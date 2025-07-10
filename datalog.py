@@ -371,9 +371,8 @@ if __name__ == "__main__":
 
     # Aggregated data across all files
     all_captured_records = []  # List to store records from all files
-    final_driver_station_enabled = None
-    final_driver_station_autonomous = None
-    final_driver_station_fms_attached = None
+    all_files_time_differences = []  # List to store time differences for analysis
+    aggregated_analysis_results = {}  # Dictionary to store aggregated time differences by analysis index
     
     def should_capture_record(driver_station_enabled, driver_station_autonomous, driver_station_fms_attached):
         """Check if records should be captured based on current DriverStation state."""
@@ -464,30 +463,97 @@ if __name__ == "__main__":
                             captured_records.append((record, entry, timestamp))
                 
                 print(f"  Captured {len(captured_records)} records from {os.path.basename(log_file_path)}")
-                return captured_records, driver_station_enabled, driver_station_autonomous, driver_station_fms_attached
+                return captured_records
                 
         except Exception as e:
             print(f"  Error processing {os.path.basename(log_file_path)}: {e}")
-            return [], None, None, None
+            return []
+
+    def analyze_file_records(file_records, analysis_configs):
+        """
+        Analyze file records and return time differences for each analysis configuration.
+        
+        Args:
+            file_records: List of (record, entry, timestamp) tuples
+            analysis_configs: List of analysis configuration dictionaries
+            
+        Returns:
+            Dictionary mapping analysis index to list of time differences
+        """
+        all_analysis_results = {}
+        
+        for analysis_idx, analysis in enumerate(analysis_configs):
+            start_entry = analysis.get('startEntry')
+            start_value = analysis.get('startValue')
+            end_entry = analysis.get('endEntry')
+            end_value = analysis.get('endValue')
+            calculations = analysis.get('calculations', [])
+            
+            if not all([start_entry, end_entry, calculations]):
+                all_analysis_results[analysis_idx] = []
+                continue
+            
+            # Find time differences between start and end events
+            time_differences = []
+            start_timestamp = None
+            
+            for record, entry, timestamp in file_records:
+                try:
+                    if (start_entry != end_entry and entry.name == start_entry) or (start_entry == end_entry and entry.name == start_entry and start_timestamp is None):
+                        # Check if this record has the start value
+                        if entry.type == "string" and record.getString() == start_value:
+                            start_timestamp = timestamp
+                        elif entry.type == "boolean" and record.getBoolean() == start_value:
+                            start_timestamp = timestamp
+                        elif entry.type == "int64" and record.getInteger() == start_value:
+                            start_timestamp = timestamp
+                        elif entry.type == "double" and record.getDouble() == start_value:
+                            start_timestamp = timestamp
+                            
+                    elif entry.name == end_entry and start_timestamp is not None:
+                        # Check if this record has the end value
+                        end_matched = False
+                        if entry.type == "string" and record.getString() == end_value:
+                            end_matched = True
+                        elif entry.type == "boolean" and record.getBoolean() == end_value:
+                            end_matched = True
+                        elif entry.type == "int64" and record.getInteger() == end_value:
+                            end_matched = True
+                        elif entry.type == "double" and record.getDouble() == end_value:
+                            end_matched = True
+                            
+                        if end_matched:
+                            time_diff = timestamp - start_timestamp
+                            time_differences.append(time_diff)
+                            start_timestamp = None  # Reset for next cycle
+                            
+                except TypeError:
+                    # Skip invalid records
+                    continue
+            
+            all_analysis_results[analysis_idx] = time_differences
+        
+        return all_analysis_results
 
     # Process all log files
     for log_file in sorted(log_files):
-        file_records, ds_enabled, ds_autonomous, ds_fms_attached = process_log_file(log_file)
+        file_records = process_log_file(log_file)
         all_captured_records.extend(file_records)
-        
-        # Update final driver station state (use the last file's final state)
-        if ds_enabled is not None:
-            final_driver_station_enabled = ds_enabled
-        if ds_autonomous is not None:
-            final_driver_station_autonomous = ds_autonomous
-        if ds_fms_attached is not None:
-            final_driver_station_fms_attached = ds_fms_attached
 
-    # Perform analysis calculations on aggregated data
-    if analysis_configs:
-            print(f"\n=== ANALYSIS RESULTS ===")
+        # Perform analysis calculations on individual file data
+        if analysis_configs and file_records:
+            print(f"\n=== ANALYSIS RESULTS FOR {os.path.basename(log_file)} ===")
             
-            for analysis in analysis_configs:
+            # Analyze this file's records using the function
+            analysis_results = analyze_file_records(file_records, analysis_configs)
+            
+            # Aggregate results for later cross-file analysis
+            for analysis_idx, time_differences in analysis_results.items():
+                if analysis_idx not in aggregated_analysis_results:
+                    aggregated_analysis_results[analysis_idx] = []
+                aggregated_analysis_results[analysis_idx].extend(time_differences)
+            
+            for analysis_idx, analysis in enumerate(analysis_configs):
                 start_entry = analysis.get('startEntry')
                 start_value = analysis.get('startValue')
                 end_entry = analysis.get('endEntry')
@@ -500,49 +566,16 @@ if __name__ == "__main__":
                 
                 print(f"\nAnalyzing: {start_entry} ({start_value}) -> {end_entry} ({end_value})")
                 
-                # Find time differences between start and end events
-                time_differences = []
-                start_timestamp = None
+                time_differences = analysis_results.get(analysis_idx, [])
                 
-                for record, entry, timestamp in all_captured_records:
-                    try:
-                        if (start_entry != end_entry and entry.name == start_entry) or (start_entry == end_entry and entry.name == start_entry and start_timestamp is None):
-                            # Check if this record has the start value
-                            if entry.type == "string" and record.getString() == start_value:
-                                start_timestamp = timestamp
-                            elif entry.type == "boolean" and record.getBoolean() == start_value:
-                                start_timestamp = timestamp
-                            elif entry.type == "int64" and record.getInteger() == start_value:
-                                start_timestamp = timestamp
-                            elif entry.type == "double" and record.getDouble() == start_value:
-                                start_timestamp = timestamp
-                                
-                        elif entry.name == end_entry and start_timestamp is not None:
-                            # Check if this record has the end value
-                            end_matched = False
-                            if entry.type == "string" and record.getString() == end_value:
-                                end_matched = True
-                            elif entry.type == "boolean" and record.getBoolean() == end_value:
-                                end_matched = True
-                            elif entry.type == "int64" and record.getInteger() == end_value:
-                                end_matched = True
-                            elif entry.type == "double" and record.getDouble() == end_value:
-                                end_matched = True
-                                
-                            if end_matched:
-                                time_diff = timestamp - start_timestamp
-                                time_differences.append(time_diff)
-                                print(f"  Found cycle: {start_timestamp:.6f}s -> {timestamp:.6f}s = {time_diff:.6f}s")
-                                start_timestamp = None  # Reset for next cycle
-                                
-                    except TypeError:
-                        # Skip invalid records
-                        continue
-                
-                # Perform calculations
+                # Print found cycles for this file
                 if time_differences:
-                    print(f"  Total cycles found: {len(time_differences)}")
-                    
+                    print(f"  Total cycles found in this file: {len(time_differences)}")
+                    for i, time_diff in enumerate(time_differences):
+                        print(f"  Found cycle {i+1}: {time_diff:.6f}s")
+                
+                # Perform calculations for this file
+                if time_differences:
                     for calc in calculations:
                         calc_type = calc.get('type')
                         calc_name = calc.get('name', f'{calc_type} calculation')
@@ -559,7 +592,51 @@ if __name__ == "__main__":
                         else:
                             print(f"  Unknown calculation type: {calc_type}")
                 else:
-                    print(f"  No complete cycles found for this analysis")
+                    print(f"  No complete cycles found for this analysis in this file")
+
+    # Perform aggregated analysis across all files
+    if analysis_configs and aggregated_analysis_results:
+        print(f"\n=== AGGREGATED ANALYSIS RESULTS ACROSS ALL FILES ===")
+        
+        for analysis_idx, analysis in enumerate(analysis_configs):
+            start_entry = analysis.get('startEntry')
+            start_value = analysis.get('startValue')
+            end_entry = analysis.get('endEntry')
+            end_value = analysis.get('endValue')
+            calculations = analysis.get('calculations', [])
+            
+            if not all([start_entry, end_entry, calculations]):
+                print(f"Skipping incomplete analysis configuration")
+                continue
+            
+            print(f"\nAggregated Analysis: {start_entry} ({start_value}) -> {end_entry} ({end_value})")
+            
+            all_time_differences = aggregated_analysis_results.get(analysis_idx, [])
+            
+            # Print aggregated cycles summary
+            if all_time_differences:
+                print(f"  Total cycles found across all files: {len(all_time_differences)}")
+                print(f"  Individual cycle times: {[f'{t:.6f}s' for t in all_time_differences]}")
+            
+            # Perform aggregated calculations
+            if all_time_differences:
+                for calc in calculations:
+                    calc_type = calc.get('type')
+                    calc_name = calc.get('name', f'{calc_type} calculation')
+                    
+                    if calc_type == 'average':
+                        result = sum(all_time_differences) / len(all_time_differences)
+                        print(f"  Aggregated {calc_name}: {result:.6f} seconds")
+                    elif calc_type == 'max':
+                        result = max(all_time_differences)
+                        print(f"  Aggregated {calc_name}: {result:.6f} seconds")
+                    elif calc_type == 'min':
+                        result = min(all_time_differences)
+                        print(f"  Aggregated {calc_name}: {result:.6f} seconds")
+                    else:
+                        print(f"  Unknown calculation type: {calc_type}")
+            else:
+                print(f"  No complete cycles found for this analysis across all files")
 
     # Print summary of captured records
     print(f"\n=== CAPTURED RECORDS SUMMARY ===")
@@ -577,11 +654,6 @@ if __name__ == "__main__":
     print(f"Filter by enabled: {filter_enabled}")
     print(f"Filter by FMS attached: {filter_fms_attached}")
     print(f"Robot mode filter: {robot_mode}")
-    
-    print(f"\n=== FINAL DRIVER STATION STATE ===")
-    print(f"DriverStation/Enabled: {final_driver_station_enabled}")
-    print(f"DriverStation/Autonomous: {final_driver_station_autonomous}")
-    print(f"DriverStation/FMSAttached: {final_driver_station_fms_attached}")
     
     if all_captured_records:
         print(f"\nCaptured records by entry name:")
