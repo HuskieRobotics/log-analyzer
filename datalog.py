@@ -308,6 +308,52 @@ def print_record_value(record: DataLogRecord, entry: StartRecordData, timestamp:
         print("  invalid")
 
 
+def print_cycles_and_calculations(time_differences, calculations, context_prefix="", no_cycles_message=None):
+        """Print cycle times and perform calculations on time differences.
+        
+        Args:
+            time_differences: List of time differences (floats)
+            calculations: List of calculation configs from analysis config
+            context_prefix: Prefix for output (e.g., "Aggregated " for aggregated results)
+            no_cycles_message: Custom message when no cycles found
+        """
+        if time_differences:
+            if context_prefix == "":
+                print(f"  Total cycles found in this file: {len(time_differences)}")
+                for i, time_diff in enumerate(time_differences):
+                    print(f"  Found cycle {i+1}: {time_diff:.6f}s")
+            else:
+                print(f"  Total cycles found across all files: {len(time_differences)}")
+                print(f"  Individual cycle times: {[f'{t:.6f}s' for t in time_differences]}")
+            
+            # Perform calculations
+            for calc in calculations:
+                calc_type = calc.get('type')
+                calc_name = calc.get('name', f'{calc_type} calculation')
+                
+                if calc_type == 'average':
+                    result = sum(time_differences) / len(time_differences)
+                    print(f"  {context_prefix}{calc_name}: {result:.6f} seconds")
+                elif calc_type == 'max':
+                    result = max(time_differences)
+                    print(f"  {context_prefix}{calc_name}: {result:.6f} seconds")
+                elif calc_type == 'min':
+                    result = min(time_differences)
+                    print(f"  {context_prefix}{calc_name}: {result:.6f} seconds")
+                else:
+                    print(f"  Unknown calculation type: {calc_type}")
+        else:
+            if no_cycles_message:
+                print(f"  {no_cycles_message}")
+            else:
+                message = "No complete cycles found for this analysis"
+                if context_prefix:
+                    message += " across all files"
+                else:
+                    message += " in this file"
+                print(f"  {message}")
+
+
 if __name__ == "__main__":
     import json
     import mmap
@@ -525,7 +571,11 @@ if __name__ == "__main__":
                         if end_matched:
                             time_diff = timestamp - start_timestamp
                             time_differences.append(time_diff)
-                            start_timestamp = None  # Reset for next cycle
+                            if start_entry == end_entry:
+                                # If start and end are the same, reset start_timestamp
+                                start_timestamp = timestamp
+                            else:
+                                start_timestamp = None  # Reset for next cycle
                             
                 except TypeError:
                     # Skip invalid records
@@ -568,31 +618,8 @@ if __name__ == "__main__":
                 
                 time_differences = analysis_results.get(analysis_idx, [])
                 
-                # Print found cycles for this file
-                if time_differences:
-                    print(f"  Total cycles found in this file: {len(time_differences)}")
-                    for i, time_diff in enumerate(time_differences):
-                        print(f"  Found cycle {i+1}: {time_diff:.6f}s")
-                
-                # Perform calculations for this file
-                if time_differences:
-                    for calc in calculations:
-                        calc_type = calc.get('type')
-                        calc_name = calc.get('name', f'{calc_type} calculation')
-                        
-                        if calc_type == 'average':
-                            result = sum(time_differences) / len(time_differences)
-                            print(f"  {calc_name}: {result:.6f} seconds")
-                        elif calc_type == 'max':
-                            result = max(time_differences)
-                            print(f"  {calc_name}: {result:.6f} seconds")
-                        elif calc_type == 'min':
-                            result = min(time_differences)
-                            print(f"  {calc_name}: {result:.6f} seconds")
-                        else:
-                            print(f"  Unknown calculation type: {calc_type}")
-                else:
-                    print(f"  No complete cycles found for this analysis in this file")
+                # Print found cycles and perform calculations for this file
+                print_cycles_and_calculations(time_differences, calculations)
 
     # Perform aggregated analysis across all files
     if analysis_configs and aggregated_analysis_results:
@@ -613,30 +640,8 @@ if __name__ == "__main__":
             
             all_time_differences = aggregated_analysis_results.get(analysis_idx, [])
             
-            # Print aggregated cycles summary
-            if all_time_differences:
-                print(f"  Total cycles found across all files: {len(all_time_differences)}")
-                print(f"  Individual cycle times: {[f'{t:.6f}s' for t in all_time_differences]}")
-            
-            # Perform aggregated calculations
-            if all_time_differences:
-                for calc in calculations:
-                    calc_type = calc.get('type')
-                    calc_name = calc.get('name', f'{calc_type} calculation')
-                    
-                    if calc_type == 'average':
-                        result = sum(all_time_differences) / len(all_time_differences)
-                        print(f"  Aggregated {calc_name}: {result:.6f} seconds")
-                    elif calc_type == 'max':
-                        result = max(all_time_differences)
-                        print(f"  Aggregated {calc_name}: {result:.6f} seconds")
-                    elif calc_type == 'min':
-                        result = min(all_time_differences)
-                        print(f"  Aggregated {calc_name}: {result:.6f} seconds")
-                    else:
-                        print(f"  Unknown calculation type: {calc_type}")
-            else:
-                print(f"  No complete cycles found for this analysis across all files")
+            # Print aggregated cycles summary and perform calculations
+            print_cycles_and_calculations(all_time_differences, calculations, "Aggregated ")
 
     # Print summary of captured records
     print(f"\n=== CAPTURED RECORDS SUMMARY ===")
@@ -667,3 +672,4 @@ if __name__ == "__main__":
             print(f"  {entry_name}: {entry_counts[entry_name]} records")
     else:
         print("No records captured matching the specified entry names.")
+
