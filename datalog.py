@@ -20,19 +20,7 @@ kControlSetMetadata = 2
 
 
 class StartRecordData:
-    """Data contained in a start control record as created by D        # Analyze this file's records and aggregate for later cross-file analysis
-        if time_analysis_configs:
-            time_analysis_results = analyze_file_records(file_records, time_analysis_configs)
-            
-            # Aggregate results for later cross-file analysis (even empty results)
-            for analysis_idx, time_differences in time_analysis_results.items():
-                if analysis_idx not in aggregated_time_analysis_results:
-                    aggregated_time_analysis_results[analysis_idx] = []
-                aggregated_time_analysis_results[analysis_idx].append(time_differences)   # Aggregate results for later cross-file analysis (even empty results)
-            for analysis_idx, time_differences in time_analysis_results.items():
-                if analysis_idx not in aggregated_time_analysis_results:
-                    aggregated_time_analysis_results[analysis_idx] = []
-                aggregated_time_analysis_results[analysis_idx].append(time_differences)g.start() when
+    """Data contained in a start control record as created by DataLog.start() when
     writing the log. This can be read by calling DataLogRecord.getStartData().
 
     entry: Entry ID; this will be used for this entry in future records.
