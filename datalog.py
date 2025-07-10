@@ -260,7 +260,7 @@ class DataLogReader:
         return DataLogIterator(self.buf, 12 + extraHeaderSize)
 
 
-def print_record_value(record: DataLogRecord, entry: StartRecordData) -> None:
+def print_record_value(record: DataLogRecord, entry: StartRecordData, timestamp: float) -> None:
     """
     Print the value associated with a record based on the entry type.
     
@@ -271,6 +271,8 @@ def print_record_value(record: DataLogRecord, entry: StartRecordData) -> None:
     from datetime import datetime
     
     try:
+        print(f"{entry.name} ({timestamp}):", end="")
+
         # handle systemTime specially
         if entry.name == "systemTime" and entry.type == "int64":
             dt = datetime.fromtimestamp(record.getInteger() / 1000000)
@@ -427,10 +429,13 @@ if __name__ == "__main__":
                 try:
                     if entry.name == "/DriverStation/Enabled" and entry.type == "boolean":
                         driver_station_enabled = record.getBoolean()
+                        print_record_value(record, entry, timestamp)
                     elif entry.name == "/DriverStation/Autonomous" and entry.type == "boolean":
                         driver_station_autonomous = record.getBoolean()
+                        print_record_value(record, entry, timestamp)
                     elif entry.name == "/DriverStation/FMSAttached" and entry.type == "boolean":
                         driver_station_fms_attached = record.getBoolean()
+                        print_record_value(record, entry, timestamp)
                 except TypeError:
                     # If we can't read the value, continue without updating state
                     pass
@@ -438,9 +443,9 @@ if __name__ == "__main__":
                 # Check if this record matches any target entry names and meets filtering criteria
                 if entry.name in mandatory_entries or (entry.name in target_entry_names and should_capture_record()):
                     captured_records.append((record, entry, timestamp))
-                    print(f"  *** CAPTURED: {entry.name} ***")
+                    # print(f"  *** CAPTURED: {entry.name} ***")
 
-                # print_record_value(record, entry)
+                # print_record_value(record, entry, timestamp)
         
         # Perform analysis calculations
         if analysis_configs:
@@ -549,7 +554,7 @@ if __name__ == "__main__":
                 if entry.name not in entry_counts:
                     entry_counts[entry.name] = 0
                 entry_counts[entry.name] += 1
-                # print_record_value(record, entry)
+                # print_record_value(record, entry, timestamp)
             
             for entry_name in sorted(entry_counts.keys()):
                 print(f"  {entry_name}: {entry_counts[entry_name]} records")
