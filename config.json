@@ -1,0 +1,17 @@
+{
+    "entryNames": ["/RealOutputs/Manipulator/State", "/Manipulator/IsIndexerIRBlocked"],
+    "enabled": true,
+    "fmsAttached": true,
+    "robotMode": "both",
+    "analysis": {
+        "startEntry": "/RealOutputs/Manipulator/State",
+        "startValue": "Scoring",
+        "endEntry": "/Manipulator/IsIndexerIRBlocked",
+        "endValue": false,
+        "calculations": [
+            {"type": "average", "name": "Average Shooting Time"},
+            {"type": "max", "name": "Max Shooting Time"},
+            {"type": "min", "name": "Min Shooting Time"}
+        ]
+    }
+}

@@ -260,14 +260,80 @@ class DataLogReader:
         return DataLogIterator(self.buf, 12 + extraHeaderSize)
 
 
+def print_record_value(record: DataLogRecord, entry: StartRecordData) -> None:
+    """
+    Print the value associated with a record based on the entry type.
+    
+    Args:
+        record: The DataLogRecord containing the data
+        entry: The StartRecordData containing type information
+    """
+    from datetime import datetime
+    
+    try:
+        # handle systemTime specially
+        if entry.name == "systemTime" and entry.type == "int64":
+            dt = datetime.fromtimestamp(record.getInteger() / 1000000)
+            print("  {:%Y-%m-%d %H:%M:%S.%f}".format(dt))
+            return
+
+        if entry.type == "double":
+            print(f"  {record.getDouble()}")
+        elif entry.type == "int64":
+            print(f"  {record.getInteger()}")
+        elif entry.type in ("string", "json"):
+            print(f"  '{record.getString()}'")
+        elif entry.type == "msgpack":
+            print(f"  '{record.getMsgPack()}'")
+        elif entry.type == "boolean":
+            print(f"  {record.getBoolean()}")
+        elif entry.type == "boolean[]":
+            arr = record.getBooleanArray()
+            print(f"  {arr}")
+        elif entry.type == "double[]":
+            arr = record.getDoubleArray()
+            print(f"  {arr}")
+        elif entry.type == "float[]":
+            arr = record.getFloatArray()
+            print(f"  {arr}")
+        elif entry.type == "int64[]":
+            arr = record.getIntegerArray()
+            print(f"  {arr}")
+        elif entry.type == "string[]":
+            arr = record.getStringArray()
+            print(f"  {arr}")
+    except TypeError:
+        print("  invalid")
+
+
 if __name__ == "__main__":
+    import json
     import mmap
     import sys
     from datetime import datetime
 
-    if len(sys.argv) != 2:
-        print("Usage: datalog.py <file>", file=sys.stderr)
+    if len(sys.argv) != 3:
+        print("Usage: datalog.py <log_file> <config_json_file>", file=sys.stderr)
         sys.exit(1)
+
+    # Load configuration from JSON file
+    try:
+        with open(sys.argv[2], 'r') as config_file:
+            config = json.load(config_file)
+            target_entry_names = set(config.get('entryNames', []))
+            
+            # Load filtering criteria
+            filter_enabled = config.get('enabled', False)
+            filter_fms_attached = config.get('fmsAttached', False)
+            robot_mode = config.get('robotMode', 'both')  # 'auto', 'teleop', or 'both'
+            
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print(f"Error loading config file: {e}", file=sys.stderr)
+        sys.exit(1)
+    
+    # Always capture these entry names regardless of JSON configuration
+    mandatory_entries = {"/DriverStation/Enabled", "/DriverStation/Autonomous", "/DriverStation/FMSAttached"}
+    target_entry_names.update(mandatory_entries)
 
     with open(sys.argv[1], "r") as f:
         mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
@@ -277,14 +343,41 @@ if __name__ == "__main__":
             sys.exit(1)
 
         entries = {}
+        captured_records = []  # List to store records matching target entry names
+        
+        # Track most recent values of DriverStation entries for filtering
+        driver_station_enabled = None
+        driver_station_autonomous = None
+        driver_station_fms_attached = None
+        
+        def should_capture_record():
+            """Check if records should be captured based on current DriverStation state."""
+
+            # Check enabled filter
+            if filter_enabled and driver_station_enabled is not None and not driver_station_enabled:
+                return False
+            
+            # Check FMS attached filter
+            if filter_fms_attached and driver_station_fms_attached is not None and not driver_station_fms_attached:
+                return False
+            
+            # Check robot mode filter
+            if robot_mode == "auto" and driver_station_autonomous is not None and not driver_station_autonomous:
+                return False
+            elif robot_mode == "teleop" and driver_station_autonomous is not None and driver_station_autonomous:
+                return False
+            # If robot_mode is "both" or any condition is not set, allow capture
+            
+            return True
+        
         for record in reader:
             timestamp = record.timestamp / 1000000
             if record.isStart():
                 try:
                     data = record.getStartData()
-                    print(
-                        f"Start({data.entry}, name='{data.name}', type='{data.type}', metadata='{data.metadata}') [{timestamp}]"
-                    )
+                    # print(
+                    #     f"Start({data.entry}, name='{data.name}', type='{data.type}', metadata='{data.metadata}') [{timestamp}]"
+                    # )
                     if data.entry in entries:
                         print("...DUPLICATE entry ID, overriding")
                     entries[data.entry] = data
@@ -293,7 +386,7 @@ if __name__ == "__main__":
             elif record.isFinish():
                 try:
                     entry = record.getFinishEntry()
-                    print(f"Finish({entry}) [{timestamp}]")
+                    # print(f"Finish({entry}) [{timestamp}]")
                     if entry not in entries:
                         print("...ID not found")
                     else:
@@ -303,7 +396,7 @@ if __name__ == "__main__":
             elif record.isSetMetadata():
                 try:
                     data = record.getSetMetadataData()
-                    print(f"SetMetadata({data.entry}, '{data.metadata}') [{timestamp}]")
+                    # print(f"SetMetadata({data.entry}, '{data.metadata}') [{timestamp}]")
                     if data.entry not in entries:
                         print("...ID not found")
                 except TypeError:
@@ -311,44 +404,64 @@ if __name__ == "__main__":
             elif record.isControl():
                 print("Unrecognized control record")
             else:
-                print(f"Data({record.entry}, size={len(record.data)}) ", end="")
+                # print(f"Data({record.entry}, size={len(record.data)}) ", end="")
                 entry = entries.get(record.entry)
                 if entry is None:
                     print("<ID not found>")
                     continue
-                print(f"<name='{entry.name}', type='{entry.type}'> [{timestamp}]")
+                # print(f"<name='{entry.name}', type='{entry.type}'> [{timestamp}]")
 
+                # Update DriverStation state tracking for filtering
                 try:
-                    # handle systemTime specially
-                    if entry.name == "systemTime" and entry.type == "int64":
-                        dt = datetime.fromtimestamp(record.getInteger() / 1000000)
-                        print("  {:%Y-%m-%d %H:%M:%S.%f}".format(dt))
-                        continue
-
-                    if entry.type == "double":
-                        print(f"  {record.getDouble()}")
-                    elif entry.type == "int64":
-                        print(f"  {record.getInteger()}")
-                    elif entry.type in ("string", "json"):
-                        print(f"  '{record.getString()}'")
-                    elif entry.type == "msgpack":
-                        print(f"  '{record.getMsgPack()}'")
-                    elif entry.type == "boolean":
-                        print(f"  {record.getBoolean()}")
-                    elif entry.type == "boolean[]":
-                        arr = record.getBooleanArray()
-                        print(f"  {arr}")
-                    elif entry.type == "double[]":
-                        arr = record.getDoubleArray()
-                        print(f"  {arr}")
-                    elif entry.type == "float[]":
-                        arr = record.getFloatArray()
-                        print(f"  {arr}")
-                    elif entry.type == "int64[]":
-                        arr = record.getIntegerArray()
-                        print(f"  {arr}")
-                    elif entry.type == "string[]":
-                        arr = record.getStringArray()
-                        print(f"  {arr}")
+                    if entry.name == "/DriverStation/Enabled" and entry.type == "boolean":
+                        driver_station_enabled = record.getBoolean()
+                    elif entry.name == "/DriverStation/Autonomous" and entry.type == "boolean":
+                        driver_station_autonomous = record.getBoolean()
+                    elif entry.name == "/DriverStation/FMSAttached" and entry.type == "boolean":
+                        driver_station_fms_attached = record.getBoolean()
                 except TypeError:
-                    print("  invalid")
+                    # If we can't read the value, continue without updating state
+                    pass
+
+                # Check if this record matches any target entry names and meets filtering criteria
+                if entry.name in mandatory_entries or (entry.name in target_entry_names and should_capture_record()):
+                    captured_records.append((record, entry, timestamp))
+                    print(f"  *** CAPTURED: {entry.name} ***")
+
+                # print_record_value(record, entry)
+            
+        
+        # Print summary of captured records
+        print(f"\n=== CAPTURED RECORDS SUMMARY ===")
+        print(f"Total captured records: {len(captured_records)}")
+        print(f"Target entry names: {sorted(target_entry_names)}")
+        print(f"Mandatory entries (always captured): {sorted(mandatory_entries)}")
+        config_only_entries = target_entry_names - mandatory_entries
+        if config_only_entries:
+            print(f"Additional entries from JSON config: {sorted(config_only_entries)}")
+        else:
+            print("Additional entries from JSON config: None")
+        
+        # Print filtering criteria and final states
+        print(f"\n=== FILTERING CRITERIA ===")
+        print(f"Filter by enabled: {filter_enabled}")
+        print(f"Filter by FMS attached: {filter_fms_attached}")
+        print(f"Robot mode filter: {robot_mode}")
+        
+        print(f"\n=== FINAL DRIVERSTATION STATE ===")
+        print(f"DriverStation/Enabled: {driver_station_enabled}")
+        print(f"DriverStation/Autonomous: {driver_station_autonomous}")
+        print(f"DriverStation/FMSAttached: {driver_station_fms_attached}")
+        
+        if captured_records:
+            print(f"\nCaptured records by entry name:")
+            entry_counts = {}
+            for record, entry, timestamp in captured_records:
+                if entry.name not in entry_counts:
+                    entry_counts[entry.name] = 0
+                entry_counts[entry.name] += 1
+            
+            for entry_name in sorted(entry_counts.keys()):
+                print(f"  {entry_name}: {entry_counts[entry_name]} records")
+        else:
+            print("No records captured matching the specified entry names.")
