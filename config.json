@@ -2,7 +2,7 @@
     "enabled": true,
     "fmsAttached": true,
     "robotMode": "teleop",
-    "analysis": [{
+    "timeAnalysis": [{
         "startEntry": "/RealOutputs/Manipulator/State",
         "startValue": "SHOOT_CORAL",
         "endEntry": "/Manipulator/IsIndexerIRBlocked",
@@ -23,6 +23,16 @@
             {"type": "max", "name": "Max Cycle Time"},
             {"type": "min", "name": "Min Cycle Time"},
             {"type": "count", "name": "Cycle Count"}
+        ]
+    }],
+    "valueAnalysis": [{
+        "entry": "/RealOutputs/DriveToReef/y velocity (reef frame)",
+        "triggerEntry": "/Manipulator/IsIndexerIRBlocked",
+        "triggerValue": false,
+        "calculations": [
+            {"type": "average", "name": "Average Y Velocity at Reef"},
+            {"type": "max", "name": "Max Y Velocity at Reef"},
+            {"type": "min", "name": "Min Y Velocity at Reef"}
         ]
     }]
 }

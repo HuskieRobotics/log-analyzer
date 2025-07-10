@@ -20,7 +20,19 @@ kControlSetMetadata = 2
 
 
 class StartRecordData:
-    """Data contained in a start control record as created by DataLog.start() when
+    """Data contained in a start control record as created by D        # Analyze this file's records and aggregate for later cross-file analysis
+        if time_analysis_configs:
+            time_analysis_results = analyze_file_records(file_records, time_analysis_configs)
+            
+            # Aggregate results for later cross-file analysis (even empty results)
+            for analysis_idx, time_differences in time_analysis_results.items():
+                if analysis_idx not in aggregated_time_analysis_results:
+                    aggregated_time_analysis_results[analysis_idx] = []
+                aggregated_time_analysis_results[analysis_idx].append(time_differences)   # Aggregate results for later cross-file analysis (even empty results)
+            for analysis_idx, time_differences in time_analysis_results.items():
+                if analysis_idx not in aggregated_time_analysis_results:
+                    aggregated_time_analysis_results[analysis_idx] = []
+                aggregated_time_analysis_results[analysis_idx].append(time_differences)g.start() when
     writing the log. This can be read by calling DataLogRecord.getStartData().
 
     entry: Entry ID; this will be used for this entry in future records.
@@ -356,6 +368,138 @@ def print_cycles_and_calculations(time_differences, calculations, context_prefix
                 print(f"  {message}")
 
 
+def print_values_and_calculations(values, calculations, context_prefix="", no_values_message=None):
+        """Print captured values and perform calculations on them.
+        
+        Args:
+            values: List of captured values (numbers)
+            calculations: List of calculation configs from analysis config
+            context_prefix: Prefix for output (e.g., "Aggregated " for aggregated results)
+            no_values_message: Custom message when no values found
+        """
+        if values:
+            if context_prefix == "":
+                print(f"  Total values captured in this file: {len(values)}")
+                print(f"  Values: {values}")
+            else:
+                print(f"  Total values captured across all files: {len(values)}")
+                print(f"  All values: {values}")
+            
+            # Filter numeric values for calculations
+            numeric_values = []
+            for val in values:
+                if isinstance(val, (int, float)):
+                    numeric_values.append(val)
+            
+            if numeric_values:
+                # Perform calculations
+                for calc in calculations:
+                    calc_type = calc.get('type')
+                    calc_name = calc.get('name', f'{calc_type} calculation')
+                    
+                    if calc_type == 'average':
+                        result = sum(numeric_values) / len(numeric_values)
+                        print(f"  {context_prefix}{calc_name}: {result:.6f}")
+                    elif calc_type == 'max':
+                        result = max(numeric_values)
+                        print(f"  {context_prefix}{calc_name}: {result:.6f}")
+                    elif calc_type == 'min':
+                        result = min(numeric_values)
+                        print(f"  {context_prefix}{calc_name}: {result:.6f}")
+                    elif calc_type == 'count':
+                        result = len(numeric_values)
+                        print(f"  {context_prefix}{calc_name}: {result}")
+                    else:
+                        print(f"  Unknown calculation type: {calc_type}")
+            else:
+                print(f"  No numeric values found for calculations")
+        else:
+            if no_values_message:
+                print(f"  {no_values_message}")
+            else:
+                message = "No values captured for this analysis"
+                if context_prefix:
+                    message += " across all files"
+                else:
+                    message += " in this file"
+                print(f"  {message}")
+
+
+def analyze_value_records(file_records, value_analysis_configs):
+        """
+        Analyze file records and return captured values for each value analysis configuration.
+        
+        Args:
+            file_records: List of (record, entry, timestamp) tuples
+            value_analysis_configs: List of value analysis configuration dictionaries
+            
+        Returns:
+            Dictionary mapping analysis index to list of captured values
+        """
+        all_value_results = {}
+        
+        for analysis_idx, analysis in enumerate(value_analysis_configs):
+            entry_name = analysis.get('entry')
+            trigger_entry = analysis.get('triggerEntry')
+            trigger_value = analysis.get('triggerValue')
+            calculations = analysis.get('calculations', [])
+            
+            if not all([entry_name, trigger_entry, calculations]) or trigger_value is None:
+                all_value_results[analysis_idx] = []
+                continue
+            
+            # Find values when trigger condition is met
+            captured_values = []
+            
+            for record, entry, timestamp in file_records:
+                try:
+                    # Check if this is the trigger entry with the trigger value
+                    if entry.name == trigger_entry:
+                        trigger_matched = False
+                        if entry.type == "string" and record.getString() == trigger_value:
+                            trigger_matched = True
+                        elif entry.type == "boolean" and record.getBoolean() == trigger_value:
+                            trigger_matched = True
+                        elif entry.type == "int64" and record.getInteger() == trigger_value:
+                            trigger_matched = True
+                        elif entry.type == "double" and record.getDouble() == trigger_value:
+                            trigger_matched = True
+                        
+                        if trigger_matched:
+                            # Find the most recent value of the target entry
+                            target_value = None
+                            target_timestamp = None
+                            
+                            # Search backwards through records to find the most recent value
+                            for search_record, search_entry, search_timestamp in reversed(file_records):
+                                if search_entry.name == entry_name and search_timestamp <= timestamp:
+                                    try:
+                                        if search_entry.type == "string":
+                                            target_value = search_record.getString()
+                                        elif search_entry.type == "boolean":
+                                            target_value = search_record.getBoolean()
+                                        elif search_entry.type == "int64":
+                                            target_value = search_record.getInteger()
+                                        elif search_entry.type == "double":
+                                            target_value = search_record.getDouble()
+                                        elif search_entry.type == "float":
+                                            target_value = search_record.getFloat()
+                                        
+                                        if target_value is not None:
+                                            captured_values.append(target_value)
+                                            break
+                                    except TypeError:
+                                        continue
+                        
+                except TypeError:
+                    # Skip invalid records
+                    continue
+            
+            all_value_results[analysis_idx] = captured_values
+        
+        return all_value_results
+
+
 if __name__ == "__main__":
     import json
     import mmap
@@ -383,7 +527,8 @@ if __name__ == "__main__":
             robot_mode = config.get('robotMode', 'both')  # 'auto', 'teleop', or 'both'
             
             # Load analysis configuration
-            analysis_configs = config.get('analysis', [])
+            time_analysis_configs = config.get('timeAnalysis', [])
+            value_analysis_configs = config.get('valueAnalysis', [])
             
     except (FileNotFoundError, json.JSONDecodeError) as e:
         print(f"Error loading config file: {e}", file=sys.stderr)
@@ -396,13 +541,22 @@ if __name__ == "__main__":
     target_entry_names.update(mandatory_entries)
     
     # Add analysis entries to target entries to ensure they're captured
-    for analysis in analysis_configs:
+    for analysis in time_analysis_configs:
         start_entry = analysis.get('startEntry')
         end_entry = analysis.get('endEntry')
         if start_entry:
             target_entry_names.add(start_entry)
         if end_entry:
             target_entry_names.add(end_entry)
+    
+    # Add value analysis entries to target entries
+    for analysis in value_analysis_configs:
+        entry = analysis.get('entry')
+        trigger_entry = analysis.get('triggerEntry')
+        if entry:
+            target_entry_names.add(entry)
+        if trigger_entry:
+            target_entry_names.add(trigger_entry)
 
     # Get list of files to process
     log_files = []
@@ -421,7 +575,8 @@ if __name__ == "__main__":
     # Aggregated data across all files
     all_captured_records = []  # List to store records from all files
     all_files_time_differences = []  # List to store time differences for analysis
-    aggregated_analysis_results = {}  # Dictionary to store aggregated time differences by analysis index
+    aggregated_time_analysis_results = {}  # Dictionary to store aggregated time differences by analysis index
+    aggregated_value_analysis_results = {}  # Dictionary to store aggregated values by analysis index
     
     def should_capture_record(driver_station_enabled, driver_station_autonomous, driver_station_fms_attached):
         """Check if records should be captured based on current DriverStation state."""
@@ -518,20 +673,20 @@ if __name__ == "__main__":
             print(f"  Error processing {os.path.basename(log_file_path)}: {e}")
             return []
 
-    def analyze_file_records(file_records, analysis_configs):
+    def analyze_file_records(file_records, time_analysis_configs):
         """
         Analyze file records and return time differences for each analysis configuration.
         
         Args:
             file_records: List of (record, entry, timestamp) tuples
-            analysis_configs: List of analysis configuration dictionaries
+            time_analysis_configs: List of analysis configuration dictionaries
             
         Returns:
             Dictionary mapping analysis index to list of time differences
         """
         all_analysis_results = {}
         
-        for analysis_idx, analysis in enumerate(analysis_configs):
+        for analysis_idx, analysis in enumerate(time_analysis_configs):
             start_entry = analysis.get('startEntry')
             start_value = analysis.get('startValue')
             end_entry = analysis.get('endEntry')
@@ -594,20 +749,30 @@ if __name__ == "__main__":
         all_captured_records.extend(file_records)
 
         # Analyze this file's records and aggregate for later cross-file analysis
-        if analysis_configs:
-            analysis_results = analyze_file_records(file_records, analysis_configs)
+        if time_analysis_configs:
+            time_analysis_results = analyze_file_records(file_records, time_analysis_configs)
             
             # Aggregate results for later cross-file analysis (even empty results)
-            for analysis_idx, time_differences in analysis_results.items():
-                if analysis_idx not in aggregated_analysis_results:
-                    aggregated_analysis_results[analysis_idx] = []
-                aggregated_analysis_results[analysis_idx].append(time_differences)
+            for analysis_idx, time_differences in time_analysis_results.items():
+                if analysis_idx not in aggregated_time_analysis_results:
+                    aggregated_time_analysis_results[analysis_idx] = []
+                aggregated_time_analysis_results[analysis_idx].append(time_differences)
+
+        # Analyze value records and aggregate for later cross-file analysis  
+        if value_analysis_configs:
+            value_analysis_results = analyze_value_records(file_records, value_analysis_configs)
+            
+            # Aggregate results for later cross-file analysis (even empty results)
+            for analysis_idx, values in value_analysis_results.items():
+                if analysis_idx not in aggregated_value_analysis_results:
+                    aggregated_value_analysis_results[analysis_idx] = []
+                aggregated_value_analysis_results[analysis_idx].append(values)
 
         # Perform analysis calculations on individual file data
-        if analysis_configs and file_records:
-            print(f"\n=== ANALYSIS RESULTS FOR {os.path.basename(log_file)} ===")
+        if time_analysis_configs and file_records:
+            print(f"\n=== TIME ANALYSIS RESULTS FOR {os.path.basename(log_file)} ===")
             
-            for analysis_idx, analysis in enumerate(analysis_configs):
+            for analysis_idx, analysis in enumerate(time_analysis_configs):
                 start_entry = analysis.get('startEntry')
                 start_value = analysis.get('startValue')
                 end_entry = analysis.get('endEntry')
@@ -620,16 +785,37 @@ if __name__ == "__main__":
                 
                 print(f"\nAnalyzing: {start_entry} ({start_value}) -> {end_entry} ({end_value})")
                 
-                time_differences = analysis_results.get(analysis_idx, [])
+                time_differences = time_analysis_results.get(analysis_idx, [])
                 
                 # Print found cycles and perform calculations for this file
                 print_cycles_and_calculations(time_differences, calculations)
 
+        # Perform value analysis calculations on individual file data
+        if value_analysis_configs and file_records:
+            print(f"\n=== VALUE ANALYSIS RESULTS FOR {os.path.basename(log_file)} ===")
+            
+            for analysis_idx, analysis in enumerate(value_analysis_configs):
+                entry_name = analysis.get('entry')
+                trigger_entry = analysis.get('triggerEntry')
+                trigger_value = analysis.get('triggerValue')
+                calculations = analysis.get('calculations', [])
+                
+                if not all([entry_name, trigger_entry, calculations]) or trigger_value is None:
+                    print(f"Skipping incomplete value analysis configuration")
+                    continue
+                
+                print(f"\nAnalyzing: {entry_name} when {trigger_entry} = {trigger_value}")
+                
+                values = value_analysis_results.get(analysis_idx, [])
+                
+                # Print captured values and perform calculations for this file
+                print_values_and_calculations(values, calculations)
+
     # Perform aggregated analysis across all files
-    if analysis_configs and aggregated_analysis_results:
-        print(f"\n=== AGGREGATED ANALYSIS RESULTS ACROSS ALL FILES ===")
+    if time_analysis_configs and aggregated_time_analysis_results:
+        print(f"\n=== AGGREGATED TIME ANALYSIS RESULTS ACROSS ALL FILES ===")
         
-        for analysis_idx, analysis in enumerate(analysis_configs):
+        for analysis_idx, analysis in enumerate(time_analysis_configs):
             start_entry = analysis.get('startEntry')
             start_value = analysis.get('startValue')
             end_entry = analysis.get('endEntry')
@@ -642,7 +828,7 @@ if __name__ == "__main__":
             
             print(f"\nAggregated Analysis: {start_entry} ({start_value}) -> {end_entry} ({end_value})")
             
-            all_time_differences_by_file = aggregated_analysis_results.get(analysis_idx, [])
+            all_time_differences_by_file = aggregated_time_analysis_results.get(analysis_idx, [])
             
             if all_time_differences_by_file:
                 # Calculate per-file cycle statistics
@@ -668,6 +854,55 @@ if __name__ == "__main__":
                 print_cycles_and_calculations(all_time_differences, calculations, context_prefix="Aggregated ")
             else:
                 print(f"  No complete cycles found for this analysis across all files")
+
+    # Perform aggregated value analysis across all files
+    if value_analysis_configs and aggregated_value_analysis_results:
+        print(f"\n=== AGGREGATED VALUE ANALYSIS RESULTS ACROSS ALL FILES ===")
+        
+        for analysis_idx, analysis in enumerate(value_analysis_configs):
+            entry_name = analysis.get('entry')
+            trigger_entry = analysis.get('triggerEntry')
+            trigger_value = analysis.get('triggerValue')
+            calculations = analysis.get('calculations', [])
+            
+            if not all([entry_name, trigger_entry, calculations]) or trigger_value is None:
+                print(f"Skipping incomplete value analysis configuration")
+                continue
+            
+            print(f"\nAggregated Value Analysis: {entry_name} when {trigger_entry} = {trigger_value}")
+            
+            all_values_by_file = aggregated_value_analysis_results.get(analysis_idx, [])
+            
+            if all_values_by_file:
+                # Calculate per-file value statistics
+                value_counts = [len(file_values) for file_values in all_values_by_file]
+                total_values = sum(value_counts)
+                
+                print(f"  Files processed: {len(all_values_by_file)}")
+                print(f"  Total values captured across all files: {total_values}")
+                
+                if value_counts and "count" in [calc.get('type') for calc in calculations]:
+                    avg_values_per_file = total_values / len(value_counts)
+                    min_values_per_file = min(value_counts)
+                    max_values_per_file = max(value_counts)
+                    
+                    print(f"  Average values per file: {avg_values_per_file:.2f}")
+                    print(f"  Minimum values in any file: {min_values_per_file}")
+                    print(f"  Maximum values in any file: {max_values_per_file}")
+                
+                # Flatten all values for overall calculations
+                all_values = [val for file_values in all_values_by_file for val in file_values]
+                
+                if all_values:
+                    print(f"  All captured values: {all_values}")
+                    
+                    # Filter numeric values for calculations
+                    numeric_values = [val for val in all_values if isinstance(val, (int, float))]
+                    
+                    print_values_and_calculations(numeric_values, calculations)
+                    
+            else:
+                print(f"  No values captured for this analysis across all files")
 
     # Print summary of captured records
     print(f"\n=== CAPTURED RECORDS SUMMARY ===")
