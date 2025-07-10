@@ -340,6 +340,8 @@ def print_cycles_and_calculations(time_differences, calculations, context_prefix
                 elif calc_type == 'min':
                     result = min(time_differences)
                     print(f"  {context_prefix}{calc_name}: {result:.6f} seconds")
+                elif calc_type == 'count':
+                    pass # Count is handled separately, not printed here
                 else:
                     print(f"  Unknown calculation type: {calc_type}")
         else:
@@ -374,7 +376,6 @@ if __name__ == "__main__":
     try:
         with open(sys.argv[2], 'r') as config_file:
             config = json.load(config_file)
-            target_entry_names = set(config.get('entryNames', []))
             
             # Load filtering criteria
             filter_enabled = config.get('enabled', False)
@@ -388,6 +389,8 @@ if __name__ == "__main__":
         print(f"Error loading config file: {e}", file=sys.stderr)
         sys.exit(1)
     
+    target_entry_names = set([])
+
     # Always capture these entry names regardless of JSON configuration
     mandatory_entries = {"/DriverStation/Enabled", "/DriverStation/Autonomous", "/DriverStation/FMSAttached"}
     target_entry_names.update(mandatory_entries)
@@ -662,7 +665,7 @@ if __name__ == "__main__":
                 all_time_differences = [diff for file_diffs in all_time_differences_by_file for diff in file_diffs]
 
                 # Print aggregated cycles summary and perform calculations
-                print_cycles_and_calculations(all_time_differences, calculations, context_prefix="Aggregated")
+                print_cycles_and_calculations(all_time_differences, calculations, context_prefix="Aggregated ")
             else:
                 print(f"  No complete cycles found for this analysis across all files")
 

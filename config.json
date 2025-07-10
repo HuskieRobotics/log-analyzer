@@ -1,5 +1,4 @@
 {
-    "entryNames": ["/RealOutputs/Manipulator/State", "/Manipulator/IsIndexerIRBlocked"],
     "enabled": true,
     "fmsAttached": true,
     "robotMode": "teleop",
