@@ -2,7 +2,7 @@
     "entryNames": ["/RealOutputs/Manipulator/State", "/Manipulator/IsIndexerIRBlocked"],
     "enabled": true,
     "fmsAttached": true,
-    "robotMode": "both",
+    "robotMode": "teleop",
     "analysis": [{
         "startEntry": "/RealOutputs/Manipulator/State",
         "startValue": "SHOOT_CORAL",
@@ -17,12 +17,13 @@
     {
         "startEntry": "/RealOutputs/Manipulator/State",
         "startValue": "WAITING_FOR_CORAL",
-        "endEntry": "/RealOutputs/Manipulator/State",
-        "endValue": "WAITING_FOR_CORAL",
+        "endEntry": "/RealOutputs/LEDS/state",
+        "endValue": "SCORING",
         "calculations": [
             {"type": "average", "name": "Average Cycle Time"},
             {"type": "max", "name": "Max Cycle Time"},
-            {"type": "min", "name": "Min Cycle Time"}
+            {"type": "min", "name": "Min Cycle Time"},
+            {"type": "count", "name": "Cycle Count"}
         ]
     }]
 }

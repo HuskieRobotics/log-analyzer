@@ -590,18 +590,19 @@ if __name__ == "__main__":
         file_records = process_log_file(log_file)
         all_captured_records.extend(file_records)
 
-        # Perform analysis calculations on individual file data
-        if analysis_configs and file_records:
-            print(f"\n=== ANALYSIS RESULTS FOR {os.path.basename(log_file)} ===")
-            
-            # Analyze this file's records using the function
+        # Analyze this file's records and aggregate for later cross-file analysis
+        if analysis_configs:
             analysis_results = analyze_file_records(file_records, analysis_configs)
             
-            # Aggregate results for later cross-file analysis
+            # Aggregate results for later cross-file analysis (even empty results)
             for analysis_idx, time_differences in analysis_results.items():
                 if analysis_idx not in aggregated_analysis_results:
                     aggregated_analysis_results[analysis_idx] = []
-                aggregated_analysis_results[analysis_idx].extend(time_differences)
+                aggregated_analysis_results[analysis_idx].append(time_differences)
+
+        # Perform analysis calculations on individual file data
+        if analysis_configs and file_records:
+            print(f"\n=== ANALYSIS RESULTS FOR {os.path.basename(log_file)} ===")
             
             for analysis_idx, analysis in enumerate(analysis_configs):
                 start_entry = analysis.get('startEntry')
@@ -638,10 +639,32 @@ if __name__ == "__main__":
             
             print(f"\nAggregated Analysis: {start_entry} ({start_value}) -> {end_entry} ({end_value})")
             
-            all_time_differences = aggregated_analysis_results.get(analysis_idx, [])
+            all_time_differences_by_file = aggregated_analysis_results.get(analysis_idx, [])
             
-            # Print aggregated cycles summary and perform calculations
-            print_cycles_and_calculations(all_time_differences, calculations, "Aggregated ")
+            if all_time_differences_by_file:
+                # Calculate per-file cycle statistics
+                cycle_counts = [len(file_diffs) for file_diffs in all_time_differences_by_file]
+                total_cycles = sum(cycle_counts)
+                
+                print(f"  Files processed: {len(all_time_differences_by_file)}")
+                print(f"  Total cycles found across all files: {total_cycles}")
+                
+                if cycle_counts and "count" in [calc.get('type') for calc in calculations]:
+                    avg_cycles_per_file = total_cycles / len(cycle_counts)
+                    min_cycles_per_file = min(cycle_counts)
+                    max_cycles_per_file = max(cycle_counts)
+                    
+                    print(f"  Average cycles per file: {avg_cycles_per_file:.2f}")
+                    print(f"  Minimum cycles in any file: {min_cycles_per_file}")
+                    print(f"  Maximum cycles in any file: {max_cycles_per_file}")
+                
+                # Flatten all time differences for overall calculations
+                all_time_differences = [diff for file_diffs in all_time_differences_by_file for diff in file_diffs]
+
+                # Print aggregated cycles summary and perform calculations
+                print_cycles_and_calculations(all_time_differences, calculations, context_prefix="Aggregated")
+            else:
+                print(f"  No complete cycles found for this analysis across all files")
 
     # Print summary of captured records
     print(f"\n=== CAPTURED RECORDS SUMMARY ===")
