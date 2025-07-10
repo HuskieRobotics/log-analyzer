@@ -13,5 +13,16 @@
             {"type": "max", "name": "Max Shooting Time"},
             {"type": "min", "name": "Min Shooting Time"}
         ]
+    },
+    {
+        "startEntry": "/RealOutputs/Manipulator/State",
+        "startValue": "WAITING_FOR_CORAL",
+        "endEntry": "/RealOutputs/Manipulator/State",
+        "endValue": "WAITING_FOR_CORAL",
+        "calculations": [
+            {"type": "average", "name": "Average Cycle Time"},
+            {"type": "max", "name": "Max Cycle Time"},
+            {"type": "min", "name": "Min Cycle Time"}
+        ]
     }]
 }

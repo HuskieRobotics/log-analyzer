@@ -311,11 +311,17 @@ def print_record_value(record: DataLogRecord, entry: StartRecordData, timestamp:
 if __name__ == "__main__":
     import json
     import mmap
+    import os
     import sys
     from datetime import datetime
 
     if len(sys.argv) != 3:
-        print("Usage: datalog.py <log_file> <config_json_file>", file=sys.stderr)
+        print("Usage: datalog.py <log_folder> <config_json_file>", file=sys.stderr)
+        sys.exit(1)
+
+    log_folder = sys.argv[1]
+    if not os.path.isdir(log_folder):
+        print(f"Error: {log_folder} is not a directory", file=sys.stderr)
         sys.exit(1)
 
     # Load configuration from JSON file
@@ -349,106 +355,136 @@ if __name__ == "__main__":
         if end_entry:
             target_entry_names.add(end_entry)
 
-    with open(sys.argv[1], "r") as f:
-        mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
-        reader = DataLogReader(mm)
-        if not reader:
-            print("not a log file", file=sys.stderr)
-            sys.exit(1)
+    # Get list of files to process
+    log_files = []
+    for filename in os.listdir(log_folder):
+        if filename.endswith('.wpilog'):
+            log_files.append(os.path.join(log_folder, filename))
+    
+    if not log_files:
+        print(f"No log files found in {log_folder}", file=sys.stderr)
+        sys.exit(1)
+    
+    print(f"Found {len(log_files)} log files to process:")
+    for log_file in sorted(log_files):
+        print(f"  {os.path.basename(log_file)}")
 
-        entries = {}
-        captured_records = []  # List to store records matching target entry names
+    # Aggregated data across all files
+    all_captured_records = []  # List to store records from all files
+    final_driver_station_enabled = None
+    final_driver_station_autonomous = None
+    final_driver_station_fms_attached = None
+    
+    def should_capture_record(driver_station_enabled, driver_station_autonomous, driver_station_fms_attached):
+        """Check if records should be captured based on current DriverStation state."""
+        # Check enabled filter
+        if filter_enabled and driver_station_enabled is not None and not driver_station_enabled:
+            return False
         
-        # Track most recent values of DriverStation entries for filtering
-        driver_station_enabled = None
-        driver_station_autonomous = None
-        driver_station_fms_attached = None
+        # Check FMS attached filter
+        if filter_fms_attached and driver_station_fms_attached is not None and not driver_station_fms_attached:
+            return False
         
-        def should_capture_record():
-            """Check if records should be captured based on current DriverStation state."""
+        # Check robot mode filter
+        if robot_mode == "auto" and driver_station_autonomous is not None and not driver_station_autonomous:
+            return False
+        elif robot_mode == "teleop" and driver_station_autonomous is not None and driver_station_autonomous:
+            return False
+        # If robot_mode is "both" or any condition is not set, allow capture
+        
+        return True
 
-            # Check enabled filter
-            if filter_enabled and driver_station_enabled is not None and not driver_station_enabled:
-                return False
-            
-            # Check FMS attached filter
-            if filter_fms_attached and driver_station_fms_attached is not None and not driver_station_fms_attached:
-                return False
-            
-            # Check robot mode filter
-            if robot_mode == "auto" and driver_station_autonomous is not None and not driver_station_autonomous:
-                return False
-            elif robot_mode == "teleop" and driver_station_autonomous is not None and driver_station_autonomous:
-                return False
-            # If robot_mode is "both" or any condition is not set, allow capture
-            
-            return True
+    def process_log_file(log_file_path):
+        """Process a single log file and return captured records and final driver station state."""
+        print(f"\nProcessing: {os.path.basename(log_file_path)}")
         
-        for record in reader:
-            timestamp = record.timestamp / 1000000
-            if record.isStart():
-                try:
-                    data = record.getStartData()
-                    # print(
-                    #     f"Start({data.entry}, name='{data.name}', type='{data.type}', metadata='{data.metadata}') [{timestamp}]"
-                    # )
-                    if data.entry in entries:
-                        print("...DUPLICATE entry ID, overriding")
-                    entries[data.entry] = data
-                except TypeError:
-                    print("Start(INVALID)")
-            elif record.isFinish():
-                try:
-                    entry = record.getFinishEntry()
-                    # print(f"Finish({entry}) [{timestamp}]")
-                    if entry not in entries:
-                        print("...ID not found")
+        try:
+            with open(log_file_path, "rb") as f:
+                mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+                reader = DataLogReader(mm)
+                if not reader:
+                    print(f"  Warning: {os.path.basename(log_file_path)} is not a valid log file")
+                    return [], None, None, None
+
+                entries = {}
+                captured_records = []  # List to store records matching target entry names
+                
+                # Track most recent values of DriverStation entries for filtering
+                driver_station_enabled = None
+                driver_station_autonomous = None
+                driver_station_fms_attached = None
+                
+                for record in reader:
+                    timestamp = record.timestamp / 1000000
+                    if record.isStart():
+                        try:
+                            data = record.getStartData()
+                            if data.entry in entries:
+                                print("...DUPLICATE entry ID, overriding")
+                            entries[data.entry] = data
+                        except TypeError:
+                            print("Start(INVALID)")
+                    elif record.isFinish():
+                        try:
+                            entry = record.getFinishEntry()
+                            if entry not in entries:
+                                print("...ID not found")
+                            else:
+                                del entries[entry]
+                        except TypeError:
+                            print("Finish(INVALID)")
+                    elif record.isSetMetadata():
+                        try:
+                            data = record.getSetMetadataData()
+                            if data.entry not in entries:
+                                print("...ID not found")
+                        except TypeError:
+                            print("SetMetadata(INVALID)")
+                    elif record.isControl():
+                        print("Unrecognized control record")
                     else:
-                        del entries[entry]
-                except TypeError:
-                    print("Finish(INVALID)")
-            elif record.isSetMetadata():
-                try:
-                    data = record.getSetMetadataData()
-                    # print(f"SetMetadata({data.entry}, '{data.metadata}') [{timestamp}]")
-                    if data.entry not in entries:
-                        print("...ID not found")
-                except TypeError:
-                    print("SetMetadata(INVALID)")
-            elif record.isControl():
-                print("Unrecognized control record")
-            else:
-                # print(f"Data({record.entry}, size={len(record.data)}) ", end="")
-                entry = entries.get(record.entry)
-                if entry is None:
-                    print("<ID not found>")
-                    continue
-                # print(f"<name='{entry.name}', type='{entry.type}'> [{timestamp}]")
+                        entry = entries.get(record.entry)
+                        if entry is None:
+                            continue
 
-                # Update DriverStation state tracking for filtering
-                try:
-                    if entry.name == "/DriverStation/Enabled" and entry.type == "boolean":
-                        driver_station_enabled = record.getBoolean()
-                        print_record_value(record, entry, timestamp)
-                    elif entry.name == "/DriverStation/Autonomous" and entry.type == "boolean":
-                        driver_station_autonomous = record.getBoolean()
-                        print_record_value(record, entry, timestamp)
-                    elif entry.name == "/DriverStation/FMSAttached" and entry.type == "boolean":
-                        driver_station_fms_attached = record.getBoolean()
-                        print_record_value(record, entry, timestamp)
-                except TypeError:
-                    # If we can't read the value, continue without updating state
-                    pass
+                        # Update DriverStation state tracking for filtering
+                        try:
+                            if entry.name == "/DriverStation/Enabled" and entry.type == "boolean":
+                                driver_station_enabled = record.getBoolean()
+                            elif entry.name == "/DriverStation/Autonomous" and entry.type == "boolean":
+                                driver_station_autonomous = record.getBoolean()
+                            elif entry.name == "/DriverStation/FMSAttached" and entry.type == "boolean":
+                                driver_station_fms_attached = record.getBoolean()
+                        except TypeError:
+                            # If we can't read the value, continue without updating state
+                            pass
 
-                # Check if this record matches any target entry names and meets filtering criteria
-                if entry.name in mandatory_entries or (entry.name in target_entry_names and should_capture_record()):
-                    captured_records.append((record, entry, timestamp))
-                    # print(f"  *** CAPTURED: {entry.name} ***")
+                        # Check if this record matches any target entry names and meets filtering criteria
+                        if entry.name in mandatory_entries or (entry.name in target_entry_names and should_capture_record(driver_station_enabled, driver_station_autonomous, driver_station_fms_attached)):
+                            captured_records.append((record, entry, timestamp))
+                
+                print(f"  Captured {len(captured_records)} records from {os.path.basename(log_file_path)}")
+                return captured_records, driver_station_enabled, driver_station_autonomous, driver_station_fms_attached
+                
+        except Exception as e:
+            print(f"  Error processing {os.path.basename(log_file_path)}: {e}")
+            return [], None, None, None
 
-                # print_record_value(record, entry, timestamp)
+    # Process all log files
+    for log_file in sorted(log_files):
+        file_records, ds_enabled, ds_autonomous, ds_fms_attached = process_log_file(log_file)
+        all_captured_records.extend(file_records)
         
-        # Perform analysis calculations
-        if analysis_configs:
+        # Update final driver station state (use the last file's final state)
+        if ds_enabled is not None:
+            final_driver_station_enabled = ds_enabled
+        if ds_autonomous is not None:
+            final_driver_station_autonomous = ds_autonomous
+        if ds_fms_attached is not None:
+            final_driver_station_fms_attached = ds_fms_attached
+
+    # Perform analysis calculations on aggregated data
+    if analysis_configs:
             print(f"\n=== ANALYSIS RESULTS ===")
             
             for analysis in analysis_configs:
@@ -468,9 +504,9 @@ if __name__ == "__main__":
                 time_differences = []
                 start_timestamp = None
                 
-                for record, entry, timestamp in captured_records:
+                for record, entry, timestamp in all_captured_records:
                     try:
-                        if entry.name == start_entry:
+                        if (start_entry != end_entry and entry.name == start_entry) or (start_entry == end_entry and entry.name == start_entry and start_timestamp is None):
                             # Check if this record has the start value
                             if entry.type == "string" and record.getString() == start_value:
                                 start_timestamp = timestamp
@@ -524,39 +560,38 @@ if __name__ == "__main__":
                             print(f"  Unknown calculation type: {calc_type}")
                 else:
                     print(f"  No complete cycles found for this analysis")
+
+    # Print summary of captured records
+    print(f"\n=== CAPTURED RECORDS SUMMARY ===")
+    print(f"Total captured records: {len(all_captured_records)}")
+    print(f"Target entry names: {sorted(target_entry_names)}")
+    print(f"Mandatory entries (always captured): {sorted(mandatory_entries)}")
+    config_only_entries = target_entry_names - mandatory_entries
+    if config_only_entries:
+        print(f"Additional entries from JSON config: {sorted(config_only_entries)}")
+    else:
+        print("Additional entries from JSON config: None")
+    
+    # Print filtering criteria and final states
+    print(f"\n=== FILTERING CRITERIA ===")
+    print(f"Filter by enabled: {filter_enabled}")
+    print(f"Filter by FMS attached: {filter_fms_attached}")
+    print(f"Robot mode filter: {robot_mode}")
+    
+    print(f"\n=== FINAL DRIVER STATION STATE ===")
+    print(f"DriverStation/Enabled: {final_driver_station_enabled}")
+    print(f"DriverStation/Autonomous: {final_driver_station_autonomous}")
+    print(f"DriverStation/FMSAttached: {final_driver_station_fms_attached}")
+    
+    if all_captured_records:
+        print(f"\nCaptured records by entry name:")
+        entry_counts = {}
+        for record, entry, timestamp in all_captured_records:
+            if entry.name not in entry_counts:
+                entry_counts[entry.name] = 0
+            entry_counts[entry.name] += 1
         
-        # Print summary of captured records
-        print(f"\n=== CAPTURED RECORDS SUMMARY ===")
-        print(f"Total captured records: {len(captured_records)}")
-        print(f"Target entry names: {sorted(target_entry_names)}")
-        print(f"Mandatory entries (always captured): {sorted(mandatory_entries)}")
-        config_only_entries = target_entry_names - mandatory_entries
-        if config_only_entries:
-            print(f"Additional entries from JSON config: {sorted(config_only_entries)}")
-        else:
-            print("Additional entries from JSON config: None")
-        
-        # Print filtering criteria and final states
-        print(f"\n=== FILTERING CRITERIA ===")
-        print(f"Filter by enabled: {filter_enabled}")
-        print(f"Filter by FMS attached: {filter_fms_attached}")
-        print(f"Robot mode filter: {robot_mode}")
-        
-        print(f"\n=== FINAL DRIVER STATION STATE ===")
-        print(f"DriverStation/Enabled: {driver_station_enabled}")
-        print(f"DriverStation/Autonomous: {driver_station_autonomous}")
-        print(f"DriverStation/FMSAttached: {driver_station_fms_attached}")
-        
-        if captured_records:
-            print(f"\nCaptured records by entry name:")
-            entry_counts = {}
-            for record, entry, timestamp in captured_records:
-                if entry.name not in entry_counts:
-                    entry_counts[entry.name] = 0
-                entry_counts[entry.name] += 1
-                # print_record_value(record, entry, timestamp)
-            
-            for entry_name in sorted(entry_counts.keys()):
-                print(f"  {entry_name}: {entry_counts[entry_name]} records")
-        else:
-            print("No records captured matching the specified entry names.")
+        for entry_name in sorted(entry_counts.keys()):
+            print(f"  {entry_name}: {entry_counts[entry_name]} records")
+    else:
+        print("No records captured matching the specified entry names.")
