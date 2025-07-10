@@ -3,9 +3,9 @@
     "enabled": true,
     "fmsAttached": true,
     "robotMode": "both",
-    "analysis": {
+    "analysis": [{
         "startEntry": "/RealOutputs/Manipulator/State",
-        "startValue": "Scoring",
+        "startValue": "SHOOT_CORAL",
         "endEntry": "/Manipulator/IsIndexerIRBlocked",
         "endValue": false,
         "calculations": [
@@ -13,5 +13,5 @@
             {"type": "max", "name": "Max Shooting Time"},
             {"type": "min", "name": "Min Shooting Time"}
         ]
-    }
+    }]
 }

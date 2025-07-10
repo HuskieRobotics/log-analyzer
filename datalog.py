@@ -327,6 +327,9 @@ if __name__ == "__main__":
             filter_fms_attached = config.get('fmsAttached', False)
             robot_mode = config.get('robotMode', 'both')  # 'auto', 'teleop', or 'both'
             
+            # Load analysis configuration
+            analysis_configs = config.get('analysis', [])
+            
     except (FileNotFoundError, json.JSONDecodeError) as e:
         print(f"Error loading config file: {e}", file=sys.stderr)
         sys.exit(1)
@@ -334,6 +337,15 @@ if __name__ == "__main__":
     # Always capture these entry names regardless of JSON configuration
     mandatory_entries = {"/DriverStation/Enabled", "/DriverStation/Autonomous", "/DriverStation/FMSAttached"}
     target_entry_names.update(mandatory_entries)
+    
+    # Add analysis entries to target entries to ensure they're captured
+    for analysis in analysis_configs:
+        start_entry = analysis.get('startEntry')
+        end_entry = analysis.get('endEntry')
+        if start_entry:
+            target_entry_names.add(start_entry)
+        if end_entry:
+            target_entry_names.add(end_entry)
 
     with open(sys.argv[1], "r") as f:
         mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
@@ -429,7 +441,84 @@ if __name__ == "__main__":
                     print(f"  *** CAPTURED: {entry.name} ***")
 
                 # print_record_value(record, entry)
+        
+        # Perform analysis calculations
+        if analysis_configs:
+            print(f"\n=== ANALYSIS RESULTS ===")
             
+            for analysis in analysis_configs:
+                start_entry = analysis.get('startEntry')
+                start_value = analysis.get('startValue')
+                end_entry = analysis.get('endEntry')
+                end_value = analysis.get('endValue')
+                calculations = analysis.get('calculations', [])
+                
+                if not all([start_entry, end_entry, calculations]):
+                    print(f"Skipping incomplete analysis configuration")
+                    continue
+                
+                print(f"\nAnalyzing: {start_entry} ({start_value}) -> {end_entry} ({end_value})")
+                
+                # Find time differences between start and end events
+                time_differences = []
+                start_timestamp = None
+                
+                for record, entry, timestamp in captured_records:
+                    try:
+                        if entry.name == start_entry:
+                            # Check if this record has the start value
+                            if entry.type == "string" and record.getString() == start_value:
+                                start_timestamp = timestamp
+                            elif entry.type == "boolean" and record.getBoolean() == start_value:
+                                start_timestamp = timestamp
+                            elif entry.type == "int64" and record.getInteger() == start_value:
+                                start_timestamp = timestamp
+                            elif entry.type == "double" and record.getDouble() == start_value:
+                                start_timestamp = timestamp
+                                
+                        elif entry.name == end_entry and start_timestamp is not None:
+                            # Check if this record has the end value
+                            end_matched = False
+                            if entry.type == "string" and record.getString() == end_value:
+                                end_matched = True
+                            elif entry.type == "boolean" and record.getBoolean() == end_value:
+                                end_matched = True
+                            elif entry.type == "int64" and record.getInteger() == end_value:
+                                end_matched = True
+                            elif entry.type == "double" and record.getDouble() == end_value:
+                                end_matched = True
+                                
+                            if end_matched:
+                                time_diff = timestamp - start_timestamp
+                                time_differences.append(time_diff)
+                                print(f"  Found cycle: {start_timestamp:.6f}s -> {timestamp:.6f}s = {time_diff:.6f}s")
+                                start_timestamp = None  # Reset for next cycle
+                                
+                    except TypeError:
+                        # Skip invalid records
+                        continue
+                
+                # Perform calculations
+                if time_differences:
+                    print(f"  Total cycles found: {len(time_differences)}")
+                    
+                    for calc in calculations:
+                        calc_type = calc.get('type')
+                        calc_name = calc.get('name', f'{calc_type} calculation')
+                        
+                        if calc_type == 'average':
+                            result = sum(time_differences) / len(time_differences)
+                            print(f"  {calc_name}: {result:.6f} seconds")
+                        elif calc_type == 'max':
+                            result = max(time_differences)
+                            print(f"  {calc_name}: {result:.6f} seconds")
+                        elif calc_type == 'min':
+                            result = min(time_differences)
+                            print(f"  {calc_name}: {result:.6f} seconds")
+                        else:
+                            print(f"  Unknown calculation type: {calc_type}")
+                else:
+                    print(f"  No complete cycles found for this analysis")
         
         # Print summary of captured records
         print(f"\n=== CAPTURED RECORDS SUMMARY ===")
@@ -448,7 +537,7 @@ if __name__ == "__main__":
         print(f"Filter by FMS attached: {filter_fms_attached}")
         print(f"Robot mode filter: {robot_mode}")
         
-        print(f"\n=== FINAL DRIVERSTATION STATE ===")
+        print(f"\n=== FINAL DRIVER STATION STATE ===")
         print(f"DriverStation/Enabled: {driver_station_enabled}")
         print(f"DriverStation/Autonomous: {driver_station_autonomous}")
         print(f"DriverStation/FMSAttached: {driver_station_fms_attached}")
@@ -460,6 +549,7 @@ if __name__ == "__main__":
                 if entry.name not in entry_counts:
                     entry_counts[entry.name] = 0
                 entry_counts[entry.name] += 1
+                # print_record_value(record, entry)
             
             for entry_name in sorted(entry_counts.keys()):
                 print(f"  {entry_name}: {entry_counts[entry_name]} records")
