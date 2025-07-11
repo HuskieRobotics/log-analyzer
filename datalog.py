@@ -650,6 +650,11 @@ if __name__ == "__main__":
                             # If we can't read the value, continue without updating state
                             pass
 
+                        if ".schema" in entry.name:
+                            # If the entry is a schema entry, we may want to capture it differently
+                            print(f"  Schema entry {entry.name} found: {record.getString()} (at {timestamp})")
+                        
+
                         # Check if this record matches any target entry names and meets filtering criteria
                         if entry.name in mandatory_entries or (entry.name in target_entry_names and should_capture_record(driver_station_enabled, driver_station_autonomous, driver_station_fms_attached)):
                             captured_records.append((record, entry, timestamp))
