@@ -871,32 +871,3 @@ class Log:
         ]
         
         return log
-
-# === Usage Example ===
-
-if __name__ == "__main__":
-    # Create a new log
-    log = Log()
-    
-    # Add some data
-    log.put_number("/robot/velocity", 1.0, 5.2)
-    log.put_number("/robot/velocity", 1.1, 5.8)
-    log.put_boolean("/robot/enabled", 1.0, True)
-    log.put_string("/robot/mode", 1.0, "teleop")
-    
-    # Add a pose
-    pose = Pose2d(translation=(1.5, 2.3), rotation=0.785)
-    log.put_pose("/robot/pose", 1.0, pose)
-    
-    # Get timestamps for specific fields
-    timestamps = log.get_timestamps(["/robot/velocity", "/robot/enabled"])
-    print(f"Combined timestamps: {timestamps}")
-    
-    # Get field tree
-    tree = log.get_field_tree()
-    print(f"Field tree keys: {list(tree.keys())}")
-    
-    # Serialize and deserialize
-    serialized = log.to_serialized()
-    restored_log = Log.from_serialized(serialized)
-    print(f"Restored log has {len(restored_log.get_field_keys())} fields")
