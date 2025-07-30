@@ -7,6 +7,7 @@ import json
 import mmap
 import os
 import sys
+from typing import Dict, List, Optional, Set, Tuple, Any, Union
 from datalog import DataLogReader
 from Log import Log, LoggableType
 
@@ -16,7 +17,8 @@ PHOTON_PREFIX = "photon:"
 PROTO_PREFIX = "proto:"
 
 
-def print_cycles_and_calculations(time_differences, calculations, context_prefix="", no_cycles_message=None):
+def print_cycles_and_calculations(time_differences: List[float], calculations: List[Dict[str, Any]], 
+                                context_prefix: str = "", no_cycles_message: Optional[str] = None) -> None:
     """Print cycle times and perform calculations on time differences.
     
     Args:
@@ -64,7 +66,8 @@ def print_cycles_and_calculations(time_differences, calculations, context_prefix
             print(f"  {message}")
 
 
-def print_values_and_calculations(values, calculations, context_prefix="", no_values_message=None):
+def print_values_and_calculations(values: List[Union[int, float, str, bool]], calculations: List[Dict[str, Any]], 
+                                context_prefix: str = "", no_values_message: Optional[str] = None) -> None:
     """Print captured values and perform calculations on them.
     
     Args:
@@ -131,12 +134,12 @@ def print_values_and_calculations(values, calculations, context_prefix="", no_va
                 message += " in this file"
             print(f"  {message}")
 
-def analyze_file_records(log, time_analysis_configs):
+def analyze_file_records(log: Log, time_analysis_configs: List[Dict[str, Any]]) -> Dict[int, List[float]]:
     """
     Analyze file records and return time differences for each analysis configuration.
     
     Args:
-        log: List of (record, entry, timestamp) tuples
+        log: The Log object containing the analyzed data
         time_analysis_configs: List of analysis configuration dictionaries
         
     Returns:
@@ -210,7 +213,7 @@ def analyze_file_records(log, time_analysis_configs):
     
     return all_analysis_results
 
-def analyze_value_records(log, value_analysis_configs):
+def analyze_value_records(log: Log, value_analysis_configs: List[Dict[str, Any]]) -> Dict[int, List[Union[int, float, str, bool]]]:
     """
     Analyze file records and return captured values for each value analysis configuration.
     
@@ -281,10 +284,11 @@ def analyze_value_records(log, value_analysis_configs):
     
     return all_value_results
 
-def process_log_file(log_file_path, mandatory_entries, target_entry_names, 
-                     filter_enabled=False, filter_fms_attached=False, robot_mode='both'):
+def process_log_file(log_file_path: str, mandatory_entries: Set[str], target_entry_names: Set[str], 
+                     filter_enabled: bool = False, filter_fms_attached: bool = False, robot_mode: str = 'both') -> Log:
     
-    def should_capture_record(driver_station_enabled, driver_station_autonomous, driver_station_fms_attached):
+    def should_capture_record(driver_station_enabled: Optional[bool], driver_station_autonomous: Optional[bool], 
+                            driver_station_fms_attached: Optional[bool]) -> bool:
         """Check if records should be captured based on current DriverStation state."""
         # Check enabled filter
         if filter_enabled and driver_station_enabled is not None and not driver_station_enabled:
@@ -312,7 +316,7 @@ def process_log_file(log_file_path, mandatory_entries, target_entry_names,
         reader = DataLogReader(mm)
         if not reader:
             print(f"  Warning: {os.path.basename(log_file_path)} is not a valid log file")
-            return [], None, None, None
+            return Log()
 
         entries = {}
         log = Log()
@@ -424,7 +428,7 @@ def process_log_file(log_file_path, mandatory_entries, target_entry_names,
                     
         return log
 
-def main():
+def main() -> None:
     """Main analysis function."""
     if len(sys.argv) != 3:
         print("Usage: analysis.py <log_folder> <config_json_file>", file=sys.stderr)
