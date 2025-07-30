@@ -220,7 +220,7 @@ class QueuedStructure:
 class Log:
     """Represents a collection of log fields."""
     
-    def __init__(self, enable_timestamp_set_cache: bool = True):
+    def __init__(self):
         self.DEFAULT_TIMESTAMP_RANGE = (0.0, 10.0)
         self.msgpack_decoder = msgpack
         self.struct_decoder = StructDecoder()
@@ -228,43 +228,18 @@ class Log:
         self.fields: Dict[str, LogField] = {}
         self.generated_parents: Set[str] = set()
         self.timestamp_range: Optional[Tuple[float, float]] = None
-        self.enable_timestamp_set_cache = enable_timestamp_set_cache
-        self.timestamp_set_cache: Dict[str, Dict[str, Any]] = {}
-        self.changed_fields: Set[str] = set()
-        
-        self.queued_structs: List[QueuedStructure] = []
-        self.queued_struct_arrays: List[QueuedStructure] = []
-        self.queued_protos: List[QueuedStructure] = []
     
     def create_blank_field(self, key: str, log_type: LoggableType) -> None:
         """Checks if the field exists and registers it if necessary."""
         if key in self.fields:
             return
         self.fields[key] = LogField(log_type)
-        self.changed_fields.add(key)
     
     def delete_field(self, key: str) -> None:
         """Removes all data for a field."""
         if key in self.fields:
             del self.fields[key]
             self.generated_parents.discard(key)
-            self.changed_fields.discard(key)
-            
-            # Update timestamp cache
-            for uuid, cache_values in self.timestamp_set_cache.items():
-                if key in cache_values["keys"]:
-                    cache_values["keys"] = [k for k in cache_values["keys"] if k != key]
-                    # Recalculate timestamps
-                    all_timestamps = []
-                    for cache_key in cache_values["keys"]:
-                        if cache_key in self.fields:
-                            all_timestamps.extend(self.fields[cache_key].get_timestamps())
-                    new_timestamps = sorted(list(set(all_timestamps)))
-                    self.timestamp_set_cache[uuid]["timestamps"] = new_timestamps
-                    self.timestamp_set_cache[uuid]["source_counts"] = [
-                        len(self.fields[k].get_timestamps()) if k in self.fields else 0
-                        for k in cache_values["keys"]
-                    ]
     
     def clear_before_time(self, timestamp: float) -> None:
         """Clears all data before the provided timestamp."""
@@ -273,14 +248,6 @@ class Log:
         elif self.timestamp_range[0] < timestamp:
             new_end = max(timestamp, self.timestamp_range[1])
             self.timestamp_range = (timestamp, new_end)
-        
-        # Clear timestamp caches
-        for cache in self.timestamp_set_cache.values():
-            timestamps = cache["timestamps"]
-            while len(timestamps) >= 2 and timestamps[1] <= timestamp:
-                timestamps.pop(0)
-            if timestamps and timestamps[0] < timestamp:
-                timestamps[0] = timestamp
         
         # Clear field data
         for field in self.fields.values():
@@ -299,24 +266,6 @@ class Log:
     def _process_timestamp(self, key: str, timestamp: float) -> None:
         """Updates the timestamp range and set caches if necessary."""
         self.update_range_with_timestamp(timestamp)
-        
-        if self.enable_timestamp_set_cache:
-            for cache in self.timestamp_set_cache.values():
-                if key in cache["keys"] and timestamp not in cache["timestamps"]:
-                    # Insert timestamp in sorted order
-                    timestamps = cache["timestamps"]
-                    insert_index = len(timestamps)
-                    for i, ts in enumerate(timestamps):
-                        if ts > timestamp:
-                            insert_index = i
-                            break
-                    timestamps.insert(insert_index, timestamp)
-    
-    def get_changed_fields(self) -> Set[str]:
-        """Returns the set of fields that have changed since the last call."""
-        output = self.changed_fields
-        self.changed_fields = set()
-        return output
     
     def get_field_keys(self) -> List[str]:
         """Returns an array of registered field keys."""
@@ -333,7 +282,6 @@ class Log:
     def set_field(self, key: str, field: LogField) -> None:
         """Adds an existing log field to this log."""
         self.fields[key] = field
-        self.changed_fields.add(key)
     
     def get_type(self, key: str) -> Optional[LoggableType]:
         """Returns the constant field type."""
@@ -350,7 +298,6 @@ class Log:
         field = self.fields.get(key)
         if field:
             field.structured_type = type_str
-            self.changed_fields.add(key)
     
     def get_type_warning(self, key: str) -> bool:
         """Returns whether there was an attempt to write a conflicting type to a field."""
@@ -382,27 +329,12 @@ class Log:
         keys = [key for key in keys if key in self.fields]
         
         if len(keys) > 1:
-            # Check cache if available
-            if (uuid and self.enable_timestamp_set_cache and 
-                uuid in self.timestamp_set_cache):
-                cache = self.timestamp_set_cache[uuid]
-                if (cache["keys"] == keys and 
-                    cache["source_counts"] == [len(self.fields[k].get_timestamps()) for k in keys]):
-                    return cache["timestamps"].copy()
-            
             # Get new data
             all_timestamps = []
             for key in keys:
                 all_timestamps.extend(self.fields[key].get_timestamps())
             output = sorted(list(set(all_timestamps)))
             
-            # Save to cache
-            if uuid and self.enable_timestamp_set_cache:
-                self.timestamp_set_cache[uuid] = {
-                    "keys": keys,
-                    "timestamps": output,
-                    "source_counts": [len(self.fields[k].get_timestamps()) for k in keys]
-                }
         elif len(keys) == 1:
             output = self.fields[keys[0]].get_timestamps()
         else:
@@ -475,7 +407,6 @@ class Log:
         """Writes a new Raw value to the field."""
         self.create_blank_field(key, LoggableType.RAW)
         self.fields[key].put_raw(timestamp, value)
-        self.changed_fields.add(key)
         if self.fields[key].get_type() == LoggableType.RAW:
             self._process_timestamp(key, timestamp)
     
@@ -483,7 +414,6 @@ class Log:
         """Writes a new Boolean value to the field."""
         self.create_blank_field(key, LoggableType.BOOLEAN)
         self.fields[key].put_boolean(timestamp, value)
-        self.changed_fields.add(key)
         if self.fields[key].get_type() == LoggableType.BOOLEAN:
             self._process_timestamp(key, timestamp)
     
@@ -491,7 +421,6 @@ class Log:
         """Writes a new Number value to the field."""
         self.create_blank_field(key, LoggableType.NUMBER)
         self.fields[key].put_number(timestamp, value)
-        self.changed_fields.add(key)
         if self.fields[key].get_type() == LoggableType.NUMBER:
             self._process_timestamp(key, timestamp)
     
@@ -499,7 +428,6 @@ class Log:
         """Writes a new String value to the field."""
         self.create_blank_field(key, LoggableType.STRING)
         self.fields[key].put_string(timestamp, value)
-        self.changed_fields.add(key)
         if self.fields[key].get_type() == LoggableType.STRING:
             self._process_timestamp(key, timestamp)
     
@@ -553,14 +481,6 @@ class Log:
                     self.create_blank_field(full_child_key, LoggableType.EMPTY)
                     self._process_timestamp(full_child_key, timestamp)
                     self.set_structured_type(full_child_key, child_schema_type)
-            else:
-                queue = self.queued_struct_arrays if is_array else self.queued_structs
-                queue.append(QueuedStructure(
-                    key=key,
-                    timestamp=timestamp,
-                    value=value,
-                    schema_type=schema_type
-                ))
     
     def _put_unknown_struct(self, key: str, timestamp: float, value: Any, 
                            allow_root_write: bool = False) -> None:
