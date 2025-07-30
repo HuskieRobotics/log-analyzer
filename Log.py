@@ -5,7 +5,6 @@ import json
 import msgpack
 import struct
 from abc import ABC, abstractmethod
-import numpy as np
 
 # === Core Types ===
 
@@ -504,6 +503,30 @@ class Log:
             field.structured_type = type_str
             self.changed_fields.add(key)
     
+    def get_wpilib_type(self, key: str) -> Optional[str]:
+        """Returns the WPILib type string for a field."""
+        field = self.fields.get(key)
+        return field.wpilib_type if field else None
+    
+    def set_wpilib_type(self, key: str, type_str: str) -> None:
+        """Sets the WPILib type string for a field."""
+        field = self.fields.get(key)
+        if field:
+            field.wpilib_type = type_str
+            self.changed_fields.add(key)
+    
+    def get_metadata_string(self, key: str) -> str:
+        """Returns the metadata string for a field."""
+        field = self.fields.get(key)
+        return field.metadata_string if field else ""
+    
+    def set_metadata_string(self, key: str, metadata: str) -> None:
+        """Sets the WPILib metadata string for a field."""
+        field = self.fields.get(key)
+        if field:
+            field.metadata_string = metadata
+            self.changed_fields.add(key)
+            
     def is_generated(self, key: str) -> bool:
         """Returns whether the key is generated."""
         return self.get_generated_parent(key) is not None
