@@ -32,7 +32,10 @@
         "calculations": [
             {"type": "average", "name": "Average Y Diff at Reef"},
             {"type": "max", "name": "Max Y Diff at Reef"},
-            {"type": "min", "name": "Min Y Diff at Reef"}
+            {"type": "min", "name": "Min Y Diff at Reef"},
+            {"type": "abs_average", "name": "Average Y Diff at Reef (abs)"},
+            {"type": "abs_max", "name": "Max Y Diff at Reef (abs)"},
+            {"type": "abs_min", "name": "Min Y Diff at Reef (abs)"}
         ]
     }]
 }

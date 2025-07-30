@@ -115,7 +115,11 @@ Both time and value analysis support these calculation types:
 | `"average"` | Arithmetic mean | Time differences, numeric values |
 | `"min"` | Minimum value | Time differences, numeric values |
 | `"max"` | Maximum value | Time differences, numeric values |
+| `"abs_average"` | Arithmetic mean of absolute values | numeric values |
+| `"abs_min"` | Minimum value of absolute values | numeric values |
+| `"abs_max"` | Maximum value of absolute values | numeric values |
 | `"count"` | Count of items | Time differences, numeric values |
+
 
 ### Complete Example Configuration
 
@@ -136,7 +140,7 @@ Both time and value analysis support these calculation types:
         ]
     },
     {
-        "startEntry": "/RealOutputs/Manipulator/State", 
+        "startEntry": "/RealOutputs/Manipulator/State",
         "startValue": "WAITING_FOR_CORAL",
         "endEntry": "/RealOutputs/LEDS/state",
         "endValue": "SCORING",
@@ -148,13 +152,13 @@ Both time and value analysis support these calculation types:
         ]
     }],
     "valueAnalysis": [{
-        "entry": "/RealOutputs/DriveToReef/y velocity (reef frame)",
+        "entry": "/RealOutputs/DriveToReef/difference (reef frame)/translation/y",
         "triggerEntry": "/Manipulator/IsIndexerIRBlocked",
         "triggerValue": false,
         "calculations": [
-            {"type": "average", "name": "Average Y Velocity at Reef"},
-            {"type": "max", "name": "Max Y Velocity at Reef"},
-            {"type": "min", "name": "Min Y Velocity at Reef"}
+            {"type": "abs_average", "name": "Average Y Diff at Reef (abs)"},
+            {"type": "abs_max", "name": "Max Y Diff at Reef (abs)"},
+            {"type": "abs_min", "name": "Min Y Diff at Reef (abs)"}
         ]
     }]
 }
@@ -193,6 +197,8 @@ The tool supports these WPILib data types:
 - `string` / `string[]`
 - `json`
 - `msgpack`
+
+In addition, the tool supports stucts whose schema is encoded in the log file.
 
 ## Requirements
 

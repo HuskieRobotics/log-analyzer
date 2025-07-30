@@ -83,10 +83,12 @@ def print_values_and_calculations(values, calculations, context_prefix="", no_va
         
         # Filter numeric values for calculations
         numeric_values = []
+        abs_numeric_values = []
         for val in values:
             if isinstance(val, (int, float)):
                 numeric_values.append(val)
-        
+                abs_numeric_values.append(abs(val))
+
         if numeric_values:
             # Perform calculations
             for calc in calculations:
@@ -101,6 +103,15 @@ def print_values_and_calculations(values, calculations, context_prefix="", no_va
                     print(f"  {context_prefix}{calc_name}: {result:.6f}")
                 elif calc_type == 'min':
                     result = min(numeric_values)
+                    print(f"  {context_prefix}{calc_name}: {result:.6f}")
+                elif calc_type == 'abs_average':
+                    result = sum(abs_numeric_values) / len(abs_numeric_values)
+                    print(f"  {context_prefix}{calc_name}: {result:.6f}")
+                elif calc_type == 'abs_max':
+                    result = max(abs_numeric_values)
+                    print(f"  {context_prefix}{calc_name}: {result:.6f}")
+                elif calc_type == 'abs_min':
+                    result = min(abs_numeric_values)
                     print(f"  {context_prefix}{calc_name}: {result:.6f}")
                 elif calc_type == 'count':
                     result = len(numeric_values)
