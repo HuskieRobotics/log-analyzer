@@ -9,6 +9,7 @@ import os
 import sys
 from datetime import datetime
 from datalog import DataLogReader, DataLogRecord, StartRecordData
+from StructDecoder import StructDecoder
 
 
 def print_cycles_and_calculations(time_differences, calculations, context_prefix="", no_cycles_message=None):
@@ -222,6 +223,8 @@ def main():
     
     target_entry_names = set([])
 
+    struct_decoder = StructDecoder()
+
     # Always capture these entry names regardless of JSON configuration
     mandatory_entries = {"/DriverStation/Enabled", "/DriverStation/Autonomous", "/DriverStation/FMSAttached"}
     target_entry_names.update(mandatory_entries)
@@ -351,6 +354,7 @@ def main():
                         if ".schema" in entry.name:
                             # If the entry is a schema entry, we may want to capture it differently
                             print(f"  Schema entry {entry.name} found: {record.getString()} (at {timestamp})")
+                            struct_decoder.add_schema(entry.name.split("struct:")[1], record.getBytes())
                         
                         # Move this to another method and bring in the struct parser from the other branch
 
@@ -359,6 +363,7 @@ def main():
                             captured_records.append((record, entry, timestamp))
                 
                 print(f"  Captured {len(captured_records)} records from {os.path.basename(log_file_path)}")
+                print("Struct decoder:  ", struct_decoder)
                 return captured_records
                 
         except Exception as e:

@@ -129,6 +129,9 @@ class DataLogRecord:
 
     def getString(self) -> str:
         return str(self.data, encoding="utf-8")
+    
+    def getBytes(self) -> bytes:
+        return bytes(self.data)
 
     def getMsgPack(self):
         return msgpack.unpackb(self.data)
