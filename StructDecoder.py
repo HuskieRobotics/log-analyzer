@@ -8,6 +8,9 @@
 """Class to manage decoding WPILib structs.
 
 Specification: https://github.com/wpilibsuite/allwpilib/blob/main/wpiutil/doc/struct.adoc
+
+Converted from the TypeScript version at:
+https://github.com/Mechanical-Advantage/AdvantageScope/blob/main/src/shared/log/StructDecoder.ts
 """
 
 import struct
