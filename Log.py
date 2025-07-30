@@ -1,10 +1,13 @@
+"""
+A simplified Python version of the TypeScript classes that are part of AdvantageScope:
+https://github.com/Mechanical-Advantage/AdvantageScope/blob/main/src/shared/log
+"""
+
 from enum import Enum
-from typing import Dict, List, Optional, Union, Any, Set, Tuple, TypeVar, Generic
+from typing import Dict, List, Optional, Any, Set, Tuple
 from dataclasses import dataclass, field
 import json
 import msgpack
-import struct
-from abc import ABC, abstractmethod
 from StructDecoder import StructDecoder
 
 # === Core Types ===
@@ -54,82 +57,6 @@ class LogValueSetNumberArray(LogValueSet):
 class LogValueSetStringArray(LogValueSet):
     values: List[List[str]] = field(default_factory=list)
 
-# === Geometry Types ===
-
-Translation2d = Tuple[float, float]  # meters (x, y)
-Rotation2d = float  # radians
-
-@dataclass
-class Pose2d:
-    translation: Translation2d
-    rotation: Rotation2d
-
-Translation3d = Tuple[float, float, float]  # meters (x, y, z)
-Rotation3d = Tuple[float, float, float, float]  # quaternion (w, x, y, z)
-
-@dataclass
-class Pose3d:
-    translation: Translation3d
-    rotation: Rotation3d
-
-# === Tree Structure ===
-
-@dataclass
-class LogFieldTree:
-    """A layer of a recursive log tree."""
-    full_key: Optional[str] = None
-    children: Dict[str, 'LogFieldTree'] = field(default_factory=dict)
-
-# === Decoders ===
-
-class ProtoDecoder:
-    """Manages decoding protobuf data."""
-    
-    def __init__(self):
-        self.descriptors: List[Any] = []
-    
-    def add_descriptor(self, descriptor: bytes) -> None:
-        """Add a protobuf descriptor."""
-        # Implement protobuf descriptor parsing
-        self.descriptors.append(descriptor)
-    
-    def decode(self, schema_type: str, data: bytes) -> Dict[str, Any]:
-        """Decode protobuf data."""
-        # Implement protobuf decoding logic
-        return {"data": None, "schema_types": {}}
-    
-    @staticmethod
-    def get_friendly_schema_type(schema_type: str) -> str:
-        """Convert schema type to friendly name."""
-        return schema_type.replace("wpi.proto.", "")
-    
-    def to_serialized(self) -> List[Any]:
-        """Serialize decoder state."""
-        return self.descriptors
-    
-    @classmethod
-    def from_serialized(cls, descriptors: List[Any]) -> 'ProtoDecoder':
-        """Create decoder from serialized state."""
-        decoder = cls()
-        decoder.descriptors = descriptors
-        return decoder
-
-class PhotonStructDecoder:
-    """Manages decoding PhotonVision struct data."""
-    
-    def __init__(self):
-        self.schemas: Dict[str, Any] = {}
-    
-    def add_schema(self, name: str, schema: bytes) -> None:
-        """Add a PhotonStruct schema."""
-        # Implement PhotonStruct schema parsing
-        pass
-    
-    def decode(self, schema_type: str, data: bytes) -> Dict[str, Any]:
-        """Decode PhotonStruct data."""
-        # Implement PhotonStruct decoding logic
-        return {"data": None, "schema_types": {}}
-
 # === Log Field ===
 
 class LogField:
@@ -139,19 +66,11 @@ class LogField:
         self.type = log_type
         self.data = LogValueSet()
         self.structured_type: Optional[str] = None
-        self.wpilib_type: Optional[str] = None
-        self.metadata_string: str = ""
         self.type_warning: bool = False
-        self.striping_reference: bool = False
-        self.get_range_cache: Dict[str, int] = {}
     
     def get_type(self) -> LoggableType:
         """Returns the constant field type."""
         return self.type
-    
-    def get_striping_reference(self) -> bool:
-        """Returns the value of the striping reference."""
-        return self.striping_reference
     
     def get_timestamps(self) -> List[float]:
         """Returns the full set of ordered timestamps."""
@@ -182,7 +101,7 @@ class LogField:
                   start_offset: Optional[int] = None) -> LogValueSet:
         """Returns values in the specified timestamp range."""
         # Implement range retrieval with caching
-        # This is a simplified version
+        # FIXME: This is a simplified version that doesn't support start_offset and handles bounds differently
         result_timestamps = []
         result_values = []
         
@@ -286,30 +205,6 @@ class LogField:
         
         self.data.timestamps.insert(insert_index, timestamp)
         self.data.values.insert(insert_index, value)
-    
-    def to_serialized(self) -> Dict[str, Any]:
-        """Serialize field data."""
-        return {
-            "type": self.type.value,
-            "timestamps": self.data.timestamps,
-            "values": self.data.values,
-            "structured_type": self.structured_type,
-            "wpilib_type": self.wpilib_type,
-            "metadata_string": self.metadata_string,
-            "type_warning": self.type_warning
-        }
-    
-    @classmethod
-    def from_serialized(cls, data: Dict[str, Any]) -> 'LogField':
-        """Create field from serialized data."""
-        field = cls(LoggableType(data["type"]))
-        field.data.timestamps = data["timestamps"]
-        field.data.values = data["values"]
-        field.structured_type = data.get("structured_type")
-        field.wpilib_type = data.get("wpilib_type")
-        field.metadata_string = data.get("metadata_string", "")
-        field.type_warning = data.get("type_warning", False)
-        return field
 
 # === Queued Structure ===
 
@@ -329,8 +224,6 @@ class Log:
         self.DEFAULT_TIMESTAMP_RANGE = (0.0, 10.0)
         self.msgpack_decoder = msgpack
         self.struct_decoder = StructDecoder()
-        self.proto_decoder = ProtoDecoder()
-        self.photon_decoder = PhotonStructDecoder()
         
         self.fields: Dict[str, LogField] = {}
         self.generated_parents: Set[str] = set()
@@ -447,11 +340,6 @@ class Log:
         field = self.fields.get(key)
         return field.get_type() if field else None
     
-    def get_striping_reference(self, key: str) -> bool:
-        """Returns a boolean that toggles when a value is removed from the field."""
-        field = self.fields.get(key)
-        return field.get_striping_reference() if field else False
-    
     def get_structured_type(self, key: str) -> Optional[str]:
         """Returns the structured type string for a field."""
         field = self.fields.get(key)
@@ -462,30 +350,6 @@ class Log:
         field = self.fields.get(key)
         if field:
             field.structured_type = type_str
-            self.changed_fields.add(key)
-    
-    def get_wpilib_type(self, key: str) -> Optional[str]:
-        """Returns the WPILib type string for a field."""
-        field = self.fields.get(key)
-        return field.wpilib_type if field else None
-    
-    def set_wpilib_type(self, key: str, type_str: str) -> None:
-        """Sets the WPILib type string for a field."""
-        field = self.fields.get(key)
-        if field:
-            field.wpilib_type = type_str
-            self.changed_fields.add(key)
-    
-    def get_metadata_string(self, key: str) -> str:
-        """Returns the metadata string for a field."""
-        field = self.fields.get(key)
-        return field.metadata_string if field else ""
-    
-    def set_metadata_string(self, key: str, metadata: str) -> None:
-        """Sets the WPILib metadata string for a field."""
-        field = self.fields.get(key)
-        if field:
-            field.metadata_string = metadata
             self.changed_fields.add(key)
     
     def get_type_warning(self, key: str) -> bool:
@@ -556,34 +420,6 @@ class Log:
         """Returns the most recent timestamp across all fields."""
         timestamps = self.get_timestamps(self.get_field_keys())
         return timestamps[-1] if timestamps else 0.0
-    
-    def get_field_tree(self, include_generated: bool = True, 
-                       prefix: str = "") -> Dict[str, LogFieldTree]:
-        """Organizes the fields into a tree structure."""
-        root: Dict[str, LogFieldTree] = {}
-        
-        for key in self.fields.keys():
-            if not key.startswith(prefix):
-                continue
-            if not include_generated and self.is_generated(key):
-                continue
-            
-            position = LogFieldTree(children=root)
-            relative_key = key[len(prefix):]
-            if relative_key.startswith("/"):
-                relative_key = relative_key[1:]
-            
-            path_parts = relative_key.split("/")
-            for part in path_parts:
-                if not part:
-                    continue
-                if part not in position.children:
-                    position.children[part] = LogFieldTree()
-                position = position.children[part]
-            
-            position.full_key = relative_key
-        
-        return root
     
     # Data reading methods
     def get_range(self, key: str, start: float, end: float, 
@@ -726,31 +562,6 @@ class Log:
                     schema_type=schema_type
                 ))
     
-    def put_pose(self, key: str, timestamp: float, pose: Pose2d) -> None:
-        """Writes a pose with the 'Pose2d' structured type."""
-        translation_key = f"{key}/translation"
-        rotation_key = f"{key}/rotation"
-        
-        self.put_number(f"{translation_key}/x", timestamp, pose.translation[0])
-        self.put_number(f"{translation_key}/y", timestamp, pose.translation[1])
-        self.put_number(f"{rotation_key}/value", timestamp, pose.rotation)
-        
-        if key not in self.fields:
-            self.create_blank_field(key, LoggableType.EMPTY)
-            self.set_structured_type(key, "Pose2d")
-            self.set_generated_parent(key)
-            self._process_timestamp(key, timestamp)
-        
-        if translation_key not in self.fields:
-            self.create_blank_field(translation_key, LoggableType.EMPTY)
-            self.set_structured_type(translation_key, "Translation2d")
-            self._process_timestamp(translation_key, timestamp)
-        
-        if rotation_key not in self.fields:
-            self.create_blank_field(rotation_key, LoggableType.EMPTY)
-            self.set_structured_type(rotation_key, "Rotation2d")
-            self._process_timestamp(rotation_key, timestamp)
-    
     def _put_unknown_struct(self, key: str, timestamp: float, value: Any, 
                            allow_root_write: bool = False) -> None:
         """Writes an unknown array or object to the children of the field."""
@@ -790,84 +601,4 @@ class Log:
             for obj_key, obj_value in value.items():
                 self._put_unknown_struct(f"{key}/{obj_key}", timestamp, obj_value, True)
     
-    def to_serialized(self) -> Dict[str, Any]:
-        """Returns a serialized version of the data from this log."""
-        result = {
-            "fields": {},
-            "generated_parents": list(self.generated_parents),
-            "timestamp_range": self.timestamp_range,
-            "struct_decoder": self.struct_decoder.to_serialized(),
-            "proto_decoder": self.proto_decoder.to_serialized(),
-            "queued_structs": [
-                {
-                    "key": qs.key,
-                    "timestamp": qs.timestamp,
-                    "value": qs.value,
-                    "schema_type": qs.schema_type
-                } for qs in self.queued_structs
-            ],
-            "queued_struct_arrays": [
-                {
-                    "key": qs.key,
-                    "timestamp": qs.timestamp,
-                    "value": qs.value,
-                    "schema_type": qs.schema_type
-                } for qs in self.queued_struct_arrays
-            ],
-            "queued_protos": [
-                {
-                    "key": qs.key,
-                    "timestamp": qs.timestamp,
-                    "value": qs.value,
-                    "schema_type": qs.schema_type
-                } for qs in self.queued_protos
-            ]
-        }
-        
-        for key, field in self.fields.items():
-            result["fields"][key] = field.to_serialized()
-        
-        return result
     
-    @classmethod
-    def from_serialized(cls, serialized_data: Dict[str, Any]) -> 'Log':
-        """Creates a new log based on the data from to_serialized()."""
-        log = cls()
-        
-        # Restore fields
-        for key, field_data in serialized_data["fields"].items():
-            log.fields[key] = LogField.from_serialized(field_data)
-        
-        # Restore other properties
-        log.generated_parents = set(serialized_data["generated_parents"])
-        log.timestamp_range = serialized_data["timestamp_range"]
-        log.struct_decoder = StructDecoder.from_serialized(serialized_data["struct_decoder"])
-        log.proto_decoder = ProtoDecoder.from_serialized(serialized_data["proto_decoder"])
-        
-        # Restore queued structures
-        log.queued_structs = [
-            QueuedStructure(
-                key=qs["key"],
-                timestamp=qs["timestamp"],
-                value=qs["value"],
-                schema_type=qs["schema_type"]
-            ) for qs in serialized_data.get("queued_structs", [])
-        ]
-        log.queued_struct_arrays = [
-            QueuedStructure(
-                key=qs["key"],
-                timestamp=qs["timestamp"],
-                value=qs["value"],
-                schema_type=qs["schema_type"]
-            ) for qs in serialized_data.get("queued_struct_arrays", [])
-        ]
-        log.queued_protos = [
-            QueuedStructure(
-                key=qs["key"],
-                timestamp=qs["timestamp"],
-                value=qs["value"],
-                schema_type=qs["schema_type"]
-            ) for qs in serialized_data.get("queued_protos", [])
-        ]
-        
-        return log
