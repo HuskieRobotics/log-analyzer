@@ -7,8 +7,7 @@ import json
 import mmap
 import os
 import sys
-from datetime import datetime
-from datalog import DataLogReader, DataLogRecord, StartRecordData
+from datalog import DataLogReader
 from Log import Log, LoggableType
 
 # Constants for structured types
@@ -121,13 +120,91 @@ def print_values_and_calculations(values, calculations, context_prefix="", no_va
                 message += " in this file"
             print(f"  {message}")
 
+def analyze_file_records(log, time_analysis_configs):
+    """
+    Analyze file records and return time differences for each analysis configuration.
+    
+    Args:
+        log: List of (record, entry, timestamp) tuples
+        time_analysis_configs: List of analysis configuration dictionaries
+        
+    Returns:
+        Dictionary mapping analysis index to list of time differences
+    """
+    all_analysis_results = {}
+    
+    for analysis_idx, analysis in enumerate(time_analysis_configs):
+        start_entry = analysis.get('startEntry')
+        start_value = analysis.get('startValue')
+        end_entry = analysis.get('endEntry')
+        end_value = analysis.get('endValue')
+        calculations = analysis.get('calculations', [])
+        
+        if not all([start_entry, end_entry, calculations]):
+            all_analysis_results[analysis_idx] = []
+            continue
+        
+        # Find time differences between start and end events
+        time_differences = []
+
+        # Get the field and timestamps for the start entry
+        start_field = log.get_field(start_entry)
+        end_field = log.get_field(end_entry)
+
+        if not start_field or not end_field:
+            print(f"  Skipping analysis {analysis_idx} due to missing fields: {start_entry} or {end_entry}")
+            all_analysis_results[analysis_idx] = []
+            continue
+
+        if start_field.get_type() == LoggableType.STRING:
+            start_log_values = start_field.get_string(0.0, log.get_last_timestamp())
+        elif start_field.get_type() == LoggableType.BOOLEAN:
+            start_log_values = start_field.get_boolean(0.0, log.get_last_timestamp())
+        elif start_field.get_type() == LoggableType.NUMBER:
+            start_log_values = start_field.get_number(0.0, log.get_last_timestamp())
+        else:
+            print(f"  Skipping analysis {analysis_idx} due to unsupported type for: {start_entry} of {start_field.get_type()}")
+            all_analysis_results[analysis_idx] = []
+            continue
+            
+        start_timestamp = 0.0
+
+        for i, timestamp in enumerate(start_log_values.timestamps):
+            if start_log_values.values[i] == start_value:
+                start_timestamp = timestamp
+                next_timestamp = log.get_last_timestamp()
+                for i, timestamp in enumerate(start_log_values.timestamps):
+                    if timestamp > start_timestamp and start_log_values.values[i] == start_value:
+                        next_timestamp = timestamp
+                        break
+
+                if end_field.get_type() == LoggableType.STRING:
+                    end_log_values = end_field.get_string(start_timestamp, next_timestamp)
+                elif end_field.get_type() == LoggableType.BOOLEAN:
+                    end_log_values = end_field.get_boolean(start_timestamp, next_timestamp)
+                elif end_field.get_type() == LoggableType.NUMBER:
+                    end_log_values = end_field.get_number(start_timestamp, next_timestamp)
+                else:
+                    print(f"  Skipping analysis {analysis_idx} due to unsupported type for: {end_entry} of {end_field.get_type()}")
+                    all_analysis_results[analysis_idx] = []
+                    continue
+
+                for i, timestamp in enumerate(end_log_values.timestamps):
+                    if end_log_values.values[i] == end_value:
+                        time_diff = timestamp - start_timestamp
+                        time_differences.append(time_diff)
+                        break
+        
+        all_analysis_results[analysis_idx] = time_differences
+    
+    return all_analysis_results
 
 def analyze_value_records(log, value_analysis_configs):
     """
     Analyze file records and return captured values for each value analysis configuration.
     
     Args:
-        log: The log object containing file records
+        log: the log to analyze for values
         value_analysis_configs: List of value analysis configuration dictionaries
         
     Returns:
@@ -193,6 +270,148 @@ def analyze_value_records(log, value_analysis_configs):
     
     return all_value_results
 
+def process_log_file(log_file_path, mandatory_entries, target_entry_names, 
+                     filter_enabled=False, filter_fms_attached=False, robot_mode='both'):
+    
+    def should_capture_record(driver_station_enabled, driver_station_autonomous, driver_station_fms_attached):
+        """Check if records should be captured based on current DriverStation state."""
+        # Check enabled filter
+        if filter_enabled and driver_station_enabled is not None and not driver_station_enabled:
+            return False
+        
+        # Check FMS attached filter
+        if filter_fms_attached and driver_station_fms_attached is not None and not driver_station_fms_attached:
+            return False
+        
+        # Check robot mode filter
+        if robot_mode == "auto" and driver_station_autonomous is not None and not driver_station_autonomous:
+            return False
+        elif robot_mode == "teleop" and driver_station_autonomous is not None and driver_station_autonomous:
+            return False
+        # If robot_mode is "both" or any condition is not set, allow capture
+        
+        return True
+
+
+    """Process a single log file and return captured records and final driver station state."""
+    print(f"\nProcessing: {os.path.basename(log_file_path)}")
+    
+    with open(log_file_path, "rb") as f:
+        mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+        reader = DataLogReader(mm)
+        if not reader:
+            print(f"  Warning: {os.path.basename(log_file_path)} is not a valid log file")
+            return [], None, None, None
+
+        entries = {}
+        log = Log()
+        
+        # Track most recent values of DriverStation entries for filtering
+        driver_station_enabled = None
+        driver_station_autonomous = None
+        driver_station_fms_attached = None
+        
+        for record in reader:
+            timestamp = record.timestamp / 1000000
+            if record.isStart():
+                try:
+                    data = record.getStartData()
+                    if data.entry in entries:
+                        print("...DUPLICATE entry ID, overriding")
+
+                    entries[data.entry] = data
+                    
+                except TypeError:
+                    print("Start(INVALID)")
+                    
+            elif record.isFinish():
+                try:
+                    entry = record.getFinishEntry()
+                    if entry not in entries:
+                        print("...ID not found")
+                    else:
+                        del entries[entry]
+                except TypeError:
+                    print("Finish(INVALID)")
+            elif record.isSetMetadata():
+                try:
+                    data = record.getSetMetadataData()
+                    if data.entry not in entries:
+                        print("...ID not found")
+                except TypeError:
+                    print("SetMetadata(INVALID)")
+            elif record.isControl():
+                print("Unrecognized control record")
+            else:
+                entry = entries.get(record.entry)
+                if entry is None:
+                    continue
+
+                # Update DriverStation state tracking for filtering
+                try:
+                    if entry.name == "/DriverStation/Enabled" and entry.type == "boolean":
+                        driver_station_enabled = record.getBoolean()
+                    elif entry.name == "/DriverStation/Autonomous" and entry.type == "boolean":
+                        driver_station_autonomous = record.getBoolean()
+                    elif entry.name == "/DriverStation/FMSAttached" and entry.type == "boolean":
+                        driver_station_fms_attached = record.getBoolean()
+                except TypeError:
+                    # If we can't read the value, continue without updating state
+                    pass
+
+                if ".schema" in entry.name:
+                    # If the entry is a schema entry, we may want to capture it differently
+                    log.struct_decoder.add_schema(entry.name.split("struct:")[1], record.getBytes())
+                
+                # Move this to another method and bring in the struct parser from the other branch
+
+                # Check if this record matches any target entry names and meets filtering criteria
+                if any(entry.name in name for name in mandatory_entries) or (any(entry.name in name for name in target_entry_names)and should_capture_record(driver_station_enabled, driver_station_autonomous, driver_station_fms_attached)):
+                    key = entry.name
+                    type_str = entry.type
+                    
+                    if type_str == "boolean":
+                        log.put_boolean(key, timestamp, record.getBoolean())
+                    elif type_str in ("int", "int64"):
+                        log.put_number(key, timestamp, record.getInteger())
+                    elif type_str == "float":
+                        log.put_number(key, timestamp, record.getFloat())
+                    elif type_str == "double":
+                        log.put_number(key, timestamp, record.getDouble())
+                    elif type_str == "string":
+                        log.put_string(key, timestamp, record.getString())
+                    elif type_str == "boolean[]":
+                        log.put_boolean_array(key, timestamp, record.getBooleanArray())
+                    elif type_str in ("int[]", "int64[]"):
+                        log.put_number_array(key, timestamp, record.getIntegerArray())
+                    elif type_str == "float[]":
+                        log.put_number_array(key, timestamp, record.getFloatArray())
+                    elif type_str == "double[]":
+                        log.put_number_array(key, timestamp, record.getDoubleArray())
+                    elif type_str == "string[]":
+                        log.put_string_array(key, timestamp, record.getStringArray())
+                    elif type_str == "json":
+                        log.put_json(key, timestamp, record.getString())
+                    elif type_str == "msgpack":
+                        log.put_msgpack(key, timestamp, record.data)  # getRaw() equivalent
+                    else:  # Default to raw
+                        if type_str.startswith(STRUCT_PREFIX):
+                            schema_type = type_str.split(STRUCT_PREFIX)[1]
+                            if schema_type.endswith("[]"):
+                                log.put_struct(key, timestamp, record.data, schema_type[:-2], True)
+                            else:
+                                log.put_struct(key, timestamp, record.data, schema_type, False)
+                        elif type_str.startswith(PHOTON_PREFIX):
+                            schema_type = type_str.split(PHOTON_PREFIX)[1]
+                            log.put_photon_struct(key, timestamp, record.data, schema_type)
+                        elif type_str.startswith(PROTO_PREFIX):
+                            schema_type = type_str.split(PROTO_PREFIX)[1]
+                            log.put_proto(key, timestamp, record.data, schema_type)
+                        else:
+                            log.put_raw(key, timestamp, record.data)
+                            # Note: CustomSchemas functionality not implemented in Python version
+                    
+        return log
 
 def main():
     """Main analysis function."""
@@ -266,229 +485,11 @@ def main():
     all_files_time_differences = []  # List to store time differences for analysis
     aggregated_time_analysis_results = {}  # Dictionary to store aggregated time differences by analysis index
     aggregated_value_analysis_results = {}  # Dictionary to store aggregated values by analysis index
-    
-    def should_capture_record(driver_station_enabled, driver_station_autonomous, driver_station_fms_attached):
-        """Check if records should be captured based on current DriverStation state."""
-        # Check enabled filter
-        if filter_enabled and driver_station_enabled is not None and not driver_station_enabled:
-            return False
-        
-        # Check FMS attached filter
-        if filter_fms_attached and driver_station_fms_attached is not None and not driver_station_fms_attached:
-            return False
-        
-        # Check robot mode filter
-        if robot_mode == "auto" and driver_station_autonomous is not None and not driver_station_autonomous:
-            return False
-        elif robot_mode == "teleop" and driver_station_autonomous is not None and driver_station_autonomous:
-            return False
-        # If robot_mode is "both" or any condition is not set, allow capture
-        
-        return True
-
-    def process_log_file(log_file_path):
-        """Process a single log file and return captured records and final driver station state."""
-        print(f"\nProcessing: {os.path.basename(log_file_path)}")
-        
-        with open(log_file_path, "rb") as f:
-            mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
-            reader = DataLogReader(mm)
-            if not reader:
-                print(f"  Warning: {os.path.basename(log_file_path)} is not a valid log file")
-                return [], None, None, None
-
-            entries = {}
-            log = Log()
-            
-            # Track most recent values of DriverStation entries for filtering
-            driver_station_enabled = None
-            driver_station_autonomous = None
-            driver_station_fms_attached = None
-            
-            for record in reader:
-                timestamp = record.timestamp / 1000000
-                if record.isStart():
-                    try:
-                        data = record.getStartData()
-                        if data.entry in entries:
-                            print("...DUPLICATE entry ID, overriding")
-
-                        entries[data.entry] = data
-                        
-                    except TypeError:
-                        print("Start(INVALID)")
-                        
-                elif record.isFinish():
-                    try:
-                        entry = record.getFinishEntry()
-                        if entry not in entries:
-                            print("...ID not found")
-                        else:
-                            del entries[entry]
-                    except TypeError:
-                        print("Finish(INVALID)")
-                elif record.isSetMetadata():
-                    try:
-                        data = record.getSetMetadataData()
-                        if data.entry not in entries:
-                            print("...ID not found")
-                    except TypeError:
-                        print("SetMetadata(INVALID)")
-                elif record.isControl():
-                    print("Unrecognized control record")
-                else:
-                    entry = entries.get(record.entry)
-                    if entry is None:
-                        continue
-
-                    # Update DriverStation state tracking for filtering
-                    try:
-                        if entry.name == "/DriverStation/Enabled" and entry.type == "boolean":
-                            driver_station_enabled = record.getBoolean()
-                        elif entry.name == "/DriverStation/Autonomous" and entry.type == "boolean":
-                            driver_station_autonomous = record.getBoolean()
-                        elif entry.name == "/DriverStation/FMSAttached" and entry.type == "boolean":
-                            driver_station_fms_attached = record.getBoolean()
-                    except TypeError:
-                        # If we can't read the value, continue without updating state
-                        pass
-
-                    if ".schema" in entry.name:
-                        # If the entry is a schema entry, we may want to capture it differently
-                        log.struct_decoder.add_schema(entry.name.split("struct:")[1], record.getBytes())
-                    
-                    # Move this to another method and bring in the struct parser from the other branch
-
-                    # Check if this record matches any target entry names and meets filtering criteria
-                    if any(entry.name in name for name in mandatory_entries) or (any(entry.name in name for name in target_entry_names)and should_capture_record(driver_station_enabled, driver_station_autonomous, driver_station_fms_attached)):
-                        key = entry.name
-                        type_str = entry.type
-                        
-                        if type_str == "boolean":
-                            log.put_boolean(key, timestamp, record.getBoolean())
-                        elif type_str in ("int", "int64"):
-                            log.put_number(key, timestamp, record.getInteger())
-                        elif type_str == "float":
-                            log.put_number(key, timestamp, record.getFloat())
-                        elif type_str == "double":
-                            log.put_number(key, timestamp, record.getDouble())
-                        elif type_str == "string":
-                            log.put_string(key, timestamp, record.getString())
-                        elif type_str == "boolean[]":
-                            log.put_boolean_array(key, timestamp, record.getBooleanArray())
-                        elif type_str in ("int[]", "int64[]"):
-                            log.put_number_array(key, timestamp, record.getIntegerArray())
-                        elif type_str == "float[]":
-                            log.put_number_array(key, timestamp, record.getFloatArray())
-                        elif type_str == "double[]":
-                            log.put_number_array(key, timestamp, record.getDoubleArray())
-                        elif type_str == "string[]":
-                            log.put_string_array(key, timestamp, record.getStringArray())
-                        elif type_str == "json":
-                            log.put_json(key, timestamp, record.getString())
-                        elif type_str == "msgpack":
-                            log.put_msgpack(key, timestamp, record.data)  # getRaw() equivalent
-                        else:  # Default to raw
-                            if type_str.startswith(STRUCT_PREFIX):
-                                schema_type = type_str.split(STRUCT_PREFIX)[1]
-                                if schema_type.endswith("[]"):
-                                    log.put_struct(key, timestamp, record.data, schema_type[:-2], True)
-                                else:
-                                    log.put_struct(key, timestamp, record.data, schema_type, False)
-                            elif type_str.startswith(PHOTON_PREFIX):
-                                schema_type = type_str.split(PHOTON_PREFIX)[1]
-                                log.put_photon_struct(key, timestamp, record.data, schema_type)
-                            elif type_str.startswith(PROTO_PREFIX):
-                                schema_type = type_str.split(PROTO_PREFIX)[1]
-                                log.put_proto(key, timestamp, record.data, schema_type)
-                            else:
-                                log.put_raw(key, timestamp, record.data)
-                                # Note: CustomSchemas functionality not implemented in Python version
-                        
-            return log
-
-    def analyze_file_records(log, time_analysis_configs):
-        """
-        Analyze file records and return time differences for each analysis configuration.
-        
-        Args:
-            log: List of (record, entry, timestamp) tuples
-            time_analysis_configs: List of analysis configuration dictionaries
-            
-        Returns:
-            Dictionary mapping analysis index to list of time differences
-        """
-        all_analysis_results = {}
-        
-        for analysis_idx, analysis in enumerate(time_analysis_configs):
-            start_entry = analysis.get('startEntry')
-            start_value = analysis.get('startValue')
-            end_entry = analysis.get('endEntry')
-            end_value = analysis.get('endValue')
-            calculations = analysis.get('calculations', [])
-            
-            if not all([start_entry, end_entry, calculations]):
-                all_analysis_results[analysis_idx] = []
-                continue
-            
-            # Find time differences between start and end events
-            time_differences = []
-
-            # Get the field and timestamps for the start entry
-            start_field = log.get_field(start_entry)
-            end_field = log.get_field(end_entry)
-
-            if not start_field or not end_field:
-                print(f"  Skipping analysis {analysis_idx} due to missing fields: {start_entry} or {end_entry}")
-                all_analysis_results[analysis_idx] = []
-                continue
-
-            if start_field.get_type() == LoggableType.STRING:
-                start_log_values = start_field.get_string(0.0, log.get_last_timestamp())
-            elif start_field.get_type() == LoggableType.BOOLEAN:
-                start_log_values = start_field.get_boolean(0.0, log.get_last_timestamp())
-            elif start_field.get_type() == LoggableType.NUMBER:
-                start_log_values = start_field.get_number(0.0, log.get_last_timestamp())
-            else:
-                print(f"  Skipping analysis {analysis_idx} due to unsupported type for: {start_entry} of {start_field.get_type()}")
-                all_analysis_results[analysis_idx] = []
-                continue
-                
-            start_timestamp = 0.0
-
-            for i, timestamp in enumerate(start_log_values.timestamps):
-                if start_log_values.values[i] == start_value:
-                    start_timestamp = timestamp
-                    next_timestamp = log.get_last_timestamp()
-                    for i, timestamp in enumerate(start_log_values.timestamps):
-                        if timestamp > start_timestamp and start_log_values.values[i] == start_value:
-                            next_timestamp = timestamp
-                            break
-
-                    if end_field.get_type() == LoggableType.STRING:
-                        end_log_values = end_field.get_string(start_timestamp, next_timestamp)
-                    elif end_field.get_type() == LoggableType.BOOLEAN:
-                        end_log_values = end_field.get_boolean(start_timestamp, next_timestamp)
-                    elif end_field.get_type() == LoggableType.NUMBER:
-                        end_log_values = end_field.get_number(start_timestamp, next_timestamp)
-                    else:
-                        print(f"  Skipping analysis {analysis_idx} due to unsupported type for: {end_entry} of {end_field.get_type()}")
-                        all_analysis_results[analysis_idx] = []
-                        continue
-
-                    for i, timestamp in enumerate(end_log_values.timestamps):
-                        if end_log_values.values[i] == end_value:
-                            time_diff = timestamp - start_timestamp
-                            time_differences.append(time_diff)
-                            break
-            
-            all_analysis_results[analysis_idx] = time_differences
-        
-        return all_analysis_results
 
     # Process all log files
     for log_file in sorted(log_files):
-        log = process_log_file(log_file)
+        log = process_log_file(log_file, mandatory_entries, target_entry_names, 
+                               filter_enabled, filter_fms_attached, robot_mode)
         all_logs.append(log)
 
         # Analyze this file's records and aggregate for later cross-file analysis
