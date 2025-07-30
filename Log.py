@@ -5,6 +5,7 @@ import json
 import msgpack
 import struct
 from abc import ABC, abstractmethod
+from StructDecoder import StructDecoder
 
 # === Core Types ===
 
@@ -80,46 +81,6 @@ class LogFieldTree:
     children: Dict[str, 'LogFieldTree'] = field(default_factory=dict)
 
 # === Decoders ===
-
-class StructDecoder:
-    """Manages decoding WPILib structs."""
-    
-    def __init__(self):
-        self.schema_strings: Dict[str, str] = {}
-        self.schemas: Dict[str, Any] = {}
-    
-    def add_schema(self, name: str, schema: bytes) -> None:
-        """Add a struct schema."""
-        schema_str = schema.decode('utf-8')
-        if name in self.schema_strings:
-            return
-        self.schema_strings[name] = schema_str
-        # Implement schema compilation logic here
-    
-    def decode(self, schema_type: str, data: bytes) -> Dict[str, Any]:
-        """Decode struct data."""
-        # Implement struct decoding logic
-        return {"data": None, "schema_types": {}}
-    
-    def decode_array(self, schema_type: str, data: bytes) -> Dict[str, Any]:
-        """Decode struct array data."""
-        # Implement struct array decoding logic
-        return {"data": None, "schema_types": {}}
-    
-    def to_serialized(self) -> Dict[str, Any]:
-        """Serialize decoder state."""
-        return {
-            "schema_strings": self.schema_strings,
-            "schemas": self.schemas
-        }
-    
-    @classmethod
-    def from_serialized(cls, data: Dict[str, Any]) -> 'StructDecoder':
-        """Create decoder from serialized state."""
-        decoder = cls()
-        decoder.schema_strings = data.get("schema_strings", {})
-        decoder.schemas = data.get("schemas", {})
-        return decoder
 
 class ProtoDecoder:
     """Manages decoding protobuf data."""
@@ -526,6 +487,11 @@ class Log:
         if field:
             field.metadata_string = metadata
             self.changed_fields.add(key)
+    
+    def get_type_warning(self, key: str) -> bool:
+        """Returns whether there was an attempt to write a conflicting type to a field."""
+        field = self.fields.get(key)
+        return field.type_warning if field else False
             
     def is_generated(self, key: str) -> bool:
         """Returns whether the key is generated."""
@@ -619,6 +585,55 @@ class Log:
         
         return root
     
+    # Data reading methods
+    def get_range(self, key: str, start: float, end: float, 
+                  uuid: Optional[str] = None, start_offset: Optional[int] = None) -> Optional[LogValueSet]:
+        """Reads a set of generic values from the field."""
+        field = self.fields.get(key)
+        return field.get_range(start, end, uuid, start_offset) if field else None
+    
+    def get_raw(self, key: str, start: float, end: float, 
+                uuid: Optional[str] = None, start_offset: Optional[int] = None) -> Optional[LogValueSetRaw]:
+        """Reads a set of Raw values from the field."""
+        field = self.fields.get(key)
+        return field.get_raw(start, end, uuid, start_offset) if field else None
+    
+    def get_boolean(self, key: str, start: float, end: float, 
+                    uuid: Optional[str] = None, start_offset: Optional[int] = None) -> Optional[LogValueSetBoolean]:
+        """Reads a set of Boolean values from the field."""
+        field = self.fields.get(key)
+        return field.get_boolean(start, end, uuid, start_offset) if field else None
+    
+    def get_number(self, key: str, start: float, end: float, 
+                   uuid: Optional[str] = None, start_offset: Optional[int] = None) -> Optional[LogValueSetNumber]:
+        """Reads a set of Number values from the field."""
+        field = self.fields.get(key)
+        return field.get_number(start, end, uuid, start_offset) if field else None
+    
+    def get_string(self, key: str, start: float, end: float, 
+                   uuid: Optional[str] = None, start_offset: Optional[int] = None) -> Optional[LogValueSetString]:
+        """Reads a set of String values from the field."""
+        field = self.fields.get(key)
+        return field.get_string(start, end, uuid, start_offset) if field else None
+    
+    def get_boolean_array(self, key: str, start: float, end: float, 
+                          uuid: Optional[str] = None, start_offset: Optional[int] = None) -> Optional[LogValueSetBooleanArray]:
+        """Reads a set of BooleanArray values from the field."""
+        field = self.fields.get(key)
+        return field.get_boolean_array(start, end, uuid, start_offset) if field else None
+    
+    def get_number_array(self, key: str, start: float, end: float, 
+                         uuid: Optional[str] = None, start_offset: Optional[int] = None) -> Optional[LogValueSetNumberArray]:
+        """Reads a set of NumberArray values from the field."""
+        field = self.fields.get(key)
+        return field.get_number_array(start, end, uuid, start_offset) if field else None
+    
+    def get_string_array(self, key: str, start: float, end: float, 
+                         uuid: Optional[str] = None, start_offset: Optional[int] = None) -> Optional[LogValueSetStringArray]:
+        """Reads a set of StringArray values from the field."""
+        field = self.fields.get(key)
+        return field.get_string_array(start, end, uuid, start_offset) if field else None
+    
     # Data writing methods
     def put_raw(self, key: str, timestamp: float, value: bytes) -> None:
         """Writes a new Raw value to the field."""
@@ -675,6 +690,41 @@ class Log:
                 self._put_unknown_struct(key, timestamp, decoded_value)
             except (msgpack.exceptions.ExtraData, ValueError):
                 pass
+    
+    def put_struct(self, key: str, timestamp: float, value: bytes, schema_type: str, is_array: bool) -> None:
+        """Writes a struct-encoded raw value to the field.
+        
+        The schema type should not include "struct:" or "[]"
+        """
+        self.put_raw(key, timestamp, value)
+        if self.fields[key].get_type() == LoggableType.RAW:
+            self.set_generated_parent(key)
+            self.set_structured_type(key, schema_type + ("[]" if is_array else ""))
+            decoded_data = None
+            try:
+                if is_array:
+                    decoded_data = self.struct_decoder.decode_array(schema_type, value)
+                else:
+                    decoded_data = self.struct_decoder.decode(schema_type, value)
+            except Exception:
+                pass
+            
+            if decoded_data is not None:
+                self._put_unknown_struct(key, timestamp, decoded_data["data"])
+                for child_key, child_schema_type in decoded_data["schema_types"].items():
+                    # Create the key so it can be dragged even though it doesn't have data
+                    full_child_key = f"{key}/{child_key}"
+                    self.create_blank_field(full_child_key, LoggableType.EMPTY)
+                    self._process_timestamp(full_child_key, timestamp)
+                    self.set_structured_type(full_child_key, child_schema_type)
+            else:
+                queue = self.queued_struct_arrays if is_array else self.queued_structs
+                queue.append(QueuedStructure(
+                    key=key,
+                    timestamp=timestamp,
+                    value=value,
+                    schema_type=schema_type
+                ))
     
     def put_pose(self, key: str, timestamp: float, pose: Pose2d) -> None:
         """Writes a pose with the 'Pose2d' structured type."""

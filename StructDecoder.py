@@ -273,12 +273,12 @@ class StructDecoder:
                     child = self.decode(value_schema.type, value_array, value_bit_length)
                 
                 output_data[value_schema.name] = child["data"]
-                for field, schema_type in child["schemaTypes"].items():
+                for field, schema_type in child["schema_types"].items():
                     output_schema_types[f"{value_schema.name}/{field}"] = schema_type
 
         return {
             "data": output_data,
-            "schemaTypes": output_schema_types
+            "schema_types": output_schema_types
         }
 
     def decode_array(self, name: str, value: bytes, array_length: Optional[int] = None) -> Dict[str, Any]:
@@ -297,13 +297,13 @@ class StructDecoder:
             decoded_data = self.decode(name, value[start_idx:end_idx])
             output_data.append(decoded_data["data"])
             
-            for item_key, item_schema_type in decoded_data["schemaTypes"].items():
+            for item_key, item_schema_type in decoded_data["schema_types"].items():
                 output_schema_types[f"{i}/{item_key}"] = item_schema_type
             output_schema_types[str(i)] = name
 
         return {
             "data": output_data,
-            "schemaTypes": output_schema_types
+            "schema_types": output_schema_types
         }
 
     @staticmethod

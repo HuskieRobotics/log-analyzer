@@ -9,7 +9,6 @@ import os
 import sys
 from datetime import datetime
 from datalog import DataLogReader, DataLogRecord, StartRecordData
-from StructDecoder import StructDecoder
 from Log import Log, LoggableType
 
 # Constants for structured types
@@ -226,8 +225,6 @@ def main():
     
     target_entry_names = set([])
 
-    struct_decoder = StructDecoder()
-
     # Always capture these entry names regardless of JSON configuration
     mandatory_entries = {"/DriverStation/Enabled", "/DriverStation/Autonomous", "/DriverStation/FMSAttached"}
     target_entry_names.update(mandatory_entries)
@@ -293,160 +290,155 @@ def main():
         """Process a single log file and return captured records and final driver station state."""
         print(f"\nProcessing: {os.path.basename(log_file_path)}")
         
-        try:
-            with open(log_file_path, "rb") as f:
-                mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
-                reader = DataLogReader(mm)
-                if not reader:
-                    print(f"  Warning: {os.path.basename(log_file_path)} is not a valid log file")
-                    return [], None, None, None
+        with open(log_file_path, "rb") as f:
+            mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+            reader = DataLogReader(mm)
+            if not reader:
+                print(f"  Warning: {os.path.basename(log_file_path)} is not a valid log file")
+                return [], None, None, None
 
-                entries = {}
-                log = Log()
-                
-                # Track most recent values of DriverStation entries for filtering
-                driver_station_enabled = None
-                driver_station_autonomous = None
-                driver_station_fms_attached = None
-                
-                for record in reader:
-                    timestamp = record.timestamp / 1000000
-                    if record.isStart():
-                        try:
-                            data = record.getStartData()
-                            if data.entry in entries:
-                                print("...DUPLICATE entry ID, overriding")
+            entries = {}
+            log = Log()
+            
+            # Track most recent values of DriverStation entries for filtering
+            driver_station_enabled = None
+            driver_station_autonomous = None
+            driver_station_fms_attached = None
+            
+            for record in reader:
+                timestamp = record.timestamp / 1000000
+                if record.isStart():
+                    try:
+                        data = record.getStartData()
+                        if data.entry in entries:
+                            print("...DUPLICATE entry ID, overriding")
 
-                            entries[data.entry] = data
-                            # only add to log if it matches target entry names
-                            if any(data.name in name for name in target_entry_names):
-                                if data.type == "boolean":
-                                    log.create_blank_field(data.name, LoggableType.BOOLEAN)
-                                elif data.type in ("int", "int64", "float", "double"):
-                                    log.create_blank_field(data.name, LoggableType.NUMBER)
-                                elif data.type in ("string", "json"):
-                                    log.create_blank_field(data.name, LoggableType.STRING)
-                                elif data.type == "boolean[]":
-                                    log.create_blank_field(data.name, LoggableType.BOOLEAN_ARRAY)
-                                elif data.type in ("int[]", "int64[]", "float[]", "double[]"):
-                                    log.create_blank_field(data.name, LoggableType.NUMBER_ARRAY)
-                                elif data.type == "string[]":
-                                    log.create_blank_field(data.name, LoggableType.STRING_ARRAY)
-                                else:  # Default to raw
-                                    log.create_blank_field(data.name, LoggableType.RAW)
-                                    if data.type.startswith(STRUCT_PREFIX):
-                                        schema_type = data.type.split(STRUCT_PREFIX)[1]
-                                        log.set_structured_type(data.name, schema_type)
-                                    elif data.type.startswith(PHOTON_PREFIX):
-                                        schema_type = data.type.split(PHOTON_PREFIX)[1]
-                                        log.set_structured_type(data.name, schema_type)
-                                    elif data.type.startswith(PROTO_PREFIX):
-                                        schema_type = data.type.split(PROTO_PREFIX)[1]
-                                        log.set_structured_type(data.name, schema_type)
-                                
-                                log.set_wpilib_type(data.name, data.type)
-                                log.set_metadata_string(data.name, data.metadata)
-                            
-                        except TypeError:
-                            print("Start(INVALID)")
-                            
-                    elif record.isFinish():
-                        try:
-                            entry = record.getFinishEntry()
-                            if entry not in entries:
-                                print("...ID not found")
-                            else:
-                                del entries[entry]
-                        except TypeError:
-                            print("Finish(INVALID)")
-                    elif record.isSetMetadata():
-                        try:
-                            data = record.getSetMetadataData()
-                            if data.entry not in entries:
-                                print("...ID not found")
-                        except TypeError:
-                            print("SetMetadata(INVALID)")
-                    elif record.isControl():
-                        print("Unrecognized control record")
-                    else:
-                        entry = entries.get(record.entry)
-                        if entry is None:
-                            continue
-
-                        # Update DriverStation state tracking for filtering
-                        try:
-                            if entry.name == "/DriverStation/Enabled" and entry.type == "boolean":
-                                driver_station_enabled = record.getBoolean()
-                            elif entry.name == "/DriverStation/Autonomous" and entry.type == "boolean":
-                                driver_station_autonomous = record.getBoolean()
-                            elif entry.name == "/DriverStation/FMSAttached" and entry.type == "boolean":
-                                driver_station_fms_attached = record.getBoolean()
-                        except TypeError:
-                            # If we can't read the value, continue without updating state
-                            pass
-
-                        if ".schema" in entry.name:
-                            # If the entry is a schema entry, we may want to capture it differently
-                            print(f"  Schema entry {entry.name} found: {record.getString()} (at {timestamp})")
-                            struct_decoder.add_schema(entry.name.split("struct:")[1], record.getBytes())
-                        
-                        # Move this to another method and bring in the struct parser from the other branch
-
-                        # Check if this record matches any target entry names and meets filtering criteria
-                        if any(entry.name in name for name in mandatory_entries) or (any(entry.name in name for name in target_entry_names)and should_capture_record(driver_station_enabled, driver_station_autonomous, driver_station_fms_attached)):
-                            key = entry.name
-                            type_str = entry.type
-                            
-                            if type_str == "boolean":
-                                log.put_boolean(key, timestamp, record.getBoolean())
-                            elif type_str in ("int", "int64"):
-                                log.put_number(key, timestamp, record.getInteger())
-                            elif type_str == "float":
-                                log.put_number(key, timestamp, record.getFloat())
-                            elif type_str == "double":
-                                log.put_number(key, timestamp, record.getDouble())
-                            elif type_str == "string":
-                                log.put_string(key, timestamp, record.getString())
-                            elif type_str == "boolean[]":
-                                log.put_boolean_array(key, timestamp, record.getBooleanArray())
-                            elif type_str in ("int[]", "int64[]"):
-                                log.put_number_array(key, timestamp, record.getIntegerArray())
-                            elif type_str == "float[]":
-                                log.put_number_array(key, timestamp, record.getFloatArray())
-                            elif type_str == "double[]":
-                                log.put_number_array(key, timestamp, record.getDoubleArray())
-                            elif type_str == "string[]":
-                                log.put_string_array(key, timestamp, record.getStringArray())
-                            elif type_str == "json":
-                                log.put_json(key, timestamp, record.getString())
-                            elif type_str == "msgpack":
-                                log.put_msgpack(key, timestamp, record.data)  # getRaw() equivalent
+                        entries[data.entry] = data
+                        # only add to log if it matches target entry names
+                        if any(data.name in name for name in target_entry_names):
+                            if data.type == "boolean":
+                                log.create_blank_field(data.name, LoggableType.BOOLEAN)
+                            elif data.type in ("int", "int64", "float", "double"):
+                                log.create_blank_field(data.name, LoggableType.NUMBER)
+                            elif data.type in ("string", "json"):
+                                log.create_blank_field(data.name, LoggableType.STRING)
+                            elif data.type == "boolean[]":
+                                log.create_blank_field(data.name, LoggableType.BOOLEAN_ARRAY)
+                            elif data.type in ("int[]", "int64[]", "float[]", "double[]"):
+                                log.create_blank_field(data.name, LoggableType.NUMBER_ARRAY)
+                            elif data.type == "string[]":
+                                log.create_blank_field(data.name, LoggableType.STRING_ARRAY)
                             else:  # Default to raw
-                                if type_str.startswith(STRUCT_PREFIX):
-                                    schema_type = type_str.split(STRUCT_PREFIX)[1]
-                                    if schema_type.endswith("[]"):
-                                        log.put_struct(key, timestamp, record.data, schema_type[:-2], True)
-                                    else:
-                                        log.put_struct(key, timestamp, record.data, schema_type, False)
-                                elif type_str.startswith(PHOTON_PREFIX):
-                                    schema_type = type_str.split(PHOTON_PREFIX)[1]
-                                    log.put_photon_struct(key, timestamp, record.data, schema_type)
-                                elif type_str.startswith(PROTO_PREFIX):
-                                    schema_type = type_str.split(PROTO_PREFIX)[1]
-                                    log.put_proto(key, timestamp, record.data, schema_type)
-                                else:
-                                    log.put_raw(key, timestamp, record.data)
-                                    # Note: CustomSchemas functionality not implemented in Python version
+                                log.create_blank_field(data.name, LoggableType.RAW)
+                                if data.type.startswith(STRUCT_PREFIX):
+                                    schema_type = data.type.split(STRUCT_PREFIX)[1]
+                                    log.set_structured_type(data.name, schema_type)
+                                elif data.type.startswith(PHOTON_PREFIX):
+                                    schema_type = data.type.split(PHOTON_PREFIX)[1]
+                                    log.set_structured_type(data.name, schema_type)
+                                elif data.type.startswith(PROTO_PREFIX):
+                                    schema_type = data.type.split(PROTO_PREFIX)[1]
+                                    log.set_structured_type(data.name, schema_type)
                             
-                            # captured_records.append((record, entry, timestamp))
-                
-                # print(f"  Captured {len(captured_records)} records from {os.path.basename(log_file_path)}")
-                print("Struct decoder:  ", struct_decoder)
-                return log
-                
-        except Exception as e:
-            print(f"  Error processing {os.path.basename(log_file_path)}: {e}")
-            return []
+                            log.set_wpilib_type(data.name, data.type)
+                            log.set_metadata_string(data.name, data.metadata)
+                        
+                    except TypeError:
+                        print("Start(INVALID)")
+                        
+                elif record.isFinish():
+                    try:
+                        entry = record.getFinishEntry()
+                        if entry not in entries:
+                            print("...ID not found")
+                        else:
+                            del entries[entry]
+                    except TypeError:
+                        print("Finish(INVALID)")
+                elif record.isSetMetadata():
+                    try:
+                        data = record.getSetMetadataData()
+                        if data.entry not in entries:
+                            print("...ID not found")
+                    except TypeError:
+                        print("SetMetadata(INVALID)")
+                elif record.isControl():
+                    print("Unrecognized control record")
+                else:
+                    entry = entries.get(record.entry)
+                    if entry is None:
+                        continue
+
+                    # Update DriverStation state tracking for filtering
+                    try:
+                        if entry.name == "/DriverStation/Enabled" and entry.type == "boolean":
+                            driver_station_enabled = record.getBoolean()
+                        elif entry.name == "/DriverStation/Autonomous" and entry.type == "boolean":
+                            driver_station_autonomous = record.getBoolean()
+                        elif entry.name == "/DriverStation/FMSAttached" and entry.type == "boolean":
+                            driver_station_fms_attached = record.getBoolean()
+                    except TypeError:
+                        # If we can't read the value, continue without updating state
+                        pass
+
+                    if ".schema" in entry.name:
+                        # If the entry is a schema entry, we may want to capture it differently
+                        print(f"  Schema entry {entry.name} found: {record.getString()} (at {timestamp})")
+                        log.struct_decoder.add_schema(entry.name.split("struct:")[1], record.getBytes())
+                    
+                    # Move this to another method and bring in the struct parser from the other branch
+
+                    # Check if this record matches any target entry names and meets filtering criteria
+                    if any(entry.name in name for name in mandatory_entries) or (any(entry.name in name for name in target_entry_names)and should_capture_record(driver_station_enabled, driver_station_autonomous, driver_station_fms_attached)):
+                        key = entry.name
+                        type_str = entry.type
+                        
+                        if type_str == "boolean":
+                            log.put_boolean(key, timestamp, record.getBoolean())
+                        elif type_str in ("int", "int64"):
+                            log.put_number(key, timestamp, record.getInteger())
+                        elif type_str == "float":
+                            log.put_number(key, timestamp, record.getFloat())
+                        elif type_str == "double":
+                            log.put_number(key, timestamp, record.getDouble())
+                        elif type_str == "string":
+                            log.put_string(key, timestamp, record.getString())
+                        elif type_str == "boolean[]":
+                            log.put_boolean_array(key, timestamp, record.getBooleanArray())
+                        elif type_str in ("int[]", "int64[]"):
+                            log.put_number_array(key, timestamp, record.getIntegerArray())
+                        elif type_str == "float[]":
+                            log.put_number_array(key, timestamp, record.getFloatArray())
+                        elif type_str == "double[]":
+                            log.put_number_array(key, timestamp, record.getDoubleArray())
+                        elif type_str == "string[]":
+                            log.put_string_array(key, timestamp, record.getStringArray())
+                        elif type_str == "json":
+                            log.put_json(key, timestamp, record.getString())
+                        elif type_str == "msgpack":
+                            log.put_msgpack(key, timestamp, record.data)  # getRaw() equivalent
+                        else:  # Default to raw
+                            if type_str.startswith(STRUCT_PREFIX):
+                                schema_type = type_str.split(STRUCT_PREFIX)[1]
+                                if schema_type.endswith("[]"):
+                                    log.put_struct(key, timestamp, record.data, schema_type[:-2], True)
+                                else:
+                                    log.put_struct(key, timestamp, record.data, schema_type, False)
+                            elif type_str.startswith(PHOTON_PREFIX):
+                                schema_type = type_str.split(PHOTON_PREFIX)[1]
+                                log.put_photon_struct(key, timestamp, record.data, schema_type)
+                            elif type_str.startswith(PROTO_PREFIX):
+                                schema_type = type_str.split(PROTO_PREFIX)[1]
+                                log.put_proto(key, timestamp, record.data, schema_type)
+                            else:
+                                log.put_raw(key, timestamp, record.data)
+                                # Note: CustomSchemas functionality not implemented in Python version
+                        
+                        # captured_records.append((record, entry, timestamp))
+            
+            # print(f"  Captured {len(captured_records)} records from {os.path.basename(log_file_path)}")
+            print("Struct decoder:  ", log.struct_decoder)
+            return log
 
     def analyze_file_records(log, time_analysis_configs):
         """
