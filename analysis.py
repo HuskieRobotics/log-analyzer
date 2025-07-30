@@ -314,34 +314,6 @@ def main():
                             print("...DUPLICATE entry ID, overriding")
 
                         entries[data.entry] = data
-                        # only add to log if it matches target entry names
-                        if any(data.name in name for name in target_entry_names):
-                            if data.type == "boolean":
-                                log.create_blank_field(data.name, LoggableType.BOOLEAN)
-                            elif data.type in ("int", "int64", "float", "double"):
-                                log.create_blank_field(data.name, LoggableType.NUMBER)
-                            elif data.type in ("string", "json"):
-                                log.create_blank_field(data.name, LoggableType.STRING)
-                            elif data.type == "boolean[]":
-                                log.create_blank_field(data.name, LoggableType.BOOLEAN_ARRAY)
-                            elif data.type in ("int[]", "int64[]", "float[]", "double[]"):
-                                log.create_blank_field(data.name, LoggableType.NUMBER_ARRAY)
-                            elif data.type == "string[]":
-                                log.create_blank_field(data.name, LoggableType.STRING_ARRAY)
-                            else:  # Default to raw
-                                log.create_blank_field(data.name, LoggableType.RAW)
-                                if data.type.startswith(STRUCT_PREFIX):
-                                    schema_type = data.type.split(STRUCT_PREFIX)[1]
-                                    log.set_structured_type(data.name, schema_type)
-                                elif data.type.startswith(PHOTON_PREFIX):
-                                    schema_type = data.type.split(PHOTON_PREFIX)[1]
-                                    log.set_structured_type(data.name, schema_type)
-                                elif data.type.startswith(PROTO_PREFIX):
-                                    schema_type = data.type.split(PROTO_PREFIX)[1]
-                                    log.set_structured_type(data.name, schema_type)
-                            
-                            log.set_wpilib_type(data.name, data.type)
-                            log.set_metadata_string(data.name, data.metadata)
                         
                     except TypeError:
                         print("Start(INVALID)")
@@ -383,7 +355,6 @@ def main():
 
                     if ".schema" in entry.name:
                         # If the entry is a schema entry, we may want to capture it differently
-                        print(f"  Schema entry {entry.name} found: {record.getString()} (at {timestamp})")
                         log.struct_decoder.add_schema(entry.name.split("struct:")[1], record.getBytes())
                     
                     # Move this to another method and bring in the struct parser from the other branch
@@ -434,10 +405,6 @@ def main():
                                 log.put_raw(key, timestamp, record.data)
                                 # Note: CustomSchemas functionality not implemented in Python version
                         
-                        # captured_records.append((record, entry, timestamp))
-            
-            # print(f"  Captured {len(captured_records)} records from {os.path.basename(log_file_path)}")
-            print("Struct decoder:  ", log.struct_decoder)
             return log
 
     def analyze_file_records(log, time_analysis_configs):
