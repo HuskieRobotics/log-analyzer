@@ -18,6 +18,8 @@ from enum import Enum
 from typing import Dict, List, Tuple, Any, Optional, Union
 import math
 
+__all__ = ["StructDecoder"]
+
 
 class ValueType(Enum):
     BOOL = "bool"

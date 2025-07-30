@@ -10,6 +10,11 @@ import json
 import msgpack
 from StructDecoder import StructDecoder
 
+__all__ = ["LoggableType", "LogValueSet", "LogValueSetRaw", "LogValueSetBoolean",
+           "LogValueSetNumber", "LogValueSetString", "LogValueSetBooleanArray",
+           "LogValueSetNumberArray", "LogValueSetStringArray", "LogField",
+           "Log"]
+
 # === Core Types ===
 
 class LoggableType(Enum):
@@ -205,15 +210,6 @@ class LogField:
         
         self.data.timestamps.insert(insert_index, timestamp)
         self.data.values.insert(insert_index, value)
-
-# === Queued Structure ===
-
-@dataclass
-class QueuedStructure:
-    key: str
-    timestamp: float
-    value: bytes
-    schema_type: str
 
 # === Main Log Class ===
 
