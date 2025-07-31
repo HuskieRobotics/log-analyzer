@@ -1,7 +1,4 @@
 #! /usr/bin/env python3
-# Copyright (c) FIRST and other WPILib contributors.
-# Open Source Software; you can modify and/or share it under the terms of
-# the WPILib BSD license file in the root directory of this project.
 
 import json
 import mmap
@@ -14,10 +11,9 @@ from Log import Log, LoggableType
 
 # Constants for structured types
 STRUCT_PREFIX = "struct:"
-PHOTON_PREFIX = "photon:"
-PROTO_PREFIX = "proto:"
 
-VERBOSE = False  # Set to True for detailed output
+# Set to True for detailed output
+VERBOSE = False
 
 
 def print_cycles_and_calculations(results: List[Tuple[str, List[float], List[float]]], calculations: List[Dict[str, Any]], 
@@ -516,12 +512,6 @@ def process_log_file(log_file_path: str, mandatory_entries: Set[str], target_ent
                                 log.put_struct(key, timestamp, record.data, schema_type[:-2], True)
                             else:
                                 log.put_struct(key, timestamp, record.data, schema_type, False)
-                        elif type_str.startswith(PHOTON_PREFIX):
-                            schema_type = type_str.split(PHOTON_PREFIX)[1]
-                            log.put_photon_struct(key, timestamp, record.data, schema_type)
-                        elif type_str.startswith(PROTO_PREFIX):
-                            schema_type = type_str.split(PROTO_PREFIX)[1]
-                            log.put_proto(key, timestamp, record.data, schema_type)
                         else:
                             log.put_raw(key, timestamp, record.data)
                             # Note: CustomSchemas functionality not implemented in Python version
