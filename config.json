@@ -22,7 +22,8 @@
             {"type": "average", "name": "Average Cycle Time"},
             {"type": "max", "name": "Max Cycle Time"},
             {"type": "min", "name": "Min Cycle Time"},
-            {"type": "count", "name": "Cycle Count"}
+            {"type": "count", "name": "Cycle Count"},
+            {"type": "outlier_2std", "name": "Outliers (2 std dev)"}
         ]
     }],
     "valueAnalysis": [{
@@ -35,7 +36,8 @@
             {"type": "min", "name": "Min Y Diff at Reef"},
             {"type": "abs_average", "name": "Average Y Diff at Reef (abs)"},
             {"type": "abs_max", "name": "Max Y Diff at Reef (abs)"},
-            {"type": "abs_min", "name": "Min Y Diff at Reef (abs)"}
+            {"type": "abs_min", "name": "Min Y Diff at Reef (abs)"},
+            {"type": "abs_outlier_2std", "name": "Outliers (2 std dev; abs)"}
         ]
     }]
 }

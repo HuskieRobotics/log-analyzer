@@ -7,6 +7,7 @@ import json
 import mmap
 import os
 import sys
+import statistics
 from typing import Dict, List, Optional, Set, Tuple, Any, Union
 from datalog import DataLogReader
 from Log import Log, LoggableType
@@ -16,25 +17,35 @@ STRUCT_PREFIX = "struct:"
 PHOTON_PREFIX = "photon:"
 PROTO_PREFIX = "proto:"
 
+VERBOSE = False  # Set to True for detailed output
 
-def print_cycles_and_calculations(time_differences: List[float], calculations: List[Dict[str, Any]], 
+
+def print_cycles_and_calculations(results: List[Tuple[str, List[float], List[float]]], calculations: List[Dict[str, Any]], 
                                 context_prefix: str = "", no_cycles_message: Optional[str] = None) -> None:
     """Print cycle times and perform calculations on time differences.
     
     Args:
-        time_differences: List of time differences (floats)
+        results: List of tuples containing log file name, time differences, and timestamps
         calculations: List of calculation configs from analysis config
         context_prefix: Prefix for output (e.g., "Aggregated " for aggregated results)
         no_cycles_message: Custom message when no cycles found
     """
+
+    # aggregate all time differences
+    time_differences = []
+    for _, file_time_diffs, _ in results:
+        time_differences.extend(file_time_diffs)
+
     if time_differences:
-        if context_prefix == "":
+        if len(results) == 1:
             print(f"  Total cycles found in this file: {len(time_differences)}")
-            for i, time_diff in enumerate(time_differences):
-                print(f"  Found cycle {i+1}: {time_diff:.6f}s")
+            if(VERBOSE):
+                for i, time_diff in enumerate(time_differences):
+                    print(f"  Found cycle {i+1}: {time_diff:.6f}s")
         else:
             print(f"  Total cycles found across all files: {len(time_differences)}")
-            print(f"  Individual cycle times: {[f'{t:.6f}s' for t in time_differences]}")
+            if(VERBOSE):
+                print(f"  Individual cycle times: {[f'{t:.6f}s' for t in time_differences]}")
         
         # Perform calculations
         for calc in calculations:
@@ -47,9 +58,34 @@ def print_cycles_and_calculations(time_differences: List[float], calculations: L
             elif calc_type == 'max':
                 result = max(time_differences)
                 print(f"  {context_prefix}{calc_name}: {result:.6f} seconds")
+                # Find the log file name and timestamp corresponding to the max value of which there may be multiple
+                for log_file_name, file_time_diffs, timestamps in results:
+                    log_file_descriptor = f"in {log_file_name}" if len(results) > 1 else ""
+                    if result in file_time_diffs:
+                        max_index = file_time_diffs.index(result)
+                        print(f"    @ {timestamps[max_index]:.6f} seconds {log_file_descriptor}")
             elif calc_type == 'min':
                 result = min(time_differences)
                 print(f"  {context_prefix}{calc_name}: {result:.6f} seconds")
+                # Find the log file name and timestamp corresponding to the min value of which there may be multiple
+                for log_file_name, file_time_diffs, timestamps in results:
+                    log_file_descriptor = f"in {log_file_name}" if len(results) > 1 else ""
+                    if result in file_time_diffs:
+                        min_index = file_time_diffs.index(result)
+                        print(f"    @ {timestamps[min_index]:.6f} seconds {log_file_descriptor}")
+            elif calc_type == 'outlier_2std':
+                std_dev = statistics.stdev(time_differences)
+                mean = statistics.mean(time_differences)
+                outliers = [x for x in time_differences if abs(x - mean) > 2 * std_dev]
+                # print each outlier and its associated timestamp
+                for outlier in outliers:
+                    print(f"  {context_prefix}{calc_name}: {outlier:.6f} seconds")
+                    # Find the log file name and timestamp corresponding to the outlier value of which there may be multiple
+                    for log_file_name, file_time_diffs, timestamps in results:
+                        log_file_descriptor = f"in {log_file_name}" if len(results) > 1 else ""
+                        if outlier in file_time_diffs:
+                            outlier_index = file_time_diffs.index(outlier)
+                            print(f"    @ {timestamps[outlier_index]:.6f} seconds {log_file_descriptor}")
             elif calc_type == 'count':
                 pass # Count is handled separately, not printed here
             else:
@@ -66,24 +102,31 @@ def print_cycles_and_calculations(time_differences: List[float], calculations: L
             print(f"  {message}")
 
 
-def print_values_and_calculations(values: List[Union[int, float, str, bool]], calculations: List[Dict[str, Any]], 
+def print_values_and_calculations(results: List[Tuple[str, List[Union[int, float, str, bool]], List[float]]], calculations: List[Dict[str, Any]], 
                                 context_prefix: str = "", no_values_message: Optional[str] = None) -> None:
     """Print captured values and perform calculations on them.
     
     Args:
-        values: List of captured values (numbers)
+        
         calculations: List of calculation configs from analysis config
         context_prefix: Prefix for output (e.g., "Aggregated " for aggregated results)
         no_values_message: Custom message when no values found
     """
+    # aggregate all values
+    values = []
+    for _, file_values, _ in results:
+        values.extend(file_values)
+
     if values:
-        if context_prefix == "":
+        if len(results) == 1:
             print(f"  Total values captured in this file: {len(values)}")
-            print(f"  Values: {values}")
+            if VERBOSE:
+                print(f"  Values: {values}")
         else:
             print(f"  Total values captured across all files: {len(values)}")
-            print(f"  All values: {values}")
-        
+            if VERBOSE:
+                print(f"  All values: {values}")
+
         # Filter numeric values for calculations
         numeric_values = []
         abs_numeric_values = []
@@ -104,21 +147,74 @@ def print_values_and_calculations(values: List[Union[int, float, str, bool]], ca
                 elif calc_type == 'max':
                     result = max(numeric_values)
                     print(f"  {context_prefix}{calc_name}: {result:.6f}")
+                    # Find the log file name and timestamp corresponding to the max value of which there may be multiple
+                    for log_file_name, file_values, timestamps in results:
+                        log_file_descriptor = f"in {log_file_name}" if len(results) > 1 else ""
+                        if result in file_values:
+                            max_index = file_values.index(result)
+                            print(f"    @ {timestamps[max_index]:.6f} seconds {log_file_descriptor}")
                 elif calc_type == 'min':
                     result = min(numeric_values)
                     print(f"  {context_prefix}{calc_name}: {result:.6f}")
+                    # Find the log file name and timestamp corresponding to the min value of which there may be multiple
+                    for log_file_name, file_values, timestamps in results:
+                        log_file_descriptor = f"in {log_file_name}" if len(results) > 1 else ""
+                        if result in file_values:
+                            min_index = file_values.index(result)
+                            print(f"    @ {timestamps[min_index]:.6f} seconds {log_file_descriptor}")
                 elif calc_type == 'abs_average':
                     result = sum(abs_numeric_values) / len(abs_numeric_values)
                     print(f"  {context_prefix}{calc_name}: {result:.6f}")
                 elif calc_type == 'abs_max':
                     result = max(abs_numeric_values)
                     print(f"  {context_prefix}{calc_name}: {result:.6f}")
+                    # Find the log file name and timestamp corresponding to the max value of which there may be multiple
+                    for log_file_name, file_values, timestamps in results:
+                        log_file_descriptor = f"in {log_file_name}" if len(results) > 1 else ""
+                        abs_numeric_values = [abs(x) for x in file_values]
+                        if result in abs_numeric_values:
+                            max_index = abs_numeric_values.index(result)
+                            print(f"    @ {timestamps[max_index]:.6f} seconds {log_file_descriptor}")
                 elif calc_type == 'abs_min':
                     result = min(abs_numeric_values)
                     print(f"  {context_prefix}{calc_name}: {result:.6f}")
+                    # Find the log file name and timestamp corresponding to the min value of which there may be
+                    for log_file_name, file_values, timestamps in results:
+                        log_file_descriptor = f"in {log_file_name}" if len(results) > 1 else ""
+                        abs_numeric_values = [abs(x) for x in file_values]
+                        if result in abs_numeric_values:
+                            min_index = abs_numeric_values.index(result)
+                            print(f"    @ {timestamps[min_index]:.6f} seconds {log_file_descriptor}")
                 elif calc_type == 'count':
                     result = len(numeric_values)
                     print(f"  {context_prefix}{calc_name}: {result}")
+                elif calc_type == 'outlier_2std':
+                    mean = statistics.mean(numeric_values)
+                    stddev = statistics.stdev(numeric_values)
+                    outliers = [x for x in numeric_values if abs(x - mean) > 2 * stddev]
+                    # print each outlier and its associated timestamp
+                    for outlier in outliers:
+                        print(f"  {context_prefix}{calc_name}: {outlier:.6f} ")
+                        # Find the log file name and timestamp corresponding to the outlier value of which there may be multiple
+                        for log_file_name, file_values, timestamps in results:
+                            log_file_descriptor = f"in {log_file_name}" if len(results) > 1 else ""
+                            if outlier in file_values:
+                                outlier_index = file_values.index(outlier)
+                                print(f"    @ {timestamps[outlier_index]:.6f} seconds {log_file_descriptor}")
+                elif calc_type == 'abs_outlier_2std':
+                    mean = statistics.mean(abs_numeric_values)
+                    stddev = statistics.stdev(abs_numeric_values)
+                    outliers = [x for x in abs_numeric_values if abs(x - mean) > 2 * stddev]
+                    # print each outlier and its associated timestamp
+                    for outlier in outliers:
+                        print(f"  {context_prefix}{calc_name}: {outlier:.6f} ")
+                        # Find the log file name and timestamp corresponding to the outlier value of which there may be multiple
+                        for log_file_name, file_values, timestamps in results:
+                            log_file_descriptor = f"in {log_file_name}" if len(results) > 1 else ""
+                            abs_numeric_values = [abs(x) for x in file_values]
+                            if outlier in abs_numeric_values:
+                                outlier_index = abs_numeric_values.index(outlier)
+                                print(f"    @ {timestamps[outlier_index]:.6f} seconds {log_file_descriptor}")
                 else:
                     print(f"  Unknown calculation type: {calc_type}")
         else:
@@ -134,16 +230,16 @@ def print_values_and_calculations(values: List[Union[int, float, str, bool]], ca
                 message += " in this file"
             print(f"  {message}")
 
-def analyze_file_records(log: Log, time_analysis_configs: List[Dict[str, Any]]) -> Dict[int, List[float]]:
+def analyze_file_records(log: Log, log_file_name: str, time_analysis_configs: List[Dict[str, Any]]) -> Dict[int, Tuple[str, List[float], List[float]]]:
     """
-    Analyze file records and return time differences for each analysis configuration.
+    Analyze file records and return time differences and start timestamps for each analysis configuration.
     
     Args:
         log: The Log object containing the analyzed data
         time_analysis_configs: List of analysis configuration dictionaries
         
     Returns:
-        Dictionary mapping analysis index to list of time differences
+        Dictionary mapping analysis index to tuple of (time_differences, start_timestamps)
     """
     all_analysis_results = {}
     
@@ -155,11 +251,12 @@ def analyze_file_records(log: Log, time_analysis_configs: List[Dict[str, Any]]) 
         calculations = analysis.get('calculations', [])
         
         if not all([start_entry, end_entry, calculations]):
-            all_analysis_results[analysis_idx] = []
+            all_analysis_results[analysis_idx] = ("", [], [])
             continue
         
         # Find time differences between start and end events
         time_differences = []
+        start_timestamps = []
 
         # Get the field and timestamps for the start entry
         start_field = log.get_field(start_entry)
@@ -167,7 +264,7 @@ def analyze_file_records(log: Log, time_analysis_configs: List[Dict[str, Any]]) 
 
         if not start_field or not end_field:
             print(f"  Skipping analysis {analysis_idx} due to missing fields: {start_entry} or {end_entry}")
-            all_analysis_results[analysis_idx] = []
+            all_analysis_results[analysis_idx] = ("", [], [])
             continue
 
         if start_field.get_type() == LoggableType.STRING:
@@ -178,7 +275,7 @@ def analyze_file_records(log: Log, time_analysis_configs: List[Dict[str, Any]]) 
             start_log_values = start_field.get_number(0.0, log.get_last_timestamp())
         else:
             print(f"  Skipping analysis {analysis_idx} due to unsupported type for: {start_entry} of {start_field.get_type()}")
-            all_analysis_results[analysis_idx] = []
+            all_analysis_results[analysis_idx] = ("", [], [])
             continue
             
         start_timestamp = 0.0
@@ -187,9 +284,9 @@ def analyze_file_records(log: Log, time_analysis_configs: List[Dict[str, Any]]) 
             if start_log_values.values[i] == start_value:
                 start_timestamp = timestamp
                 next_timestamp = log.get_last_timestamp()
-                for i, timestamp in enumerate(start_log_values.timestamps):
-                    if timestamp > start_timestamp and start_log_values.values[i] == start_value:
-                        next_timestamp = timestamp
+                for j, next_ts in enumerate(start_log_values.timestamps):
+                    if next_ts > start_timestamp and start_log_values.values[j] == start_value:
+                        next_timestamp = next_ts
                         break
 
                 if end_field.get_type() == LoggableType.STRING:
@@ -200,29 +297,30 @@ def analyze_file_records(log: Log, time_analysis_configs: List[Dict[str, Any]]) 
                     end_log_values = end_field.get_number(start_timestamp, next_timestamp)
                 else:
                     print(f"  Skipping analysis {analysis_idx} due to unsupported type for: {end_entry} of {end_field.get_type()}")
-                    all_analysis_results[analysis_idx] = []
+                    all_analysis_results[analysis_idx] = ("", [], [])
                     continue
 
-                for i, timestamp in enumerate(end_log_values.timestamps):
-                    if end_log_values.values[i] == end_value:
-                        time_diff = timestamp - start_timestamp
+                for k, end_timestamp in enumerate(end_log_values.timestamps):
+                    if end_log_values.values[k] == end_value:
+                        time_diff = end_timestamp - start_timestamp
                         time_differences.append(time_diff)
+                        start_timestamps.append(start_timestamp)
                         break
         
-        all_analysis_results[analysis_idx] = time_differences
+        all_analysis_results[analysis_idx] = (log_file_name, time_differences, start_timestamps)
     
     return all_analysis_results
 
-def analyze_value_records(log: Log, value_analysis_configs: List[Dict[str, Any]]) -> Dict[int, List[Union[int, float, str, bool]]]:
+def analyze_value_records(log: Log, log_file_name: str, value_analysis_configs: List[Dict[str, Any]]) -> Dict[int, Tuple[str, List[Union[int, float, str, bool]], List[float]]]:
     """
-    Analyze file records and return captured values for each value analysis configuration.
+    Analyze file records and return captured values and timestamps for each value analysis configuration.
     
     Args:
         log: the log to analyze for values
         value_analysis_configs: List of value analysis configuration dictionaries
         
     Returns:
-        Dictionary mapping analysis index to list of captured values
+        Dictionary mapping analysis index to tuple of (captured values, timestamps)
     """
     all_value_results = {}
     
@@ -233,11 +331,12 @@ def analyze_value_records(log: Log, value_analysis_configs: List[Dict[str, Any]]
         calculations = analysis.get('calculations', [])
         
         if not all([entry_name, trigger_entry, calculations]) or trigger_value is None:
-            all_value_results[analysis_idx] = []
+            all_value_results[analysis_idx] = ("", [], [])
             continue
         
         # Find values when trigger condition is met
         captured_values = []
+        end_timestamps = []
 
         # Get the field and timestamps for the start entry
         trigger_field = log.get_field(trigger_entry)
@@ -245,7 +344,7 @@ def analyze_value_records(log: Log, value_analysis_configs: List[Dict[str, Any]]
 
         if not trigger_field or not field:
             print(f"  Skipping analysis {analysis_idx} due to missing fields: {trigger_entry} or {entry_name}")
-            all_value_results[analysis_idx] = []
+            all_value_results[analysis_idx] = ("", [], [])
             continue
 
         if trigger_field.get_type() == LoggableType.STRING:
@@ -256,7 +355,7 @@ def analyze_value_records(log: Log, value_analysis_configs: List[Dict[str, Any]]
             trigger_log_values = trigger_field.get_number(0.0, log.get_last_timestamp())
         else:
             print(f"  Skipping analysis {analysis_idx} due to unsupported type for: {trigger_entry} of {trigger_field.get_type()}")
-            all_value_results[analysis_idx] = []
+            all_value_results[analysis_idx] = ("", [], [])
             continue
             
         start_timestamp = 0.0
@@ -273,14 +372,15 @@ def analyze_value_records(log: Log, value_analysis_configs: List[Dict[str, Any]]
                     log_values = field.get_number(start_timestamp, end_timestamp)
                 else:
                     print(f"  Skipping analysis {analysis_idx} due to unsupported type for: {entry_name} of {field.get_type()}")
-                    all_value_results[analysis_idx] = []
+                    all_value_results[analysis_idx] = ("", [], [])
                     continue
 
                 if len(log_values.values) > 0:
                     captured_values.append(log_values.values[-1])
+                    end_timestamps.append(end_timestamp)
                 start_timestamp = timestamp  # Update start timestamp for next trigger match
         
-        all_value_results[analysis_idx] = captured_values
+        all_value_results[analysis_idx] = (log_file_name, captured_values, end_timestamps)
     
     return all_value_results
 
@@ -491,6 +591,13 @@ def main() -> None:
         print(f"No log files found in {log_folder}", file=sys.stderr)
         sys.exit(1)
     
+     # Print filtering criteria and final states
+    print(f"\n=== FILTERING CRITERIA ===")
+    print(f"Filter by enabled: {filter_enabled}")
+    print(f"Filter by FMS attached: {filter_fms_attached}")
+    print(f"Robot mode filter: {robot_mode}")
+    
+    print(f"\n=== ANALYSIS ===")
     print(f"Found {len(log_files)} log files to process:")
     for log_file in sorted(log_files):
         print(f"  {os.path.basename(log_file)}")
@@ -498,7 +605,7 @@ def main() -> None:
     # Aggregated data across all files
     all_logs = []  # List to store records from all files
     all_files_time_differences = []  # List to store time differences for analysis
-    aggregated_time_analysis_results = {}  # Dictionary to store aggregated time differences by analysis index
+    aggregated_time_analysis_results = {}  # Dictionary to store aggregated (time_differences, timestamps) by analysis index
     aggregated_value_analysis_results = {}  # Dictionary to store aggregated values by analysis index
 
     # Process all log files
@@ -509,25 +616,25 @@ def main() -> None:
 
         # Analyze this file's records and aggregate for later cross-file analysis
         if time_analysis_configs:
-            time_analysis_results = analyze_file_records(log, time_analysis_configs)
+            time_analysis_results = analyze_file_records(log, os.path.basename(log_file), time_analysis_configs)
 
             # Aggregate results for later cross-file analysis (even empty results)
-            for analysis_idx, time_differences in time_analysis_results.items():
+            for analysis_idx, (log_file_name, time_differences, timestamps) in time_analysis_results.items():
                 if analysis_idx not in aggregated_time_analysis_results:
                     aggregated_time_analysis_results[analysis_idx] = []
-                aggregated_time_analysis_results[analysis_idx].append(time_differences)
+                aggregated_time_analysis_results[analysis_idx].append((log_file_name, time_differences, timestamps))
 
         # Analyze value records and aggregate for later cross-file analysis  
         if value_analysis_configs:
-            value_analysis_results = analyze_value_records(log, value_analysis_configs)
+            value_analysis_results = analyze_value_records(log, os.path.basename(log_file), value_analysis_configs)
             
             # Aggregate results for later cross-file analysis (even empty results)
-            for analysis_idx, values in value_analysis_results.items():
+            for analysis_idx, (log_file_name, values, end_timestamps) in value_analysis_results.items():
                 if analysis_idx not in aggregated_value_analysis_results:
                     aggregated_value_analysis_results[analysis_idx] = []
-                aggregated_value_analysis_results[analysis_idx].append(values)
+                aggregated_value_analysis_results[analysis_idx].append((log_file_name, values, end_timestamps))
 
-        # Perform analysis calculations on individual file data
+        # Perform cycle time analysis calculations on individual file data
         if time_analysis_configs:
             print(f"\n=== TIME ANALYSIS RESULTS FOR {os.path.basename(log_file)} ===")
             
@@ -543,11 +650,11 @@ def main() -> None:
                     continue
                 
                 print(f"\nAnalyzing: {start_entry} ({start_value}) -> {end_entry} ({end_value})")
-                
-                time_differences = time_analysis_results.get(analysis_idx, [])
-                
+
+                results = time_analysis_results.get(analysis_idx, ("", [], []))
+
                 # Print found cycles and perform calculations for this file
-                print_cycles_and_calculations(time_differences, calculations)
+                print_cycles_and_calculations([results], calculations)
 
         # Perform value analysis calculations on individual file data
         if value_analysis_configs:
@@ -564,11 +671,11 @@ def main() -> None:
                     continue
                 
                 print(f"\nAnalyzing: {entry_name} when {trigger_entry} = {trigger_value}")
-                
-                values = value_analysis_results.get(analysis_idx, [])
-                
+
+                results = value_analysis_results.get(analysis_idx, ("", [], []))
+
                 # Print captured values and perform calculations for this file
-                print_values_and_calculations(values, calculations)
+                print_values_and_calculations([results], calculations)
 
     # Perform aggregated analysis across all files
     if time_analysis_configs and aggregated_time_analysis_results:
@@ -587,15 +694,17 @@ def main() -> None:
             
             print(f"\nAggregated Analysis: {start_entry} ({start_value}) -> {end_entry} ({end_value})")
             
-            all_time_differences_by_file = aggregated_time_analysis_results.get(analysis_idx, [])
+            all_results_by_file = aggregated_time_analysis_results.get(analysis_idx, [])
             
-            if all_time_differences_by_file:
+            if all_results_by_file:
+                # Extract time differences for cycle statistics
+                all_time_differences_by_file = [time_diffs for _, time_diffs, _ in all_results_by_file]
+                
                 # Calculate per-file cycle statistics
                 cycle_counts = [len(file_diffs) for file_diffs in all_time_differences_by_file]
                 total_cycles = sum(cycle_counts)
                 
                 print(f"  Files processed: {len(all_time_differences_by_file)}")
-                print(f"  Total cycles found across all files: {total_cycles}")
                 
                 if cycle_counts and "count" in [calc.get('type') for calc in calculations]:
                     avg_cycles_per_file = total_cycles / len(cycle_counts)
@@ -603,14 +712,15 @@ def main() -> None:
                     max_cycles_per_file = max(cycle_counts)
                     
                     print(f"  Average cycles per file: {avg_cycles_per_file:.2f}")
-                    print(f"  Minimum cycles in any file: {min_cycles_per_file}")
-                    print(f"  Maximum cycles in any file: {max_cycles_per_file}")
-                
-                # Flatten all time differences for overall calculations
-                all_time_differences = [diff for file_diffs in all_time_differences_by_file for diff in file_diffs]
+                    # print the minimum cycles in any file along with the corresponding file name
+                    min_cycle_file = all_results_by_file[cycle_counts.index(min_cycles_per_file)][0]
+                    print(f"  Minimum cycles in any file: {min_cycles_per_file} in {min_cycle_file}")
+                    # print the maximum cycles in any file along with the corresponding file name
+                    max_cycle_file = all_results_by_file[cycle_counts.index(max_cycles_per_file)][0]
+                    print(f"  Maximum cycles in any file: {max_cycles_per_file} in {max_cycle_file}")
 
                 # Print aggregated cycles summary and perform calculations
-                print_cycles_and_calculations(all_time_differences, calculations, context_prefix="Aggregated ")
+                print_cycles_and_calculations(all_results_by_file, calculations, context_prefix="Aggregated ")
             else:
                 print(f"  No complete cycles found for this analysis across all files")
 
@@ -633,12 +743,14 @@ def main() -> None:
             all_values_by_file = aggregated_value_analysis_results.get(analysis_idx, [])
             
             if all_values_by_file:
+                # Extract values for statistics
+                all_values_lists = [values for _, values, _ in all_values_by_file]
+                
                 # Calculate per-file value statistics
-                value_counts = [len(file_values) for file_values in all_values_by_file]
+                value_counts = [len(file_values) for file_values in all_values_lists]
                 total_values = sum(value_counts)
                 
-                print(f"  Files processed: {len(all_values_by_file)}")
-                print(f"  Total values captured across all files: {total_values}")
+                print(f"  Files processed: {len(all_values_lists)}")
                 
                 if value_counts and "count" in [calc.get('type') for calc in calculations]:
                     avg_values_per_file = total_values / len(value_counts)
@@ -646,54 +758,44 @@ def main() -> None:
                     max_values_per_file = max(value_counts)
                     
                     print(f"  Average values per file: {avg_values_per_file:.2f}")
-                    print(f"  Minimum values in any file: {min_values_per_file}")
-                    print(f"  Maximum values in any file: {max_values_per_file}")
+                    # print the minimum cycles in any file along with the corresponding file name
+                    min_cycle_file = all_results_by_file[cycle_counts.index(min_cycles_per_file)][0]
+                    print(f"  Minimum values in any file: {min_values_per_file} in {min_cycle_file}")
+                    # print the maximum cycles in any file along with the corresponding file name
+                    max_cycle_file = all_results_by_file[cycle_counts.index(max_cycles_per_file)][0]
+                    print(f"  Maximum values in any file: {max_values_per_file} in {max_cycle_file}")
                 
-                # Flatten all values for overall calculations
-                all_values = [val for file_values in all_values_by_file for val in file_values]
-                
-                if all_values:
-                    print(f"  All captured values: {all_values}")
-                    
-                    # Filter numeric values for calculations
-                    numeric_values = [val for val in all_values if isinstance(val, (int, float))]
-                    
-                    print_values_and_calculations(numeric_values, calculations)
+                print_values_and_calculations(all_values_by_file, calculations)
                     
             else:
                 print(f"  No values captured for this analysis across all files")
 
     # Print summary of captured records
-    print(f"\n=== CAPTURED RECORDS SUMMARY ===")
-    print(f"Total captured logs: {len(all_logs)}")
-    print(f"Target entry names: {sorted(target_entry_names)}")
-    print(f"Mandatory entries (always captured): {sorted(mandatory_entries)}")
-    config_only_entries = target_entry_names - mandatory_entries
-    if config_only_entries:
-        print(f"Additional entries from JSON config: {sorted(config_only_entries)}")
-    else:
-        print("Additional entries from JSON config: None")
+    if(VERBOSE):
+        print(f"\n=== CAPTURED RECORDS SUMMARY ===")
+        print(f"Total captured logs: {len(all_logs)}")
+        print(f"Target entry names: {sorted(target_entry_names)}")
+        print(f"Mandatory entries (always captured): {sorted(mandatory_entries)}")
+        config_only_entries = target_entry_names - mandatory_entries
+        if config_only_entries:
+            print(f"Additional entries from JSON config: {sorted(config_only_entries)}")
+        else:
+            print("Additional entries from JSON config: None")
     
-    # Print filtering criteria and final states
-    print(f"\n=== FILTERING CRITERIA ===")
-    print(f"Filter by enabled: {filter_enabled}")
-    print(f"Filter by FMS attached: {filter_fms_attached}")
-    print(f"Robot mode filter: {robot_mode}")
-    
-    if all_logs:
-        print(f"\nCaptured logs by entry name:")
-        entry_counts = {}
-        for log in all_logs:
-            for key in log.get_field_keys():
-                if key not in entry_counts:
-                    entry_counts[key] = 0
-                entry_counts[key] += len(log.get_field(key).get_timestamps())
+    if(VERBOSE):
+        if all_logs:
+            print(f"\nCaptured logs by entry name:")
+            entry_counts = {}
+            for log in all_logs:
+                for key in log.get_field_keys():
+                    if key not in entry_counts:
+                        entry_counts[key] = 0
+                    entry_counts[key] += len(log.get_field(key).get_timestamps())
 
-        for entry_name in sorted(entry_counts.keys()):
-            print(f"  {entry_name}: {entry_counts[entry_name]} records")
-    else:
-        print("No records captured matching the specified entry names.")
-
+            for entry_name in sorted(entry_counts.keys()):
+                print(f"  {entry_name}: {entry_counts[entry_name]} records")
+        else:
+            print("No records captured matching the specified entry names.")
 
 if __name__ == "__main__":
     main()
