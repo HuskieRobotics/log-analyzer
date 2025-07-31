@@ -17,15 +17,14 @@ VERBOSE = False
 
 
 def print_results_and_calculations(results: List[Tuple[str, List[Union[int, float, str, bool]], List[float]]], calculations: List[Dict[str, Any]], 
-                                 context_prefix: str = "", no_data_message: Optional[str] = None, data_type: str = "values") -> None:
+                                 data_type: str = "values", value_unit: str = "") -> None:
     """Print results and perform calculations on time differences or captured values.
     
     Args:
         results: List of tuples containing log file name, data (time differences or values), and timestamps
         calculations: List of calculation configs from analysis config
-        context_prefix: Prefix for output (e.g., "Aggregated " for aggregated results)
-        no_data_message: Custom message when no data found
         data_type: Type of data being processed ("cycles" for time differences, "values" for captured values)
+        value_unit: Unit for values (e.g., "s" for time differences, "m" for meters)
     """
     # aggregate all data
     all_data = []
@@ -70,105 +69,93 @@ def print_results_and_calculations(results: List[Tuple[str, List[Union[int, floa
                 
                 if calc_type == 'average':
                     result = sum(numeric_values) / len(numeric_values)
-                    unit = " seconds" if data_type == "cycles" else ""
-                    print(f"  {context_prefix}{calc_name}: {result:.6f}{unit}")
+                    print(f"  {calc_name}: {result:.6f} {value_unit}")
                 elif calc_type == 'max':
                     result = max(numeric_values)
-                    unit = " seconds" if data_type == "cycles" else ""
-                    print(f"  {context_prefix}{calc_name}: {result:.6f}{unit}")
+                    print(f"  {calc_name}: {result:.6f} {value_unit}")
                     # Find the log file name and timestamp corresponding to the max value
                     for log_file_name, file_data, timestamps in results:
                         log_file_descriptor = f"in {log_file_name}" if len(results) > 1 else ""
                         if result in file_data:
                             max_index = file_data.index(result)
-                            print(f"    @ {timestamps[max_index]:.6f} seconds {log_file_descriptor}")
+                            print(f"    @ {timestamps[max_index]:.6f} s {log_file_descriptor}")
                 elif calc_type == 'min':
                     result = min(numeric_values)
-                    unit = " seconds" if data_type == "cycles" else ""
-                    print(f"  {context_prefix}{calc_name}: {result:.6f}{unit}")
+                    print(f"  {calc_name}: {result:.6f} {value_unit}")
                     # Find the log file name and timestamp corresponding to the min value
                     for log_file_name, file_data, timestamps in results:
                         log_file_descriptor = f"in {log_file_name}" if len(results) > 1 else ""
                         if result in file_data:
                             min_index = file_data.index(result)
-                            print(f"    @ {timestamps[min_index]:.6f} seconds {log_file_descriptor}")
+                            print(f"    @ {timestamps[min_index]:.6f} s {log_file_descriptor}")
                 elif calc_type == 'abs_average':
                     result = sum(abs_numeric_values) / len(abs_numeric_values)
-                    print(f"  {context_prefix}{calc_name}: {result:.6f}")
+                    print(f"  {calc_name}: {result:.6f} {value_unit}")
                 elif calc_type == 'abs_max':
                     result = max(abs_numeric_values)
-                    print(f"  {context_prefix}{calc_name}: {result:.6f}")
+                    print(f"  {calc_name}: {result:.6f} {value_unit}")
                     # Find the log file name and timestamp corresponding to the max absolute value
                     for log_file_name, file_data, timestamps in results:
                         log_file_descriptor = f"in {log_file_name}" if len(results) > 1 else ""
                         abs_file_data = [abs(x) for x in file_data if isinstance(x, (int, float))]
                         if result in abs_file_data:
                             max_index = abs_file_data.index(result)
-                            print(f"    @ {timestamps[max_index]:.6f} seconds {log_file_descriptor}")
+                            print(f"    @ {timestamps[max_index]:.6f} s {log_file_descriptor}")
                 elif calc_type == 'abs_min':
                     result = min(abs_numeric_values)
-                    print(f"  {context_prefix}{calc_name}: {result:.6f}")
+                    print(f"  {calc_name}: {result:.6f} {value_unit}")
                     # Find the log file name and timestamp corresponding to the min absolute value
                     for log_file_name, file_data, timestamps in results:
                         log_file_descriptor = f"in {log_file_name}" if len(results) > 1 else ""
                         abs_file_data = [abs(x) for x in file_data if isinstance(x, (int, float))]
                         if result in abs_file_data:
                             min_index = abs_file_data.index(result)
-                            print(f"    @ {timestamps[min_index]:.6f} seconds {log_file_descriptor}")
+                            print(f"    @ {timestamps[min_index]:.6f} s {log_file_descriptor}")
                 elif calc_type == 'count':
                     # Cycles are counted and printed elsewhere
                     if data_type != "cycles":
                         result = len(numeric_values)
-                        print(f"  {context_prefix}{calc_name}: {result}")
+                        print(f"  {calc_name}: {result}")
                 elif calc_type == 'outlier_2std':
                     if len(numeric_values) < 2:
-                        print(f"  {context_prefix}{calc_name}: Cannot calculate with less than 2 values")
+                        print(f"  {calc_name}: Cannot calculate with less than 2 values")
                     else:
                         mean = statistics.mean(numeric_values)
                         stddev = statistics.stdev(numeric_values)
                         outliers = [x for x in numeric_values if abs(x - mean) > 2 * stddev]
                         # print each outlier and its associated timestamp
                         for outlier in outliers:
-                            unit = " seconds" if data_type == "cycles" else ""
-                            print(f"  {context_prefix}{calc_name}: {outlier:.6f}{unit}")
+                            print(f"  {calc_name}: {outlier:.6f} {value_unit}")
                             # Find the log file name and timestamp corresponding to the outlier value
                             for log_file_name, file_data, timestamps in results:
                                 log_file_descriptor = f"in {log_file_name}" if len(results) > 1 else ""
                                 if outlier in file_data:
                                     outlier_index = file_data.index(outlier)
-                                    print(f"    @ {timestamps[outlier_index]:.6f} seconds {log_file_descriptor}")
+                                    print(f"    @ {timestamps[outlier_index]:.6f} s {log_file_descriptor}")
                 elif calc_type == 'abs_outlier_2std':
                     if len(abs_numeric_values) < 2:
-                        print(f"  {context_prefix}{calc_name}: Cannot calculate with less than 2 values")
+                        print(f"  {calc_name}: Cannot calculate with less than 2 values")
                     else:
                         mean = statistics.mean(abs_numeric_values)
                         stddev = statistics.stdev(abs_numeric_values)
                         outliers = [x for x in abs_numeric_values if abs(x - mean) > 2 * stddev]
                         # print each outlier and its associated timestamp
                         for outlier in outliers:
-                            print(f"  {context_prefix}{calc_name}: {outlier:.6f}")
+                            print(f"  {calc_name}: {outlier:.6f} {value_unit}")
                             # Find the log file name and timestamp corresponding to the outlier value
                             for log_file_name, file_data, timestamps in results:
                                 log_file_descriptor = f"in {log_file_name}" if len(results) > 1 else ""
                                 abs_file_data = [abs(x) for x in file_data if isinstance(x, (int, float))]
                                 if outlier in abs_file_data:
                                     outlier_index = abs_file_data.index(outlier)
-                                    print(f"    @ {timestamps[outlier_index]:.6f} seconds {log_file_descriptor}")
+                                    print(f"    @ {timestamps[outlier_index]:.6f} s {log_file_descriptor}")
                 else:
                     print(f"  Unknown calculation type: {calc_type}")
         else:
             print(f"  No numeric values found for calculations")
     else:
-        if no_data_message:
-            print(f"  {no_data_message}")
-        else:
-            data_name = "cycles" if data_type == "cycles" else "values"
-            message = f"No {data_name} found for this analysis"
-            if context_prefix:
-                message += " across all files"
-            else:
-                message += " in this file"
-            print(f"  {message}")
+        data_name = "cycles" if data_type == "cycles" else "values"
+        print(f"No {data_name} found for this analysis")
 
 def analyze_file_records(log: Log, log_file_name: str, time_analysis_configs: List[Dict[str, Any]]) -> Dict[int, Tuple[str, List[float], List[float]]]:
     """
@@ -326,10 +313,28 @@ def analyze_value_records(log: Log, log_file_name: str, value_analysis_configs: 
 
 def process_log_file(log_file_path: str, mandatory_entries: Set[str], target_entry_names: Set[str], 
                      filter_enabled: bool = False, filter_fms_attached: bool = False, robot_mode: str = 'both') -> Log:
-    
+    """
+    Process a single log file and return captured records and final driver station state.
+    Args:
+        log_file_path: Path to the log file to process
+        mandatory_entries: Set of mandatory entry names to always capture
+        target_entry_names: Set of target entry names to capture based on filtering configuration
+        filter_enabled: Whether to filter records based on driver station enabled state
+        filter_fms_attached: Whether to filter records based on FMS attached state
+        robot_mode: Robot mode filter ('auto', 'teleop', or 'both')
+        Returns: Log object containing captured records and final driver station state
+    """
+
     def should_capture_record(driver_station_enabled: Optional[bool], driver_station_autonomous: Optional[bool], 
                             driver_station_fms_attached: Optional[bool]) -> bool:
-        """Check if records should be captured based on current DriverStation state."""
+        """Check if records should be captured based on current DriverStation state.
+        Args:
+            driver_station_enabled: Current enabled state of the DriverStation
+            driver_station_autonomous: Current autonomous state of the DriverStation
+            driver_station_fms_attached: Current FMS attached state of the DriverStation
+        Returns:
+            bool: True if the record should be captured, False otherwise.
+        """
         # Check enabled filter
         if filter_enabled and driver_station_enabled is not None and not driver_station_enabled:
             return False
@@ -348,7 +353,6 @@ def process_log_file(log_file_path: str, mandatory_entries: Set[str], target_ent
         return True
 
 
-    """Process a single log file and return captured records and final driver station state."""
     print(f"\nProcessing: {os.path.basename(log_file_path)}")
     
     with open(log_file_path, "rb") as f:
@@ -418,8 +422,6 @@ def process_log_file(log_file_path: str, mandatory_entries: Set[str], target_ent
                     # If the entry is a schema entry, we may want to capture it differently
                     log.struct_decoder.add_schema(entry.name.split("struct:")[1], record.getBytes())
                 
-                # Move this to another method and bring in the struct parser from the other branch
-
                 # Check if this record matches any target entry names and meets filtering criteria
                 if any(entry.name in name for name in mandatory_entries) or (any(entry.name in name for name in target_entry_names)and should_capture_record(driver_station_enabled, driver_station_autonomous, driver_station_fms_attached)):
                     key = entry.name
@@ -479,11 +481,11 @@ def main() -> None:
             config = json.load(config_file)
             
             # Load filtering criteria
-            filter_enabled = config.get('enabled', False)
-            filter_fms_attached = config.get('fmsAttached', False)
-            robot_mode = config.get('robotMode', 'both')  # 'auto', 'teleop', or 'both'
+            filter_on_enabled = config.get('enabled', False)
+            filter_on_fms_attached = config.get('fmsAttached', False)
+            filter_on_robot_mode = config.get('robotMode', 'both')  # 'auto', 'teleop', or 'both'
             
-            # Load analysis configuration
+            # Load analysis configurations
             time_analysis_configs = config.get('timeAnalysis', [])
             value_analysis_configs = config.get('valueAnalysis', [])
             
@@ -527,10 +529,10 @@ def main() -> None:
     
      # Print filtering criteria and final states
     print(f"\n=== FILTERING CRITERIA ===")
-    print(f"Filter by enabled: {filter_enabled}")
-    print(f"Filter by FMS attached: {filter_fms_attached}")
-    print(f"Robot mode filter: {robot_mode}")
-    
+    print(f"Filter for enabled: {filter_on_enabled}")
+    print(f"Filter for FMS attached: {filter_on_fms_attached}")
+    print(f"Filter for robot mode: {filter_on_robot_mode}")
+
     print(f"\n=== ANALYSIS ===")
     print(f"Found {len(log_files)} log files to process:")
     for log_file in sorted(log_files):
@@ -538,17 +540,16 @@ def main() -> None:
 
     # Aggregated data across all files
     all_logs = []  # List to store records from all files
-    all_files_time_differences = []  # List to store time differences for analysis
-    aggregated_time_analysis_results = {}  # Dictionary to store aggregated (time_differences, timestamps) by analysis index
+    aggregated_time_analysis_results = {}  # Dictionary to store aggregated times by analysis index
     aggregated_value_analysis_results = {}  # Dictionary to store aggregated values by analysis index
 
     # Process all log files
     for log_file in sorted(log_files):
         log = process_log_file(log_file, mandatory_entries, target_entry_names, 
-                               filter_enabled, filter_fms_attached, robot_mode)
+                               filter_on_enabled, filter_on_fms_attached, filter_on_robot_mode)
         all_logs.append(log)
 
-        # Analyze this file's records and aggregate for later cross-file analysis
+        # Analyze time records and aggregate for later cross-file analysis
         if time_analysis_configs:
             time_analysis_results = analyze_file_records(log, os.path.basename(log_file), time_analysis_configs)
 
@@ -588,7 +589,7 @@ def main() -> None:
                 results = time_analysis_results.get(analysis_idx, ("", [], []))
 
                 # Print found cycles and perform calculations for this file
-                print_results_and_calculations([results], calculations, data_type="cycles")
+                print_results_and_calculations([results], calculations, data_type="cycles", value_unit="s")
 
         # Perform value analysis calculations on individual file data
         if value_analysis_configs:
@@ -596,6 +597,7 @@ def main() -> None:
             
             for analysis_idx, analysis in enumerate(value_analysis_configs):
                 entry_name = analysis.get('entry')
+                entry_unit = analysis.get('entryUnit', "")
                 trigger_entry = analysis.get('triggerEntry')
                 trigger_value = analysis.get('triggerValue')
                 calculations = analysis.get('calculations', [])
@@ -609,7 +611,7 @@ def main() -> None:
                 results = value_analysis_results.get(analysis_idx, ("", [], []))
 
                 # Print captured values and perform calculations for this file
-                print_results_and_calculations([results], calculations, data_type="values")
+                print_results_and_calculations([results], calculations, data_type="values", value_unit=entry_unit)
 
     # Perform aggregated analysis across all files
     if time_analysis_configs and aggregated_time_analysis_results:
@@ -654,7 +656,7 @@ def main() -> None:
                     print(f"  Maximum cycles in any file: {max_cycles_per_file} in {max_cycle_file}")
 
                 # Print aggregated cycles summary and perform calculations
-                print_results_and_calculations(all_results_by_file, calculations, context_prefix="Aggregated ", data_type="cycles")
+                print_results_and_calculations(all_results_by_file, calculations, data_type="cycles", value_unit="s")
             else:
                 print(f"  No complete cycles found for this analysis across all files")
 
@@ -664,6 +666,7 @@ def main() -> None:
         
         for analysis_idx, analysis in enumerate(value_analysis_configs):
             entry_name = analysis.get('entry')
+            entry_unit = analysis.get('entryUnit', "")
             trigger_entry = analysis.get('triggerEntry')
             trigger_value = analysis.get('triggerValue')
             calculations = analysis.get('calculations', [])
@@ -699,7 +702,7 @@ def main() -> None:
                     max_cycle_file = all_results_by_file[cycle_counts.index(max_cycles_per_file)][0]
                     print(f"  Maximum values in any file: {max_values_per_file} in {max_cycle_file}")
                 
-                print_results_and_calculations(all_values_by_file, calculations, data_type="values")
+                print_results_and_calculations(all_values_by_file, calculations, data_type="values", value_unit=entry_unit)
                     
             else:
                 print(f"  No values captured for this analysis across all files")
