@@ -17,6 +17,8 @@ STRUCT_PREFIX = "struct:"
 PHOTON_PREFIX = "photon:"
 PROTO_PREFIX = "proto:"
 
+VERBOSE = False  # Set to True for detailed output
+
 
 def print_cycles_and_calculations(results: List[Tuple[str, List[float], List[float]]], calculations: List[Dict[str, Any]], 
                                 context_prefix: str = "", no_cycles_message: Optional[str] = None) -> None:
@@ -36,12 +38,14 @@ def print_cycles_and_calculations(results: List[Tuple[str, List[float], List[flo
 
     if time_differences:
         if len(results) == 1:
-            print(f"  Total cycles found in {results[0][0]}: {len(time_differences)}")
-            for i, time_diff in enumerate(time_differences):
-                print(f"  Found cycle {i+1}: {time_diff:.6f}s")
+            print(f"  Total cycles found in this file: {len(time_differences)}")
+            if(VERBOSE):
+                for i, time_diff in enumerate(time_differences):
+                    print(f"  Found cycle {i+1}: {time_diff:.6f}s")
         else:
             print(f"  Total cycles found across all files: {len(time_differences)}")
-            print(f"  Individual cycle times: {[f'{t:.6f}s' for t in time_differences]}")
+            if(VERBOSE):
+                print(f"  Individual cycle times: {[f'{t:.6f}s' for t in time_differences]}")
         
         # Perform calculations
         for calc in calculations:
@@ -116,11 +120,13 @@ def print_values_and_calculations(results: List[Tuple[str, List[Union[int, float
     if values:
         if len(results) == 1:
             print(f"  Total values captured in this file: {len(values)}")
-            print(f"  Values: {values}")
+            if VERBOSE:
+                print(f"  Values: {values}")
         else:
             print(f"  Total values captured across all files: {len(values)}")
-            print(f"  All values: {values}")
-        
+            if VERBOSE:
+                print(f"  All values: {values}")
+
         # Filter numeric values for calculations
         numeric_values = []
         abs_numeric_values = []
@@ -585,6 +591,13 @@ def main() -> None:
         print(f"No log files found in {log_folder}", file=sys.stderr)
         sys.exit(1)
     
+     # Print filtering criteria and final states
+    print(f"\n=== FILTERING CRITERIA ===")
+    print(f"Filter by enabled: {filter_enabled}")
+    print(f"Filter by FMS attached: {filter_fms_attached}")
+    print(f"Robot mode filter: {robot_mode}")
+    
+    print(f"\n=== ANALYSIS ===")
     print(f"Found {len(log_files)} log files to process:")
     for log_file in sorted(log_files):
         print(f"  {os.path.basename(log_file)}")
@@ -692,7 +705,6 @@ def main() -> None:
                 total_cycles = sum(cycle_counts)
                 
                 print(f"  Files processed: {len(all_time_differences_by_file)}")
-                print(f"  Total cycles found across all files: {total_cycles}")
                 
                 if cycle_counts and "count" in [calc.get('type') for calc in calculations]:
                     avg_cycles_per_file = total_cycles / len(cycle_counts)
@@ -759,36 +771,31 @@ def main() -> None:
                 print(f"  No values captured for this analysis across all files")
 
     # Print summary of captured records
-    print(f"\n=== CAPTURED RECORDS SUMMARY ===")
-    print(f"Total captured logs: {len(all_logs)}")
-    print(f"Target entry names: {sorted(target_entry_names)}")
-    print(f"Mandatory entries (always captured): {sorted(mandatory_entries)}")
-    config_only_entries = target_entry_names - mandatory_entries
-    if config_only_entries:
-        print(f"Additional entries from JSON config: {sorted(config_only_entries)}")
-    else:
-        print("Additional entries from JSON config: None")
+    if(VERBOSE):
+        print(f"\n=== CAPTURED RECORDS SUMMARY ===")
+        print(f"Total captured logs: {len(all_logs)}")
+        print(f"Target entry names: {sorted(target_entry_names)}")
+        print(f"Mandatory entries (always captured): {sorted(mandatory_entries)}")
+        config_only_entries = target_entry_names - mandatory_entries
+        if config_only_entries:
+            print(f"Additional entries from JSON config: {sorted(config_only_entries)}")
+        else:
+            print("Additional entries from JSON config: None")
     
-    # Print filtering criteria and final states
-    print(f"\n=== FILTERING CRITERIA ===")
-    print(f"Filter by enabled: {filter_enabled}")
-    print(f"Filter by FMS attached: {filter_fms_attached}")
-    print(f"Robot mode filter: {robot_mode}")
-    
-    if all_logs:
-        print(f"\nCaptured logs by entry name:")
-        entry_counts = {}
-        for log in all_logs:
-            for key in log.get_field_keys():
-                if key not in entry_counts:
-                    entry_counts[key] = 0
-                entry_counts[key] += len(log.get_field(key).get_timestamps())
+    if(VERBOSE):
+        if all_logs:
+            print(f"\nCaptured logs by entry name:")
+            entry_counts = {}
+            for log in all_logs:
+                for key in log.get_field_keys():
+                    if key not in entry_counts:
+                        entry_counts[key] = 0
+                    entry_counts[key] += len(log.get_field(key).get_timestamps())
 
-        for entry_name in sorted(entry_counts.keys()):
-            print(f"  {entry_name}: {entry_counts[entry_name]} records")
-    else:
-        print("No records captured matching the specified entry names.")
-
+            for entry_name in sorted(entry_counts.keys()):
+                print(f"  {entry_name}: {entry_counts[entry_name]} records")
+        else:
+            print("No records captured matching the specified entry names.")
 
 if __name__ == "__main__":
     main()
