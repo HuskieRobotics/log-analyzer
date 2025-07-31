@@ -102,16 +102,14 @@ class LogField:
             self.data.timestamps[0] < clear_timestamp):
             self.data.timestamps[0] = clear_timestamp
     
-    def get_range(self, start: float, end: float, uuid: Optional[str] = None, 
-                  start_offset: Optional[int] = None) -> LogValueSet:
+    def get_range(self, start: float, end: float) -> LogValueSet:
         """Returns values in the specified timestamp range."""
         # Implement range retrieval with caching
-        # FIXME: This is a simplified version that doesn't support start_offset and handles bounds differently
         result_timestamps = []
         result_values = []
         
         for i, timestamp in enumerate(self.data.timestamps):
-            if start <= timestamp <= end:
+            if start < timestamp <= end:
                 result_timestamps.append(timestamp)
                 result_values.append(self.data.values[i])
         
@@ -121,32 +119,28 @@ class LogField:
         return result
     
     # Specific type getters
-    def get_raw(self, start: float, end: float, uuid: Optional[str] = None, 
-                start_offset: Optional[int] = None) -> Optional[LogValueSetRaw]:
+    def get_raw(self, start: float, end: float) -> Optional[LogValueSetRaw]:
         if self.type != LoggableType.RAW:
             return None
-        range_data = self.get_range(start, end, uuid, start_offset)
+        range_data = self.get_range(start, end)
         return LogValueSetRaw(range_data.timestamps, range_data.values)
     
-    def get_boolean(self, start: float, end: float, uuid: Optional[str] = None, 
-                    start_offset: Optional[int] = None) -> Optional[LogValueSetBoolean]:
+    def get_boolean(self, start: float, end: float) -> Optional[LogValueSetBoolean]:
         if self.type != LoggableType.BOOLEAN:
             return None
-        range_data = self.get_range(start, end, uuid, start_offset)
+        range_data = self.get_range(start, end)
         return LogValueSetBoolean(range_data.timestamps, range_data.values)
     
-    def get_number(self, start: float, end: float, uuid: Optional[str] = None, 
-                   start_offset: Optional[int] = None) -> Optional[LogValueSetNumber]:
+    def get_number(self, start: float, end: float) -> Optional[LogValueSetNumber]:
         if self.type != LoggableType.NUMBER:
             return None
-        range_data = self.get_range(start, end, uuid, start_offset)
+        range_data = self.get_range(start, end)
         return LogValueSetNumber(range_data.timestamps, range_data.values)
     
-    def get_string(self, start: float, end: float, uuid: Optional[str] = None, 
-                   start_offset: Optional[int] = None) -> Optional[LogValueSetString]:
+    def get_string(self, start: float, end: float) -> Optional[LogValueSetString]:
         if self.type != LoggableType.STRING:
             return None
-        range_data = self.get_range(start, end, uuid, start_offset)
+        range_data = self.get_range(start, end)
         return LogValueSetString(range_data.timestamps, range_data.values)
     
     # Putters for different types
@@ -320,7 +314,7 @@ class Log:
         """Sets the key to cause its children to be marked generated."""
         self.generated_parents.add(key)
     
-    def get_timestamps(self, keys: List[str], uuid: Optional[str] = None) -> List[float]:
+    def get_timestamps(self, keys: List[str]) -> List[float]:
         """Returns the combined timestamps from a set of fields."""
         keys = [key for key in keys if key in self.fields]
         
@@ -350,54 +344,46 @@ class Log:
         return timestamps[-1] if timestamps else 0.0
     
     # Data reading methods
-    def get_range(self, key: str, start: float, end: float, 
-                  uuid: Optional[str] = None, start_offset: Optional[int] = None) -> Optional[LogValueSet]:
+    def get_range(self, key: str, start: float, end: float) -> Optional[LogValueSet]:
         """Reads a set of generic values from the field."""
         field = self.fields.get(key)
-        return field.get_range(start, end, uuid, start_offset) if field else None
+        return field.get_range(start, end) if field else None
     
-    def get_raw(self, key: str, start: float, end: float, 
-                uuid: Optional[str] = None, start_offset: Optional[int] = None) -> Optional[LogValueSetRaw]:
+    def get_raw(self, key: str, start: float, end: float) -> Optional[LogValueSetRaw]:
         """Reads a set of Raw values from the field."""
         field = self.fields.get(key)
-        return field.get_raw(start, end, uuid, start_offset) if field else None
+        return field.get_raw(start, end) if field else None
     
-    def get_boolean(self, key: str, start: float, end: float, 
-                    uuid: Optional[str] = None, start_offset: Optional[int] = None) -> Optional[LogValueSetBoolean]:
+    def get_boolean(self, key: str, start: float, end: float) -> Optional[LogValueSetBoolean]:
         """Reads a set of Boolean values from the field."""
         field = self.fields.get(key)
-        return field.get_boolean(start, end, uuid, start_offset) if field else None
+        return field.get_boolean(start, end) if field else None
     
-    def get_number(self, key: str, start: float, end: float, 
-                   uuid: Optional[str] = None, start_offset: Optional[int] = None) -> Optional[LogValueSetNumber]:
+    def get_number(self, key: str, start: float, end: float) -> Optional[LogValueSetNumber]:
         """Reads a set of Number values from the field."""
         field = self.fields.get(key)
-        return field.get_number(start, end, uuid, start_offset) if field else None
+        return field.get_number(start, end) if field else None
     
-    def get_string(self, key: str, start: float, end: float, 
-                   uuid: Optional[str] = None, start_offset: Optional[int] = None) -> Optional[LogValueSetString]:
+    def get_string(self, key: str, start: float, end: float) -> Optional[LogValueSetString]:
         """Reads a set of String values from the field."""
         field = self.fields.get(key)
-        return field.get_string(start, end, uuid, start_offset) if field else None
-    
-    def get_boolean_array(self, key: str, start: float, end: float, 
-                          uuid: Optional[str] = None, start_offset: Optional[int] = None) -> Optional[LogValueSetBooleanArray]:
+        return field.get_string(start, end) if field else None
+
+    def get_boolean_array(self, key: str, start: float, end: float) -> Optional[LogValueSetBooleanArray]:
         """Reads a set of BooleanArray values from the field."""
         field = self.fields.get(key)
-        return field.get_boolean_array(start, end, uuid, start_offset) if field else None
-    
-    def get_number_array(self, key: str, start: float, end: float, 
-                         uuid: Optional[str] = None, start_offset: Optional[int] = None) -> Optional[LogValueSetNumberArray]:
+        return field.get_boolean_array(start, end) if field else None
+
+    def get_number_array(self, key: str, start: float, end: float) -> Optional[LogValueSetNumberArray]:
         """Reads a set of NumberArray values from the field."""
         field = self.fields.get(key)
-        return field.get_number_array(start, end, uuid, start_offset) if field else None
-    
-    def get_string_array(self, key: str, start: float, end: float, 
-                         uuid: Optional[str] = None, start_offset: Optional[int] = None) -> Optional[LogValueSetStringArray]:
+        return field.get_number_array(start, end) if field else None
+
+    def get_string_array(self, key: str, start: float, end: float) -> Optional[LogValueSetStringArray]:
         """Reads a set of StringArray values from the field."""
         field = self.fields.get(key)
-        return field.get_string_array(start, end, uuid, start_offset) if field else None
-    
+        return field.get_string_array(start, end) if field else None
+
     # Data writing methods
     def put_raw(self, key: str, timestamp: float, value: bytes) -> None:
         """Writes a new Raw value to the field."""
