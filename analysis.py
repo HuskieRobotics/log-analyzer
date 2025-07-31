@@ -17,13 +17,12 @@ VERBOSE = False
 
 
 def print_results_and_calculations(results: List[Tuple[str, List[Union[int, float, str, bool]], List[float]]], calculations: List[Dict[str, Any]], 
-                                 data_type: str = "values", value_unit: str = "") -> None:
+                                 value_unit: str = "") -> None:
     """Print results and perform calculations on time differences or captured values.
     
     Args:
         results: List of tuples containing log file name, data (time differences or values), and timestamps
         calculations: List of calculation configs from analysis config
-        data_type: Type of data being processed ("cycles" for time differences, "values" for captured values)
         value_unit: Unit for values (e.g., "s" for time differences, "m" for meters)
     """
     # aggregate all data
@@ -32,26 +31,14 @@ def print_results_and_calculations(results: List[Tuple[str, List[Union[int, floa
         all_data.extend(file_data)
 
     if all_data:
-        # Print summary based on data type
-        if data_type == "cycles":
-            if len(results) == 1:
-                print(f"  Total cycles found in this file: {len(all_data)}")
-                if VERBOSE:
-                    for i, time_diff in enumerate(all_data):
-                        print(f"  Found cycle {i+1}: {time_diff:.6f}s")
-            else:
-                print(f"  Total cycles found across all files: {len(all_data)}")
-                if VERBOSE:
-                    print(f"  Individual cycle times: {[f'{t:.6f}s' for t in all_data]}")
-        else:  # values
-            if len(results) == 1:
-                print(f"  Total values captured in this file: {len(all_data)}")
-                if VERBOSE:
-                    print(f"  Values: {all_data}")
-            else:
-                print(f"  Total values captured across all files: {len(all_data)}")
-                if VERBOSE:
-                    print(f"  All values: {all_data}")
+        if len(results) == 1:
+            print(f"  Total values captured in this file: {len(all_data)}")
+            if VERBOSE:
+                print(f"  Values captured: {[f'{v:.6f} {value_unit}' for v in all_data]}")
+        else:
+            print(f"  Total values captured across all files: {len(all_data)}")
+            if VERBOSE:
+                print(f"  All values: {[f'{v:.6f} {value_unit}' for v in all_data]}")
 
         # Filter numeric values for calculations
         numeric_values = []
@@ -112,10 +99,8 @@ def print_results_and_calculations(results: List[Tuple[str, List[Union[int, floa
                             min_index = abs_file_data.index(result)
                             print(f"    @ {timestamps[min_index]:.6f} s {log_file_descriptor}")
                 elif calc_type == 'count':
-                    # Cycles are counted and printed elsewhere
-                    if data_type != "cycles":
-                        result = len(numeric_values)
-                        print(f"  {calc_name}: {result}")
+                    result = len(numeric_values)
+                    print(f"  {calc_name}: {result}")
                 elif calc_type == 'outlier_2std':
                     if len(numeric_values) < 2:
                         print(f"  {calc_name}: Cannot calculate with less than 2 values")
@@ -154,8 +139,7 @@ def print_results_and_calculations(results: List[Tuple[str, List[Union[int, floa
         else:
             print(f"  No numeric values found for calculations")
     else:
-        data_name = "cycles" if data_type == "cycles" else "values"
-        print(f"No {data_name} found for this analysis")
+        print(f"No values found for this analysis")
 
 def analyze_file_records(log: Log, log_file_name: str, time_analysis_configs: List[Dict[str, Any]]) -> Dict[int, Tuple[str, List[float], List[float]]]:
     """
@@ -589,7 +573,7 @@ def main() -> None:
                 results = time_analysis_results.get(analysis_idx, ("", [], []))
 
                 # Print found cycles and perform calculations for this file
-                print_results_and_calculations([results], calculations, data_type="cycles", value_unit="s")
+                print_results_and_calculations([results], calculations, value_unit="s")
 
         # Perform value analysis calculations on individual file data
         if value_analysis_configs:
@@ -611,7 +595,7 @@ def main() -> None:
                 results = value_analysis_results.get(analysis_idx, ("", [], []))
 
                 # Print captured values and perform calculations for this file
-                print_results_and_calculations([results], calculations, data_type="values", value_unit=entry_unit)
+                print_results_and_calculations([results], calculations, value_unit=entry_unit)
 
     # Perform aggregated analysis across all files
     if time_analysis_configs and aggregated_time_analysis_results:
@@ -646,17 +630,15 @@ def main() -> None:
                     avg_cycles_per_file = total_cycles / len(cycle_counts)
                     min_cycles_per_file = min(cycle_counts)
                     max_cycles_per_file = max(cycle_counts)
-                    
-                    print(f"  Average cycles per file: {avg_cycles_per_file:.2f}")
-                    # print the minimum cycles in any file along with the corresponding file name
-                    min_cycle_file = all_results_by_file[cycle_counts.index(min_cycles_per_file)][0]
-                    print(f"  Minimum cycles in any file: {min_cycles_per_file} in {min_cycle_file}")
-                    # print the maximum cycles in any file along with the corresponding file name
-                    max_cycle_file = all_results_by_file[cycle_counts.index(max_cycles_per_file)][0]
-                    print(f"  Maximum cycles in any file: {max_cycles_per_file} in {max_cycle_file}")
+
+                    print(f"  Average matched values per file: {avg_cycles_per_file:.2f}")
+                    min_matched_values_file = all_results_by_file[cycle_counts.index(min_cycles_per_file)][0]
+                    print(f"  Minimum matched values in any file: {min_cycles_per_file} in {min_matched_values_file}")
+                    max_matched_values_file = all_results_by_file[cycle_counts.index(max_cycles_per_file)][0]
+                    print(f"  Maximum matched values in any file: {max_cycles_per_file} in {max_matched_values_file}")
 
                 # Print aggregated cycles summary and perform calculations
-                print_results_and_calculations(all_results_by_file, calculations, data_type="cycles", value_unit="s")
+                print_results_and_calculations(all_results_by_file, calculations, value_unit="s")
             else:
                 print(f"  No complete cycles found for this analysis across all files")
 
@@ -694,15 +676,13 @@ def main() -> None:
                     min_values_per_file = min(value_counts)
                     max_values_per_file = max(value_counts)
                     
-                    print(f"  Average values per file: {avg_values_per_file:.2f}")
-                    # print the minimum cycles in any file along with the corresponding file name
-                    min_cycle_file = all_results_by_file[cycle_counts.index(min_cycles_per_file)][0]
-                    print(f"  Minimum values in any file: {min_values_per_file} in {min_cycle_file}")
-                    # print the maximum cycles in any file along with the corresponding file name
-                    max_cycle_file = all_results_by_file[cycle_counts.index(max_cycles_per_file)][0]
-                    print(f"  Maximum values in any file: {max_values_per_file} in {max_cycle_file}")
-                
-                print_results_and_calculations(all_values_by_file, calculations, data_type="values", value_unit=entry_unit)
+                    print(f"  Average matched values per file: {avg_values_per_file:.2f}")
+                    min_matched_values_file = all_results_by_file[cycle_counts.index(min_cycles_per_file)][0]
+                    print(f"  Minimum matched values in any file: {min_values_per_file} in {min_matched_values_file}")
+                    max_matched_values_file = all_results_by_file[cycle_counts.index(max_cycles_per_file)][0]
+                    print(f"  Maximum matched values in any file: {max_values_per_file} in {max_matched_values_file}")
+
+                print_results_and_calculations(all_values_by_file, calculations, value_unit=entry_unit)
                     
             else:
                 print(f"  No values captured for this analysis across all files")
