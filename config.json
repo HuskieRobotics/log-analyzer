@@ -28,6 +28,7 @@
     }],
     "valueAnalysis": [{
         "entry": "/RealOutputs/DriveToReef/difference (reef frame)/translation/y",
+        "entryUnit": "m",
         "triggerEntry": "/Manipulator/IsIndexerIRBlocked",
         "triggerValue": false,
         "calculations": [
