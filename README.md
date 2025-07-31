@@ -58,16 +58,18 @@ Time analysis calculates the duration between start and end events. Multiple ana
 
 ```json
 "timeAnalysis": [{
-    "startEntry": "/RealOutputs/Manipulator/State",
-    "startValue": "SHOOT_CORAL",
-    "endEntry": "/Manipulator/IsIndexerIRBlocked", 
-    "endValue": false,
-    "calculations": [
-        {"type": "average", "name": "Average Shooting Time"},
-        {"type": "max", "name": "Max Shooting Time"},
-        {"type": "min", "name": "Min Shooting Time"}
-    ]
-}]
+        "startEntry": "/RealOutputs/Manipulator/State",
+        "startValue": "WAITING_FOR_CORAL",
+        "endEntry": "/RealOutputs/LEDS/state",
+        "endValue": "SCORING",
+        "calculations": [
+            {"type": "average", "name": "Average Cycle Time"},
+            {"type": "max", "name": "Max Cycle Time"},
+            {"type": "min", "name": "Min Cycle Time"},
+            {"type": "count", "name": "Cycle Count"},
+            {"type": "outlier_2std", "name": "Outliers (2 std dev)"}
+        ]
+    }]
 ```
 
 #### Time Analysis Properties
@@ -86,13 +88,17 @@ Value analysis captures values from one entry when a trigger condition is met on
 
 ```json
 "valueAnalysis": [{
-    "entry": "/RealOutputs/DriveToReef/y velocity (reef frame)",
+    "entry": "/RealOutputs/DriveToReef/difference (reef frame)/translation/y",
     "triggerEntry": "/Manipulator/IsIndexerIRBlocked",
     "triggerValue": false,
     "calculations": [
-        {"type": "average", "name": "Average Y Velocity at Reef"},
-        {"type": "max", "name": "Max Y Velocity at Reef"}, 
-        {"type": "min", "name": "Min Y Velocity at Reef"}
+        {"type": "average", "name": "Average Y Diff at Reef"},
+        {"type": "max", "name": "Max Y Diff at Reef"},
+        {"type": "min", "name": "Min Y Diff at Reef"},
+        {"type": "abs_average", "name": "Average Y Diff at Reef (abs)"},
+        {"type": "abs_max", "name": "Max Y Diff at Reef (abs)"},
+        {"type": "abs_min", "name": "Min Y Diff at Reef (abs)"},
+        {"type": "abs_outlier_2std", "name": "Outliers (2 std dev; abs)"}
     ]
 }]
 ```
@@ -119,7 +125,8 @@ Both time and value analysis support these calculation types:
 | `"abs_min"` | Minimum value of absolute values | numeric values |
 | `"abs_max"` | Maximum value of absolute values | numeric values |
 | `"count"` | Count of items | Time differences, numeric values |
-
+| `"outlier_2std"` | All values greater than 2 standard deviations from the mean | Time differences, numeric values |
+| `"abs_outlier_2std"` | All values greater than 2 standard deviations from the mean of absolute values | numeric values |
 
 ### Complete Example Configuration
 
@@ -148,7 +155,8 @@ Both time and value analysis support these calculation types:
             {"type": "average", "name": "Average Cycle Time"},
             {"type": "max", "name": "Max Cycle Time"},
             {"type": "min", "name": "Min Cycle Time"},
-            {"type": "count", "name": "Cycle Count"}
+            {"type": "count", "name": "Cycle Count"},
+            {"type": "outlier_2std", "name": "Outliers (2 std dev)"}
         ]
     }],
     "valueAnalysis": [{
@@ -156,9 +164,13 @@ Both time and value analysis support these calculation types:
         "triggerEntry": "/Manipulator/IsIndexerIRBlocked",
         "triggerValue": false,
         "calculations": [
+            {"type": "average", "name": "Average Y Diff at Reef"},
+            {"type": "max", "name": "Max Y Diff at Reef"},
+            {"type": "min", "name": "Min Y Diff at Reef"},
             {"type": "abs_average", "name": "Average Y Diff at Reef (abs)"},
             {"type": "abs_max", "name": "Max Y Diff at Reef (abs)"},
-            {"type": "abs_min", "name": "Min Y Diff at Reef (abs)"}
+            {"type": "abs_min", "name": "Min Y Diff at Reef (abs)"},
+            {"type": "abs_outlier_2std", "name": "Outliers (2 std dev; abs)"}
         ]
     }]
 }
@@ -187,6 +199,8 @@ Cross-file statistics including:
 - Target entry names
 - Filtering criteria applied
 
+There is a VERBOSE variable defined in the analysis.py file. If True, additional information will be displayed.
+
 ## Data Types Supported
 
 The tool supports these WPILib data types:
@@ -214,35 +228,131 @@ pip install msgpack
 ## Example Output
 
 ```
-Found 3 log files to process:
-  match1.wpilog
-  match2.wpilog
-  match3.wpilog
+(.venv) geoff@MacBookPro log-analyzer % python analysis.py ~/Desktop/log\ analysis/test config.json
 
-Processing: match1.wpilog
-  Captured 1247 records from match1.wpilog
+=== FILTERING CRITERIA ===
+Filter by enabled: True
+Filter by FMS attached: True
+Robot mode filter: teleop
 
-=== TIME ANALYSIS RESULTS FOR match1.wpilog ===
+=== PROCESSING ===
+Found 2 log files to process:
+  akit_25-04-17_14-51-30_curie_q40.wpilog
+  akit_25-04-19_09-36-19_curie_e6.wpilog
+
+Processing: akit_25-04-17_14-51-30_curie_q40.wpilog
+
+=== TIME ANALYSIS RESULTS FOR akit_25-04-17_14-51-30_curie_q40.wpilog ===
 
 Analyzing: /RealOutputs/Manipulator/State (SHOOT_CORAL) -> /Manipulator/IsIndexerIRBlocked (False)
-  Total cycles found in this file: 5
-  Found cycle 1: 1.234567s
-  Found cycle 2: 1.345678s
-  ...
-  Average Shooting Time: 1.298765 seconds
-  Max Shooting Time: 1.456789 seconds
-  Min Shooting Time: 1.123456 seconds
+  Total cycles found in this file: 13
+  Average Shooting Time: 0.120009 seconds
+  Max Shooting Time: 0.140015 seconds
+    @ 293.243832 seconds 
+  Min Shooting Time: 0.100003 seconds
+    @ 337.654072 seconds 
+
+Analyzing: /RealOutputs/Manipulator/State (WAITING_FOR_CORAL) -> /RealOutputs/LEDS/state (SCORING)
+  Total cycles found in this file: 16
+  Average Cycle Time: 6.804564 seconds
+  Max Cycle Time: 9.882420 seconds
+    @ 337.774090 seconds 
+  Min Cycle Time: 3.967845 seconds
+    @ 289.296021 seconds 
+
+=== VALUE ANALYSIS RESULTS FOR akit_25-04-17_14-51-30_curie_q40.wpilog ===
+
+Analyzing: /RealOutputs/DriveToReef/difference (reef frame)/translation/y when /Manipulator/IsIndexerIRBlocked = False
+  Total values captured in this file: 13
+  Average Y Diff at Reef: -0.003209
+  Max Y Diff at Reef: 0.012699
+    @ 289.276043 seconds 
+  Min Y Diff at Reef: -0.012387
+    @ 293.383847 seconds 
+  Average Y Diff at Reef (abs): 0.008027
+  Max Y Diff at Reef (abs): 0.012699
+    @ 289.276043 seconds 
+  Min Y Diff at Reef (abs): 0.000263
+    @ 337.754075 seconds 
+
+Processing: akit_25-04-19_09-36-19_curie_e6.wpilog
+
+=== TIME ANALYSIS RESULTS FOR akit_25-04-19_09-36-19_curie_e6.wpilog ===
+
+Analyzing: /RealOutputs/Manipulator/State (SHOOT_CORAL) -> /Manipulator/IsIndexerIRBlocked (False)
+  Total cycles found in this file: 14
+  Average Shooting Time: 0.112864 seconds
+  Max Shooting Time: 0.120074 seconds
+    @ 193.556561 seconds 
+  Min Shooting Time: 0.099947 seconds
+    @ 152.181621 seconds 
+
+Analyzing: /RealOutputs/Manipulator/State (WAITING_FOR_CORAL) -> /RealOutputs/LEDS/state (SCORING)
+  Total cycles found in this file: 15
+  Average Cycle Time: 7.291700 seconds
+  Max Cycle Time: 16.860040 seconds
+    @ 158.646889 seconds 
+  Min Cycle Time: 4.157296 seconds
+    @ 137.682737 seconds 
+  Outliers (2 std dev): 16.860040 seconds
+    @ 158.646889 seconds 
+
+=== VALUE ANALYSIS RESULTS FOR akit_25-04-19_09-36-19_curie_e6.wpilog ===
+
+Analyzing: /RealOutputs/DriveToReef/difference (reef frame)/translation/y when /Manipulator/IsIndexerIRBlocked = False
+  Total values captured in this file: 14
+  Average Y Diff at Reef: -0.000523
+  Max Y Diff at Reef: 0.012569
+    @ 210.868924 seconds 
+  Min Y Diff at Reef: -0.012030
+    @ 175.586898 seconds 
+  Average Y Diff at Reef (abs): 0.007575
+  Max Y Diff at Reef (abs): 0.012569
+    @ 210.868924 seconds 
+  Min Y Diff at Reef (abs): 0.000153
+    @ 187.954405 seconds 
 
 === AGGREGATED TIME ANALYSIS RESULTS ACROSS ALL FILES ===
 
 Aggregated Analysis: /RealOutputs/Manipulator/State (SHOOT_CORAL) -> /Manipulator/IsIndexerIRBlocked (False)
-  Files processed: 3
-  Total cycles found across all files: 15
-  Average cycles per file: 5.00
-  Minimum cycles in any file: 4
-  Maximum cycles in any file: 6
-  Aggregated Average Shooting Time: 1.287643 seconds
-  ...
+  Files processed: 2
+  Total cycles found across all files: 27
+  Aggregated Average Shooting Time: 0.116304 seconds
+  Aggregated Max Shooting Time: 0.140015 seconds
+    @ 293.243832 seconds in akit_25-04-17_14-51-30_curie_q40.wpilog
+  Aggregated Min Shooting Time: 0.099947 seconds
+    @ 152.181621 seconds in akit_25-04-19_09-36-19_curie_e6.wpilog
+
+Aggregated Analysis: /RealOutputs/Manipulator/State (WAITING_FOR_CORAL) -> /RealOutputs/LEDS/state (SCORING)
+  Files processed: 2
+  Average cycles per file: 15.50
+  Minimum cycles in any file: 15 in akit_25-04-19_09-36-19_curie_e6.wpilog
+  Maximum cycles in any file: 16 in akit_25-04-17_14-51-30_curie_q40.wpilog
+  Total cycles found across all files: 31
+  Aggregated Average Cycle Time: 7.040275 seconds
+  Aggregated Max Cycle Time: 16.860040 seconds
+    @ 158.646889 seconds in akit_25-04-19_09-36-19_curie_e6.wpilog
+  Aggregated Min Cycle Time: 3.967845 seconds
+    @ 289.296021 seconds in akit_25-04-17_14-51-30_curie_q40.wpilog
+  Aggregated Outliers (2 std dev): 16.860040 seconds
+    @ 158.646889 seconds in akit_25-04-19_09-36-19_curie_e6.wpilog
+
+=== AGGREGATED VALUE ANALYSIS RESULTS ACROSS ALL FILES ===
+
+Aggregated Value Analysis: /RealOutputs/DriveToReef/difference (reef frame)/translation/y when /Manipulator/IsIndexerIRBlocked = False
+  Files processed: 2
+  Total values captured across all files: 27
+  Average Y Diff at Reef: -0.001816
+  Max Y Diff at Reef: 0.012699
+    @ 289.276043 seconds in akit_25-04-17_14-51-30_curie_q40.wpilog
+  Min Y Diff at Reef: -0.012387
+    @ 293.383847 seconds in akit_25-04-17_14-51-30_curie_q40.wpilog
+  Average Y Diff at Reef (abs): 0.007793
+  Max Y Diff at Reef (abs): 0.012699
+    @ 289.276043 seconds in akit_25-04-17_14-51-30_curie_q40.wpilog
+  Min Y Diff at Reef (abs): 0.000153
+    @ 187.954405 seconds in akit_25-04-19_09-36-19_curie_e6.wpilog
+(.venv) geoff@MacBookPro log-analyzer % 
 ```
 
 ## Error Handling
