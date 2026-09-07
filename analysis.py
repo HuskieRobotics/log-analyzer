@@ -141,6 +141,29 @@ def print_results_and_calculations(results: List[Tuple[str, List[Union[int, floa
     else:
         print(f"No values found for this analysis")
 
+def print_per_file_counts(results: List[Tuple[str, List[Union[int, float, str, bool]], List[float]]],
+                          calculations: List[Dict[str, Any]]) -> None:
+    """Print per-file match-count statistics for an aggregated analysis.
+
+    Args:
+        results: List of tuples containing log file name, data, and timestamps; one per file
+        calculations: List of calculation configs; per-file counts are only
+            reported when a "count" calculation was requested
+    """
+    counts = [len(data) for _, data, _ in results]
+
+    print(f"  Files processed: {len(results)}")
+
+    if not counts or "count" not in [calc.get('type') for calc in calculations]:
+        return
+
+    min_count = min(counts)
+    max_count = max(counts)
+
+    print(f"  Average matched values per file: {sum(counts) / len(counts):.2f}")
+    print(f"  Minimum matched values in any file: {min_count} in {results[counts.index(min_count)][0]}")
+    print(f"  Maximum matched values in any file: {max_count} in {results[counts.index(max_count)][0]}")
+
 def analyze_file_records(log: Log, log_file_name: str, time_analysis_configs: List[Dict[str, Any]]) -> Dict[int, Tuple[str, List[float], List[float]]]:
     """
     Analyze file records and return time differences and start timestamps for each analysis configuration.
@@ -617,25 +640,7 @@ def main() -> None:
             all_results_by_file = aggregated_time_analysis_results.get(analysis_idx, [])
             
             if all_results_by_file:
-                # Extract time differences for cycle statistics
-                all_time_differences_by_file = [time_diffs for _, time_diffs, _ in all_results_by_file]
-                
-                # Calculate per-file cycle statistics
-                cycle_counts = [len(file_diffs) for file_diffs in all_time_differences_by_file]
-                total_cycles = sum(cycle_counts)
-                
-                print(f"  Files processed: {len(all_time_differences_by_file)}")
-                
-                if cycle_counts and "count" in [calc.get('type') for calc in calculations]:
-                    avg_cycles_per_file = total_cycles / len(cycle_counts)
-                    min_cycles_per_file = min(cycle_counts)
-                    max_cycles_per_file = max(cycle_counts)
-
-                    print(f"  Average matched values per file: {avg_cycles_per_file:.2f}")
-                    min_matched_values_file = all_results_by_file[cycle_counts.index(min_cycles_per_file)][0]
-                    print(f"  Minimum matched values in any file: {min_cycles_per_file} in {min_matched_values_file}")
-                    max_matched_values_file = all_results_by_file[cycle_counts.index(max_cycles_per_file)][0]
-                    print(f"  Maximum matched values in any file: {max_cycles_per_file} in {max_matched_values_file}")
+                print_per_file_counts(all_results_by_file, calculations)
 
                 # Print aggregated cycles summary and perform calculations
                 print_results_and_calculations(all_results_by_file, calculations, value_unit="s")
@@ -662,25 +667,7 @@ def main() -> None:
             all_values_by_file = aggregated_value_analysis_results.get(analysis_idx, [])
             
             if all_values_by_file:
-                # Extract values for statistics
-                all_values_lists = [values for _, values, _ in all_values_by_file]
-                
-                # Calculate per-file value statistics
-                value_counts = [len(file_values) for file_values in all_values_lists]
-                total_values = sum(value_counts)
-                
-                print(f"  Files processed: {len(all_values_lists)}")
-                
-                if value_counts and "count" in [calc.get('type') for calc in calculations]:
-                    avg_values_per_file = total_values / len(value_counts)
-                    min_values_per_file = min(value_counts)
-                    max_values_per_file = max(value_counts)
-                    
-                    print(f"  Average matched values per file: {avg_values_per_file:.2f}")
-                    min_matched_values_file = all_results_by_file[cycle_counts.index(min_cycles_per_file)][0]
-                    print(f"  Minimum matched values in any file: {min_values_per_file} in {min_matched_values_file}")
-                    max_matched_values_file = all_results_by_file[cycle_counts.index(max_cycles_per_file)][0]
-                    print(f"  Maximum matched values in any file: {max_values_per_file} in {max_matched_values_file}")
+                print_per_file_counts(all_values_by_file, calculations)
 
                 print_results_and_calculations(all_values_by_file, calculations, value_unit=entry_unit)
                     
