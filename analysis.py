@@ -371,47 +371,65 @@ def process_log_file(log_file_path: str, mandatory_entries: Set[str], target_ent
 
         entries = {}
         log = Log()
-        
+
+        # Whether each entry name is mandatory / targeted / a struct schema depends
+        # only on the name, which is fixed when the entry is declared. Deciding it
+        # once per entry rather than once per record avoids re-running the substring
+        # scans over the configured names for every one of millions of data records.
+        entry_flags = {}
+
+        def flags_for(name: str) -> Tuple[bool, bool, bool]:
+            """Return (is_mandatory, is_target, is_schema) for an entry name."""
+            return (any(name in target for target in mandatory_entries),
+                    any(name in target for target in target_entry_names),
+                    ".schema" in name)
+
         # Track most recent values of DriverStation entries for filtering
         driver_station_enabled = None
         driver_station_autonomous = None
         driver_station_fms_attached = None
-        
-        for record in reader:
-            timestamp = record.timestamp / 1000000
-            if record.isStart():
-                try:
-                    data = record.getStartData()
-                    if data.entry in entries:
-                        print("...DUPLICATE entry ID, overriding")
 
-                    entries[data.entry] = data
-                    
-                except TypeError:
-                    print("Start(INVALID)")
-                    
-            elif record.isFinish():
-                try:
-                    entry = record.getFinishEntry()
-                    if entry not in entries:
-                        print("...ID not found")
-                    else:
-                        del entries[entry]
-                except TypeError:
-                    print("Finish(INVALID)")
-            elif record.isSetMetadata():
-                try:
-                    data = record.getSetMetadataData()
-                    if data.entry not in entries:
-                        print("...ID not found")
-                except TypeError:
-                    print("SetMetadata(INVALID)")
-            elif record.isControl():
-                print("Unrecognized control record")
+        for record in reader:
+            # Control records all have entry 0; testing that once keeps the far more
+            # common data-record path down to a single comparison.
+            if record.entry == 0:
+                if record.isStart():
+                    try:
+                        data = record.getStartData()
+                        if data.entry in entries:
+                            print("...DUPLICATE entry ID, overriding")
+
+                        entries[data.entry] = data
+                        entry_flags[data.entry] = flags_for(data.name)
+
+                    except TypeError:
+                        print("Start(INVALID)")
+
+                elif record.isFinish():
+                    try:
+                        entry = record.getFinishEntry()
+                        if entry not in entries:
+                            print("...ID not found")
+                        else:
+                            del entries[entry]
+                            entry_flags.pop(entry, None)
+                    except TypeError:
+                        print("Finish(INVALID)")
+                elif record.isSetMetadata():
+                    try:
+                        data = record.getSetMetadataData()
+                        if data.entry not in entries:
+                            print("...ID not found")
+                    except TypeError:
+                        print("SetMetadata(INVALID)")
+                else:
+                    print("Unrecognized control record")
             else:
                 entry = entries.get(record.entry)
                 if entry is None:
                     continue
+
+                is_mandatory, is_target, is_schema = entry_flags[record.entry]
 
                 # Update DriverStation state tracking for filtering
                 try:
@@ -425,12 +443,13 @@ def process_log_file(log_file_path: str, mandatory_entries: Set[str], target_ent
                     # If we can't read the value, continue without updating state
                     pass
 
-                if ".schema" in entry.name:
+                if is_schema:
                     # If the entry is a schema entry, we may want to capture it differently
                     log.struct_decoder.add_schema(entry.name.split("struct:")[1], record.getBytes())
-                
+
                 # Check if this record matches any target entry names and meets filtering criteria
-                if any(entry.name in name for name in mandatory_entries) or (any(entry.name in name for name in target_entry_names)and should_capture_record(driver_station_enabled, driver_station_autonomous, driver_station_fms_attached)):
+                if is_mandatory or (is_target and should_capture_record(driver_station_enabled, driver_station_autonomous, driver_station_fms_attached)):
+                    timestamp = record.timestamp / 1000000
                     key = entry.name
                     type_str = entry.type
                     

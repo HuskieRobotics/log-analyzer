@@ -254,17 +254,57 @@ not O(one file), though only the VERBOSE summary uses the retained list.
 
 ## 7. Performance Profile
 
-Two quadratic behaviours dominate and matter for full-match logs:
+**Run time is dominated by the ingest scan, not by the analysis.** Both sample
+logs together hold ~4.36M records, of which the shipped config captures ~15K
+values. Everything downstream of capture is therefore negligible; cost is
+proportional to *records read*, not records kept.
 
-- `LogField._insert_value` finds its insertion point by **linear scan from the
-  front** of the timestamp list. Records arrive in timestamp order, so the scan
-  runs the full length every time → **O(n²)** ingest per field.
-- `LogField.get_range` **scans every timestamp** in the field. `analyze_file_records`
-  calls it once per start-event occurrence → **O(starts × n)** per analysis. The
-  docstring says "with caching"; there is none.
+Measured on the two sample logs with `config.json` (`cProfile`, same machine):
 
-Records are also mmapped whole-file, and every captured value is retained in
-Python lists, so peak memory scales with total captured records across all files.
+| | before | after |
+|---|---|---|
+| Wall clock | 21.2 s | **7.0 s** |
+| Function calls | 118.3 M | **26.7 M** |
+| Test suite | 84.2 s | **28.5 s** |
+
+Four fixes, all verified output-identical by [tests/](../tests/):
+
+1. **Per-record entry selection was re-derived 4.36M times.** The capture test
+   `any(entry.name in name for name in target_entry_names)` ran for every data
+   record — 52.3M generator steps, ~6.9 s. It depends only on `entry.name`, which
+   is fixed when the entry is declared, so it is now computed once per entry at
+   its start record and looked up from `entry_flags`. The `.schema` substring test
+   moved with it.
+2. **Four control-record predicates per data record.** `isStart` / `isFinish` /
+   `isSetMetadata` / `isControl` each re-tested `entry == 0`. The loop now
+   branches once on `record.entry == 0`, so the overwhelmingly common data path
+   costs one comparison.
+3. **`DataLogIterator.__next__` decoded headers a byte at a time.** `_readVarInt`
+   was a Python shift-and-or loop called 13.1M times; header fields are now read
+   with `int.from_bytes`, and the buffer length is cached instead of re-measured
+   three times per record. This is a local deviation from the upstream WPILib
+   example, noted in that file's header.
+4. **The timestamp division ran for every record**, though only captured records
+   use it; it moved inside the capture branch.
+
+`LogField._insert_value` and `get_range` were also genuinely quadratic —
+`_insert_value` scanned the timestamp list from the front, which for in-order
+records runs its full length every time. Both now use `bisect` (with an append
+fast path for the in-order case). This is a **latent** fix, not a current one:
+profiling showed `_insert_value` at 0.197 s and `get_range` at 0.002 s, because
+filtering keeps per-field lists small. It matters as soon as a config captures
+broadly — measured in isolation, in-order ingest of 32K records into one field
+went from 14.9 s to 0.016 s. `Log.get_last_timestamp` likewise no longer merges
+and sorts every timestamp in the log on each call.
+
+What remains is close to the floor for pure Python: ~5.0 s in `__next__` and
+~2.3 s in the `process_log_file` body, both simply the cost of walking 4.36M
+records. Further gains would need to avoid decoding records that cannot match —
+the entry id is known before the payload is touched — or move the scan out of
+Python.
+
+Records are mmapped whole-file, and every captured value is retained in Python
+lists, so peak memory scales with total captured records across all files.
 
 ## 8. Known Defects Found During Review
 
@@ -313,5 +353,5 @@ Where new features naturally attach:
 | Machine-readable output | `print_results_and_calculations` currently computes *and* prints; separating computation from formatting is the prerequisite |
 | Anything that changes printed output | Re-record goldens with `UPDATE_GOLDEN=1` and review `git diff tests/golden/` — that diff is the review artifact |
 | Support for array/raw fields | fix defects 1–2 first, then extend the `LoggableType` dispatch in both analyzers |
-| Faster ingest on large logs | `LogField._insert_value` (append-fast-path or `bisect`) and `get_range` (`bisect` on the sorted timestamps) |
+| Faster ingest on large logs | Already optimized; see §7. The remaining cost is `DataLogIterator.__next__` walking every record |
 | CLI flags (verbose, output format) | replace `VERBOSE` constant and manual `sys.argv` handling with `argparse` |

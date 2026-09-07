@@ -6,6 +6,7 @@ https://github.com/Mechanical-Advantage/AdvantageScope/blob/main/src/shared/log
 from enum import Enum
 from typing import Dict, List, Optional, Any, Set, Tuple
 from dataclasses import dataclass, field
+import bisect
 import json
 import msgpack
 from StructDecoder import StructDecoder
@@ -103,19 +104,16 @@ class LogField:
             self.data.timestamps[0] = clear_timestamp
     
     def get_range(self, start: float, end: float) -> LogValueSet:
-        """Returns values in the specified timestamp range."""
-        # Implement range retrieval with caching
-        result_timestamps = []
-        result_values = []
-        
-        for i, timestamp in enumerate(self.data.timestamps):
-            if start < timestamp <= end:
-                result_timestamps.append(timestamp)
-                result_values.append(self.data.values[i])
-        
+        """Returns values in the specified timestamp range (start < ts <= end)."""
+        # Timestamps are kept sorted, so the matching values are a contiguous
+        # slice: from the first timestamp after start up to the last one <= end.
+        timestamps = self.data.timestamps
+        low = bisect.bisect_right(timestamps, start)
+        high = bisect.bisect_right(timestamps, end)
+
         result = LogValueSet()
-        result.timestamps = result_timestamps
-        result.values = result_values
+        result.timestamps = timestamps[low:high]
+        result.values = self.data.values[low:high]
         return result
     
     # Specific type getters
@@ -195,14 +193,19 @@ class LogField:
     
     def _insert_value(self, timestamp: float, value: Any) -> None:
         """Insert a value at the correct timestamp position."""
-        # Find insertion point
-        insert_index = len(self.data.timestamps)
-        for i, ts in enumerate(self.data.timestamps):
-            if ts > timestamp:
-                insert_index = i
-                break
-        
-        self.data.timestamps.insert(insert_index, timestamp)
+        timestamps = self.data.timestamps
+
+        # Records normally arrive in timestamp order, so check for an append
+        # before searching. Scanning for the insertion point instead makes
+        # in-order ingest quadratic in the number of records per field.
+        if not timestamps or timestamp >= timestamps[-1]:
+            timestamps.append(timestamp)
+            self.data.values.append(value)
+            return
+
+        # Insert after any equal timestamps, matching append-on-equal above.
+        insert_index = bisect.bisect_right(timestamps, timestamp)
+        timestamps.insert(insert_index, timestamp)
         self.data.values.insert(insert_index, value)
 
 # === Main Log Class ===
@@ -340,8 +343,13 @@ class Log:
     
     def get_last_timestamp(self) -> float:
         """Returns the most recent timestamp across all fields."""
-        timestamps = self.get_timestamps(self.get_field_keys())
-        return timestamps[-1] if timestamps else 0.0
+        # Each field's timestamps are sorted, so the maximum over all fields is
+        # the maximum of their last entries. Merging and sorting every timestamp
+        # in the log (as get_timestamps does) would cost far more for the same
+        # answer, and this is called once per candidate event during analysis.
+        last_timestamps = [field.data.timestamps[-1]
+                           for field in self.fields.values() if field.data.timestamps]
+        return max(last_timestamps) if last_timestamps else 0.0
     
     # Data reading methods
     def get_range(self, key: str, start: float, end: float) -> Optional[LogValueSet]:
