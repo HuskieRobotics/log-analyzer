@@ -1,0 +1,16 @@
+{
+    "enabled": true,
+    "fmsAttached": true,
+    "robotMode": "teleop",
+    "valueAnalysis": [{
+        "entry": "/RealOutputs/DriveToReef/difference (reef frame)/translation/y",
+        "entryUnit": "m",
+        "triggerEntry": "/Manipulator/IsIndexerIRBlocked",
+        "triggerValue": false,
+        "calculations": [
+            {"type": "count", "name": "Captured Value Count"},
+            {"type": "average", "name": "Average Y Diff at Reef"},
+            {"type": "abs_max", "name": "Max Y Diff at Reef (abs)"}
+        ]
+    }]
+}

@@ -1,0 +1,24 @@
+{
+    "enabled": true,
+    "fmsAttached": true,
+    "robotMode": "teleop",
+    "timeAnalysis": [{
+        "startEntry": "/RealOutputs/NoSuchEntry/State",
+        "startValue": "NEVER",
+        "endEntry": "/RealOutputs/AlsoMissing/State",
+        "endValue": "NEVER",
+        "calculations": [
+            {"type": "count", "name": "Cycle Count"},
+            {"type": "average", "name": "Average Cycle Time"}
+        ]
+    }],
+    "valueAnalysis": [{
+        "entry": "/RealOutputs/NoSuchEntry/value",
+        "entryUnit": "m",
+        "triggerEntry": "/Manipulator/IsIndexerIRBlocked",
+        "triggerValue": false,
+        "calculations": [
+            {"type": "count", "name": "Captured Value Count"}
+        ]
+    }]
+}

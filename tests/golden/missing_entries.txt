@@ -1,0 +1,56 @@
+
+=== FILTERING CRITERIA ===
+Filter for enabled: True
+Filter for FMS attached: True
+Filter for robot mode: teleop
+
+=== ANALYSIS ===
+Found 2 log files to process:
+  akit_25-04-17_14-51-30_curie_q40.wpilog
+  akit_25-04-19_09-36-19_curie_e6.wpilog
+
+Processing: akit_25-04-17_14-51-30_curie_q40.wpilog
+  Skipping analysis 0 due to missing fields: /RealOutputs/NoSuchEntry/State or /RealOutputs/AlsoMissing/State
+  Skipping analysis 0 due to missing fields: /Manipulator/IsIndexerIRBlocked or /RealOutputs/NoSuchEntry/value
+
+=== TIME ANALYSIS RESULTS FOR akit_25-04-17_14-51-30_curie_q40.wpilog ===
+
+Analyzing: /RealOutputs/NoSuchEntry/State (NEVER) -> /RealOutputs/AlsoMissing/State (NEVER)
+No values found for this analysis
+
+=== VALUE ANALYSIS RESULTS FOR akit_25-04-17_14-51-30_curie_q40.wpilog ===
+
+Analyzing: /RealOutputs/NoSuchEntry/value when /Manipulator/IsIndexerIRBlocked = False
+No values found for this analysis
+
+Processing: akit_25-04-19_09-36-19_curie_e6.wpilog
+  Skipping analysis 0 due to missing fields: /RealOutputs/NoSuchEntry/State or /RealOutputs/AlsoMissing/State
+  Skipping analysis 0 due to missing fields: /Manipulator/IsIndexerIRBlocked or /RealOutputs/NoSuchEntry/value
+
+=== TIME ANALYSIS RESULTS FOR akit_25-04-19_09-36-19_curie_e6.wpilog ===
+
+Analyzing: /RealOutputs/NoSuchEntry/State (NEVER) -> /RealOutputs/AlsoMissing/State (NEVER)
+No values found for this analysis
+
+=== VALUE ANALYSIS RESULTS FOR akit_25-04-19_09-36-19_curie_e6.wpilog ===
+
+Analyzing: /RealOutputs/NoSuchEntry/value when /Manipulator/IsIndexerIRBlocked = False
+No values found for this analysis
+
+=== AGGREGATED TIME ANALYSIS RESULTS ACROSS ALL FILES ===
+
+Aggregated Analysis: /RealOutputs/NoSuchEntry/State (NEVER) -> /RealOutputs/AlsoMissing/State (NEVER)
+  Files processed: 2
+  Average matched values per file: 0.00
+  Minimum matched values in any file: 0 in 
+  Maximum matched values in any file: 0 in 
+No values found for this analysis
+
+=== AGGREGATED VALUE ANALYSIS RESULTS ACROSS ALL FILES ===
+
+Aggregated Value Analysis: /RealOutputs/NoSuchEntry/value when /Manipulator/IsIndexerIRBlocked = False
+  Files processed: 2
+  Average matched values per file: 0.00
+  Minimum matched values in any file: 0 in 
+  Maximum matched values in any file: 0 in 
+No values found for this analysis
