@@ -1,0 +1,16 @@
+{
+    "season": "2026",
+    "logDir": "test/2026",
+    "shippedConfig": "config2026.json",
+    "logs": [
+        "akit_26-04-30_14-46-03_johnson_q12.wpilog",
+        "akit_26-04-30_16-20-07_johnson_q22.wpilog",
+        "akit_26-04-30_20-48-03_johnson_q46.wpilog",
+        "akit_26-04-30_22-42-16_johnson_q59.wpilog",
+        "akit_26-05-01_13-38-09_johnson_q67.wpilog",
+        "akit_26-05-01_15-45-36_johnson_q80.wpilog",
+        "akit_26-05-01_17-57-36_johnson_q89.wpilog",
+        "akit_26-05-01_20-28-19_q105.wpilog",
+        "akit_26-05-01_22-45-20_johnson_q121.wpilog"
+    ]
+}

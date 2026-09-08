@@ -1,8 +1,9 @@
 # Integration Tests
 
-End-to-end characterization tests for `analysis.py`. Each test runs the analyzer
-as a subprocess against real `.wpilog` files and compares its **full stdout**
-against a recorded expectation in [`golden/`](golden/).
+End-to-end characterization tests for `analysis.py`, **parameterized by season**.
+Each scenario runs the analyzer as a subprocess against real `.wpilog` files and
+compares its **full stdout** against a recorded expectation under
+[`fixtures/<season>/golden/`](fixtures/).
 
 These tests assert that output does not change *unintentionally*. They do not
 assert the numbers are correct — the goldens were recorded from the current
@@ -23,52 +24,82 @@ Or directly:
 python3 tests/test_integration.py
 ```
 
-A full run takes roughly **90 seconds** — each scenario reads every record of
-both logs, and ingest is currently O(n²) in records per field.
+Every scenario reads every record of every log in its season, at roughly **3.5 s
+per file**. The 2025 season (2 logs, 4 scenarios) takes about 30 s.
 
-To run only the fast tests that need no log files (~0.2s):
+To run one season, or only the fast tests that need no log files (~0.2 s):
 
 ```bash
+python3 -m unittest tests.test_integration.Season2025GoldenTest -v
 python3 -m unittest tests.test_integration.ArgumentHandlingTest -v
 ```
 
+## Fixture layout
+
+Each season is a directory under `fixtures/` with a manifest, optional extra
+configs, and its recorded goldens:
+
+```
+fixtures/2025/manifest.json      logs, log folder, shipped config
+fixtures/2025/configs/*.json     extra scenarios beyond the shipped config
+fixtures/2025/golden/*.txt       recorded stdout, one per scenario
+```
+
+The manifest points at a log folder relative to the repo root:
+
+```json
+{
+    "season": "2025",
+    "logDir": "test/2025",
+    "shippedConfig": "config2025.json",
+    "logs": ["akit_25-04-17_...wpilog", "akit_25-04-19_...wpilog"]
+}
+```
+
+Scenarios are **discovered**, not registered: the season's `shippedConfig` plus
+every `configs/*.json`, each compared against `golden/<name>.txt`. Adding a case
+means dropping in a config and recording its golden.
+
+### Adding a season
+
+1. `mkdir -p fixtures/<year>/{configs,golden}`
+2. Write `fixtures/<year>/manifest.json` naming the logs and shipped config.
+3. Record goldens (below). Until then, that season's scenarios skip.
+
 ## Log fixtures
 
-The tests need these two files, which are the ones the README's sample output was
-produced from:
-
-```
-akit_25-04-17_14-51-30_curie_q40.wpilog
-akit_25-04-19_09-36-19_curie_e6.wpilog
-```
-
-They are ~108 MB together and are **not checked in** (`*.wpilog` is gitignored).
-Place them in `test/` at the repository root, or point the suite elsewhere:
+The `.wpilog` files are large and **not checked in** (`*.wpilog` is gitignored) —
+~108 MB for 2025, ~433 MB for 2026. Place them in the `logDir` each manifest
+names, or relocate all seasons at once:
 
 ```bash
 LOG_ANALYZER_TEST_LOGS=/path/to/logs python3 -m unittest discover -s tests
 ```
 
-Without them, `GoldenOutputTest` skips with an explanatory message and
-`ArgumentHandlingTest` still runs. The suite checks for these exact filenames —
-recording goldens against a different set of logs would produce a suite that
-silently tests nothing.
+`LOG_ANALYZER_TEST_LOGS` replaces the repo root, so the per-season subfolders
+(`test/2025`, `test/2026`) are still appended beneath it.
+
+A season whose logs are missing skips with an explanatory message;
+`ArgumentHandlingTest` still runs. Each manifest lists the exact filenames its
+goldens were recorded against, and the suite reports **unexpected** logs as well
+as missing ones — an extra file in the folder changes the output, so goldens
+recorded against a different set would test nothing.
 
 ## Scenarios
 
-| Test | Config | Covers |
+| Scenario | Config | Covers |
 |---|---|---|
-| `test_shipped_config` | [`../config.json`](../config.json) | The example config, whose output the top-level README documents verbatim |
-| `test_value_analysis_with_count` | [`configs/value_count.json`](configs/value_count.json) | Value analysis requesting `count` with **no** `timeAnalysis` — regression test, see below |
-| `test_unfiltered_time_analysis` | [`configs/unfiltered.json`](configs/unfiltered.json) | All robot-state filters off (`robotMode: "both"`), plus `outlier_2std` |
-| `test_missing_entries_are_reported` | [`configs/missing_entries.json`](configs/missing_entries.json) | Entries absent from the logs are skipped without crashing |
+| `shipped_config` | the season's `shippedConfig` | The example config, whose output the top-level README documents verbatim |
+| `value_count` | [`fixtures/2025/configs/value_count.json`](fixtures/2025/configs/value_count.json) | Value analysis requesting `count` with **no** `timeAnalysis` — regression test, see below |
+| `unfiltered` | [`fixtures/2025/configs/unfiltered.json`](fixtures/2025/configs/unfiltered.json) | All robot-state filters off (`robotMode: "both"`), plus `outlier_2std` |
+| `missing_entries` | [`fixtures/2025/configs/missing_entries.json`](fixtures/2025/configs/missing_entries.json) | Entries absent from the logs are skipped without crashing |
 | `ArgumentHandlingTest` | — | Bad argv, missing folder, missing config, folder with no logs |
 
-`test_value_analysis_with_count` exists because the aggregated value analysis
+The `value_count` scenario exists because the aggregated value analysis
 used to read the *time* analysis's local variables, which raised
 `UnboundLocalError` whenever a value analysis requested `count` without a prior
 time analysis. The shipped config never requests `count` on a value analysis, so
-a golden test of `config.json` alone would not have caught it.
+a golden test of the shipped config alone would not have caught it.
 
 ## Updating goldens
 
@@ -77,7 +108,7 @@ committing — that diff is the point of the suite:
 
 ```bash
 UPDATE_GOLDEN=1 python3 -m unittest discover -s tests
-git diff tests/golden/
+git diff tests/fixtures/*/golden/
 ```
 
 Tests report as *skipped* while recording, since nothing is being asserted.

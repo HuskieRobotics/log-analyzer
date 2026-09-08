@@ -1,0 +1,124 @@
+{
+    "enabled": true,
+    "fmsAttached": true,
+    "robotMode": "both",
+    "timeAnalysis": [{
+        "startEntry": "/RealOutputs/Auto/FallenBehindPath/FallenBehind",
+        "startValue": true,
+        "endEntry": "/RealOutputs/Auto/FallenBehindPath/FallenBehind",
+        "endValue": false,
+        "calculations": [
+            {"type": "average", "name": "Average Auto Fallen Behind Time"},
+            {"type": "max", "name": "Max Auto Fallen Behind Time"},
+            {"type": "min", "name": "Min Auto Fallen Behind Time"},
+            {"type": "count", "name": "Auto Fallen Behind Count"},
+            {"type": "outlier_2std", "name": "Outliers (2 std dev)"}
+        ]
+    },
+    {
+        "startEntry": "/RealOutputs/ShooterModes/HubActive",
+        "startValue": true,
+        "endEntry": "/Hopper/SpindexerReferenceVelocityRPS",
+        "endValue": 12,
+        "calculations": [
+            {"type": "average", "name": "Average Start of Period Delay Time"},
+            {"type": "max", "name": "Max Start of Period Delay Time"},
+            {"type": "min", "name": "Min Start of Period Delay Time"},
+            {"type": "count", "name": "Start of Period Delay Count"},
+            {"type": "outlier_2std", "name": "Outliers (2 std dev)"}
+        ]
+    },
+    {
+        "startEntry": "/RealOutputs/Intake/RollerStalled",
+        "startValue": true,
+        "endEntry": "/RealOutputs/Intake/RollerStalled",
+        "endValue": false,
+        "calculations": [
+            {"type": "average", "name": "Average Roller Stalled Time"},
+            {"type": "max", "name": "Max Roller Stalled Time"},
+            {"type": "min", "name": "Min Roller Stalled Time"},
+            {"type": "count", "name": "Roller Stalled Count"},
+            {"type": "outlier_2std", "name": "Outliers (2 std dev)"}
+        ]
+    },
+    {
+        "startEntry": "/RealOutputs/ShooterModes/turret not near setpoint",
+        "startValue": true,
+        "endEntry": "/RealOutputs/ShooterModes/turret not near setpoint",
+        "endValue": false,
+        "calculations": [
+            {"type": "average", "name": "Average Turret Lagging Time"},
+            {"type": "max", "name": "Max Turret Lagging Time"},
+            {"type": "min", "name": "Min Turret Lagging Time"},
+            {"type": "count", "name": "Turret Lagging Count"},
+            {"type": "outlier_2std", "name": "Outliers (2 std dev)"}
+        ]
+    },
+    {
+        "startEntry": "/RealOutputs/Vision/BCH/sending frames",
+        "startValue": false,
+        "endEntry": "/RealOutputs/Vision/BCH/sending frames",
+        "endValue": true,
+        "calculations": [
+            {"type": "average", "name": "Average Camera Loss Time"},
+            {"type": "max", "name": "Max Camera Loss Time"},
+            {"type": "min", "name": "Min Camera Loss Time"},
+            {"type": "count", "name": "Camera Loss Count"},
+            {"type": "outlier_2std", "name": "Outliers (2 std dev)"}
+        ]
+    },
+    {
+        "startEntry": "/RealOutputs/Vision/BCL/sending frames",
+        "startValue": false,
+        "endEntry": "/RealOutputs/Vision/BCL/sending frames",
+        "endValue": true,
+        "calculations": [
+            {"type": "average", "name": "Average Camera Loss Time"},
+            {"type": "max", "name": "Max Camera Loss Time"},
+            {"type": "min", "name": "Min Camera Loss Time"},
+            {"type": "count", "name": "Camera Loss Count"},
+            {"type": "outlier_2std", "name": "Outliers (2 std dev)"}
+        ]
+    },
+    {
+        "startEntry": "/RealOutputs/Vision/BL/sending frames",
+        "startValue": false,
+        "endEntry": "/RealOutputs/Vision/BL/sending frames",
+        "endValue": true,
+        "calculations": [
+            {"type": "average", "name": "Average Camera Loss Time"},
+            {"type": "max", "name": "Max Camera Loss Time"},
+            {"type": "min", "name": "Min Camera Loss Time"},
+            {"type": "count", "name": "Camera Loss Count"},
+            {"type": "outlier_2std", "name": "Outliers (2 std dev)"}
+        ]
+    },
+    {
+        "startEntry": "/RealOutputs/Vision/BR/sending frames",
+        "startValue": false,
+        "endEntry": "/RealOutputs/Vision/BR/sending frames",
+        "endValue": true,
+        "calculations": [
+            {"type": "average", "name": "Average Camera Loss Time"},
+            {"type": "max", "name": "Max Camera Loss Time"},
+            {"type": "min", "name": "Min Camera Loss Time"},
+            {"type": "count", "name": "Camera Loss Count"},
+            {"type": "outlier_2std", "name": "Outliers (2 std dev)"}
+        ]
+    }],
+    "valueAnalysis": [{
+        "entry": "/RealOutputs//ShooterModes/DistanceToHub",
+        "entryUnit": "m",
+        "triggerEntry": "/RealOutputs/ShooterModes/CurrentMode",
+        "triggerValue": "SHOOT_OTM",
+        "calculations": [
+            {"type": "average", "name": "Average SotM Distance to Hub"},
+            {"type": "max", "name": "Max SotM Distance to Hub"},
+            {"type": "min", "name": "Min SotM Distance to Hub"},
+            {"type": "abs_average", "name": "Average SotM Distance to Hub (abs)"},
+            {"type": "abs_max", "name": "Max SotM Distance to Hub (abs)"},
+            {"type": "abs_min", "name": "Min SotM Distance to Hub (abs)"},
+            {"type": "abs_outlier_2std", "name": "Outliers (2 std dev; abs)"}
+        ]
+    }]
+}

@@ -18,6 +18,8 @@ logs in ~7 s; golden suite in [tests/](../tests/) is green).
 3. **Search for an event** and get back the file and timestamp.
 4. **Refresh test fixtures to 2026-season logs**, so new work is written against
    current logging conventions.
+5. **Wildcards in entry names** — `/RealOutputs/Vision/*/sending frames` rather
+   than naming each of the four cameras.
 
 ## 2. How the Tool Is Used
 
@@ -238,7 +240,112 @@ Two upgrades, in order of cost:
 Neither is needed to ship Milestone A, and both stay available because the
 computation layer does not care which one renders.
 
-## 6. Sequence
+## 6. Entry Patterns (Wildcards)
+
+Feature 5. Today every entry must be named in full, so watching four cameras means
+four near-identical config stanzas:
+
+```
+/RealOutputs/Vision/BCH/sending frames
+/RealOutputs/Vision/BCL/sending frames
+/RealOutputs/Vision/BL/sending frames
+/RealOutputs/Vision/BR/sending frames
+```
+
+One pattern should cover them: `/RealOutputs/Vision/*/sending frames`.
+
+This is not a niche convenience. In a single 2026 log there are **44 distinct
+patterns matching three or more sibling entries** — every joystick, every swerve
+corner, every camera, every subsystem's `Connected` / `Faults` pair.
+
+### 6.1 Where patterns apply
+
+Three places, with different consequences:
+
+| Site | Effect |
+|---|---|
+| **Capture selection** (`target_entry_names`) | Widens the set of records kept. Mechanical. |
+| **Analysis references** (`entry`, `triggerEntry`, `startEntry`, `endEntry`) | One config stanza **fans out** into N analyses. Semantic change — see §6.3. |
+| **Detector rules** (A4) | Essential. "Any `*/Connected` false while enabled" *is* the motor-dropout check; enumerating devices by hand defeats the purpose. |
+
+### 6.2 Syntax
+
+Recommended: **segment-scoped glob**, where `/` is a hard boundary.
+
+- `*` matches within one `/`-delimited segment
+- `**` spans segments
+- `?` and `[…]` behave as in `fnmatch`, within a segment
+
+So `/RealOutputs/Vision/*/sending frames` matches exactly the four cameras and
+cannot accidentally reach deeper, while `/RealOutputs/**/Connected` reaches any
+depth when that is what you want.
+
+Plain `fnmatch` is rejected: its `*` crosses `/`, which for hierarchical keys
+produces surprising over-matching — `/RealOutputs/*/state` would match
+`/RealOutputs/a/b/c/state`. Regex is rejected as unreadable inside JSON.
+
+### 6.3 Fan-out semantics
+
+`/RealOutputs/Vision/*/sending frames` can mean two different things:
+
+- **Per-match** — four analyses, reported separately, one per camera.
+- **Pooled** — one analysis over the union of all four cameras' values.
+
+**Default to per-match.** The point of the vision example is finding out *which*
+camera stopped sending frames; pooling discards exactly that. Pooling is still
+useful ("overall vision availability"), so make it an explicit opt-in — e.g.
+`"combine": true` on the analysis.
+
+Per-match fan-out needs a label per result, and the natural label is the text the
+wildcard captured (`BCH`, `BCL`, `BL`, `BR`). Which means:
+
+> **Wildcards require the named-analyses fix (§9).** One stanza now yields N
+> results, and identifying them by list position no longer works.
+
+### 6.4 The struct-flattening ordering problem
+
+This is the subtle part, and the reason the current matching is written backwards.
+
+Capture selection happens *before* decoding: the tool decides whether to keep a
+record from the entry name in its start record. But struct, JSON and msgpack
+payloads flatten into synthetic child fields *after* decoding (see
+[DESIGN.md §3.2](DESIGN.md#32-field-store-logpy)). A config naming a struct leaf
+therefore refers to a field that does not exist at the moment the keep/discard
+decision is made — which is why the current test asks whether the logged name is a
+substring of the configured name.
+
+With patterns, resolve it in two stages instead:
+
+1. **At capture** — keep the record if its entry name could *produce* a field
+   matching the pattern: the entry name matches the pattern, or is a prefix of the
+   pattern at a segment boundary. Deliberately over-captures; that is correct and
+   cheap.
+2. **At analysis** — resolve the pattern against the actual field names present
+   after flattening, and fan out over those.
+
+That makes the struct-leaf case an explicit rule rather than a side effect of
+substring matching, and it stops unrelated entries being captured merely because
+their names happen to be substrings of a configured one.
+
+### 6.5 Cost
+
+Pattern matching is more expensive per test than a string compare, but it stays
+off the hot path: whether an entry is captured is already decided **once per
+entry** at its start record and cached in `entry_flags`
+(see [DESIGN.md §7](DESIGN.md#7-performance-profile)). Matching a few dozen
+patterns against ~550 distinct entry names is negligible against 4.36M records.
+Any future change must preserve that memoization — testing patterns per *record*
+would undo the optimization work outright.
+
+### 6.6 Discoverability
+
+Once a config can match things you did not enumerate, you need to see what it
+matched. Add a dry-run: given a pattern and a log (or the index, once B1 exists),
+print the entries it selects and their types — before committing to a run over a
+folder. This also gives a fast answer to "what did we even log this year?", which
+is currently a manual scan.
+
+## 7. Sequence
 
 ### Milestone A — Pit mode
 
@@ -246,13 +353,14 @@ The post-match checklist, end to end. Nothing here needs the index.
 
 | # | Step | Why | Depends on |
 |---|---|---|---|
-| A0 | **Refresh fixtures to 2026 logs** (§7) | Detector rules should be written against current entry names, not 2025 ones | — |
+| A0 | **Refresh fixtures to 2026 logs** (§8) — *fixture layout done; `config2026.json` still to write* | Detector rules should be written against current entry names, not 2025 ones | — |
 | A1 | **Fix array support** (defects #1–2) | Unlocks `Alerts/*` and `SystemStatus/*/Faults` — most of feature 2's value | — |
 | A2 | **Split computation from formatting** | Prerequisite for HTML and JSON output | — |
-| A3 | **Checks as a third analysis kind** | Replaces the manual post-match pass | A1, A2 |
-| A4 | **roboRIO sync** | First link in the pit chain (§2.2) | — |
-| A5 | **HTML + JSON emitters** | The pit screen itself (§5.1) | A2, A3 |
-| A6 | **Watch mode** | Closes the pit chain: no commands typed between matches | A4, A5 |
+| A3 | **Entry patterns / wildcards** (§6) | Detector rules are unwritable without it; shortens every config | A1 |
+| A4 | **Checks as a third analysis kind** | Replaces the manual post-match pass | A2, A3 |
+| A5 | **roboRIO sync** | First link in the pit chain (§2.2) | — |
+| A6 | **HTML + JSON emitters** | The pit screen itself (§5.1) | A2, A4 |
+| A7 | **Watch mode** | Closes the pit chain: no commands typed between matches | A5, A6 |
 
 ### Milestone B — Library / practice mode
 
@@ -260,7 +368,7 @@ The post-match checklist, end to end. Nothing here needs the index.
 |---|---|---|---|
 | B1 | **Extract / index layer** (SQLite) | Makes search viable, checks instant across a season | A2 |
 | B2 | **Event search** (feature 3) | The reason the index exists | B1 |
-| B3 | **Baseline comparison** | "Is this match worse than our normal?" — needs history | B1, A3 |
+| B3 | **Baseline comparison** | "Is this match worse than our normal?" — needs history | B1, A4 |
 
 ### Milestone C — Optional
 
@@ -275,21 +383,24 @@ The post-match checklist, end to end. Nothing here needs the index.
 `LoggableType` dispatch in both analyzers, which currently skip anything that is
 not STRING / BOOLEAN / NUMBER.
 
-**A3 — checks.** Different output shape from the existing analyses: a list of
+**A3 — entry patterns.** Designed in §6; it replaces the reversed-substring
+matching rather than layering on top of it.
+
+**A4 — checks.** Different output shape from the existing analyses: a list of
 `(file, timestamp, severity, message)` incidents rather than a numeric series for
 statistics. Keep it declarative like `timeAnalysis` / `valueAnalysis`, but ship a
 **default rule set** so it runs with no config — pit mode is zero-config by
 definition. Rule shape: entry pattern, predicate, gating condition (e.g. "while
 enabled"), severity, message template.
 
-**A4 — roboRIO sync.** A separate program sharing only an output folder. Reach the
+**A5 — roboRIO sync.** A separate program sharing only an output folder. Reach the
 robot at `roborio-<team>-frc.local` or `10.TE.AM.2`; AdvantageKit commonly logs to
 USB (`/media/sda1` / `/media/sdb1`) rather than `/home/lvuser/logs`, so check both.
 Copy-then-verify, never move; dedupe on content hash. Must degrade quietly when
 the robot is absent — it will be, most of the time.
 
-**A6 — watch mode.** A long-running `--watch <folder>` that notices new `.wpilog`
-files (dropped there by A4), analyzes each once, and rewrites the report. Debounce
+**A7 — watch mode.** A long-running `--watch <folder>` that notices new `.wpilog`
+files (dropped there by A5), analyzes each once, and rewrites the report. Debounce
 on file size settling — a log still being copied must not be analyzed early. Keep
 it restartable and idempotent: track which files have been processed by content
 hash, the same identity B1 uses, so a restart mid-event does not redo the day or
@@ -300,7 +411,7 @@ identity (content hash, not name) so re-imports from A4 are idempotent. Keep the
 schema versioned so a format change can rebuild rather than migrate — extraction
 is cheap and the `.wpilog` files remain authoritative.
 
-## 7. Test Fixtures and Logging Conventions
+## 8. Test Fixtures and Logging Conventions
 
 The suite is currently pinned to two 2025-season logs, in two ways:
 
@@ -337,21 +448,20 @@ fixtures, and — more importantly — would give the motor-dropout detectors th
 positive fixture they currently lack (§3.2). Without it, those detectors cannot be
 distinguished from ones that never fire.
 
-## 8. Cross-Cutting Work
+## 9. Cross-Cutting Work
 
 Fix these along the way — each will otherwise distort a feature above:
 
 - **Entry matching is reversed substring** (`entry.name in configured_name`, see
   [DESIGN.md §3.4](DESIGN.md#34-ingest-and-filtering-analysispy-process_log_file)).
-  It exists so a config can name a struct leaf and still capture the parent record.
-  Search needs explicit prefix/glob semantics instead, with struct-child resolution
-  handled deliberately rather than as a side effect.
+  Superseded by A3; §6.4 covers how to keep the struct-leaf case working without it.
 - **Analyses are keyed by list position** (`analysis_idx`). Reports and JSON output
-  that reference results stably need named ids.
+  need stable named ids — and wildcard fan-out (§6.3) makes this a prerequisite of
+  A3, not a nicety.
 - **`.schema` handling assumes `struct:`** (defect #4) and will `IndexError` on a
   protobuf schema entry.
 
-## 9. What Must Not Regress
+## 10. What Must Not Regress
 
 The folder-wide aggregate analysis is the feature that replaced hours of
 one-file-at-a-time work in AdvantageScope. It is the thing to protect through

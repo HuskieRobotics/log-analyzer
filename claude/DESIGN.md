@@ -15,7 +15,7 @@ answers two questions across a folder of match logs:
 - **Value analysis** — what was the value of field X at the moment condition Y became true?
 
 Results are printed per-file and then aggregated across all files. Everything is
-driven by a JSON config; there is no CLI beyond `analysis.py <log_folder> <config.json>`.
+driven by a JSON config; there is no CLI beyond `analysis.py <log_folder> <config_json_file>`.
 
 ## 2. Module Map
 
@@ -25,9 +25,9 @@ driven by a JSON config; there is no CLI beyond `analysis.py <log_folder> <confi
 | [StructDecoder.py](../StructDecoder.py) | WPILib struct schema parser + decoder | Port of AdvantageScope's `StructDecoder.ts`, Littleton Robotics BSD |
 | [Log.py](../Log.py) | In-memory field store (timestamps → values) | Simplified port of AdvantageScope's `shared/log` |
 | [analysis.py](../analysis.py) | Entry point: config, filtering, analysis, reporting | Original to this repo |
-| [config.json](../config.json) | Example/default analysis config | — |
-| [tests/](../tests/) | Golden-output integration suite (stdlib `unittest`) | — |
-| `test/` | `.wpilog` fixtures for the suite; gitignored, ~108 MB | — |
+| [config2025.json](../config2025.json), [config2026.json](../config2026.json) | Per-season example/default analysis configs | — |
+| [tests/](../tests/) | Season-parameterized golden-output suite (stdlib `unittest`) | — |
+| `test/<season>/` | `.wpilog` fixtures per season; gitignored (~108 MB for 2025, ~433 MB for 2026) | — |
 | [test.log](../test.log) | Stray plain-text sample; **not** a `.wpilog` and unused by any code | — |
 
 The dependency direction is strictly `analysis.py → Log.py → StructDecoder.py`
@@ -154,6 +154,13 @@ Target entries are derived automatically from the analysis configs (commit
 `66db43b` removed an explicit `entryNames` key), so the config never has to list
 what to capture.
 
+There is **no pattern matching**: every entry must be named in full, so watching
+four cameras takes four near-identical config stanzas. Wildcard support
+(`/RealOutputs/Vision/*/sending frames`) is designed in
+[ROADMAP.md §6](ROADMAP.md#6-entry-patterns-wildcards), which replaces this
+substring test rather than layering on it — §6.4 there covers how the struct-leaf
+case survives the change.
+
 ### 3.5 Analysis semantics
 
 **Time analysis** (`analyze_file_records`) — for each occurrence of `startValue`
@@ -260,7 +267,7 @@ logs together hold ~4.36M records, of which the shipped config captures ~15K
 values. Everything downstream of capture is therefore negligible; cost is
 proportional to *records read*, not records kept.
 
-Measured on the two sample logs with `config.json` (`cProfile`, same machine):
+Measured on the two 2025 sample logs with `config2025.json` (`cProfile`, same machine):
 
 | | before | after |
 |---|---|---|
@@ -351,6 +358,7 @@ Where new features naturally attach:
 |---|---|
 | A new calculation type | if/elif chain in `print_results_and_calculations`, plus README table |
 | A new analysis kind | new `analyze_*_records()` + config key + per-file and aggregate print blocks in `main()` |
+| Wildcards in entry names | Selection test in `process_log_file` and entry lookup in both analyzers; see [ROADMAP.md §6](ROADMAP.md#6-entry-patterns-wildcards). Keep the per-entry `entry_flags` memoization or §7's gains are lost |
 | Machine-readable output | `print_results_and_calculations` currently computes *and* prints; separating computation from formatting is the prerequisite |
 | Anything that changes printed output | Re-record goldens with `UPDATE_GOLDEN=1` and review `git diff tests/golden/` — that diff is the review artifact |
 | Support for array/raw fields | fix defects 1–2 first, then extend the `LoggableType` dispatch in both analyzers |
