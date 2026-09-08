@@ -2,7 +2,8 @@
 
 A working understanding of the repository, first written against commit `230d144`
 before exploring new features. Describes what the code *does*, not what it should
-do. Defects listed in §8 are marked as they are fixed.
+do. Defects listed in §8 are marked as they are fixed. For where the tool goes
+next, see [ROADMAP.md](ROADMAP.md).
 
 ## 1. Purpose
 
