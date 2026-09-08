@@ -762,8 +762,8 @@ Aggregated Analysis: /RealOutputs/ShooterModes/HubActive (True) -> /Hopper/Spind
 Aggregated Analysis: /RealOutputs/Intake/RollerStalled (True) -> /RealOutputs/Intake/RollerStalled (False)
   Files processed: 9
   Average matched values per file: 0.00
-  Minimum matched values in any file: 0 in 
-  Maximum matched values in any file: 0 in 
+  Minimum matched values in any file: 0 in akit_26-04-30_14-46-03_johnson_q12.wpilog
+  Maximum matched values in any file: 0 in akit_26-04-30_14-46-03_johnson_q12.wpilog
 No values found for this analysis
 
 Aggregated Analysis: /RealOutputs/ShooterModes/turret not near setpoint (True) -> /RealOutputs/ShooterModes/turret not near setpoint (False)
@@ -816,7 +816,7 @@ Aggregated Analysis: /RealOutputs/ShooterModes/turret not near setpoint (True) -
 Aggregated Analysis: /RealOutputs/Vision/BCH/sending frames (False) -> /RealOutputs/Vision/BCH/sending frames (True)
   Files processed: 9
   Average matched values per file: 3.00
-  Minimum matched values in any file: 0 in 
+  Minimum matched values in any file: 0 in akit_26-05-01_20-28-19_q105.wpilog
   Maximum matched values in any file: 18 in akit_26-05-01_15-45-36_johnson_q80.wpilog
   Total values captured across all files: 27
   Average Camera Loss Time: 0.759157 s
@@ -831,7 +831,7 @@ Aggregated Analysis: /RealOutputs/Vision/BCH/sending frames (False) -> /RealOutp
 Aggregated Analysis: /RealOutputs/Vision/BCL/sending frames (False) -> /RealOutputs/Vision/BCL/sending frames (True)
   Files processed: 9
   Average matched values per file: 0.67
-  Minimum matched values in any file: 0 in 
+  Minimum matched values in any file: 0 in akit_26-04-30_14-46-03_johnson_q12.wpilog
   Maximum matched values in any file: 2 in akit_26-04-30_20-48-03_johnson_q46.wpilog
   Total values captured across all files: 6
   Average Camera Loss Time: 0.760674 s
@@ -844,7 +844,7 @@ Aggregated Analysis: /RealOutputs/Vision/BCL/sending frames (False) -> /RealOutp
 Aggregated Analysis: /RealOutputs/Vision/BL/sending frames (False) -> /RealOutputs/Vision/BL/sending frames (True)
   Files processed: 9
   Average matched values per file: 3.67
-  Minimum matched values in any file: 0 in 
+  Minimum matched values in any file: 0 in akit_26-05-01_17-57-36_johnson_q89.wpilog
   Maximum matched values in any file: 18 in akit_26-05-01_15-45-36_johnson_q80.wpilog
   Total values captured across all files: 33
   Average Camera Loss Time: 0.758033 s
@@ -859,7 +859,7 @@ Aggregated Analysis: /RealOutputs/Vision/BL/sending frames (False) -> /RealOutpu
 Aggregated Analysis: /RealOutputs/Vision/BR/sending frames (False) -> /RealOutputs/Vision/BR/sending frames (True)
   Files processed: 9
   Average matched values per file: 3.44
-  Minimum matched values in any file: 0 in 
+  Minimum matched values in any file: 0 in akit_26-04-30_14-46-03_johnson_q12.wpilog
   Maximum matched values in any file: 19 in akit_26-05-01_15-45-36_johnson_q80.wpilog
   Total values captured across all files: 31
   Average Camera Loss Time: 1.363211 s

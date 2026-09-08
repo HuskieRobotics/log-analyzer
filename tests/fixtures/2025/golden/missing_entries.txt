@@ -42,8 +42,8 @@ No values found for this analysis
 Aggregated Analysis: /RealOutputs/NoSuchEntry/State (NEVER) -> /RealOutputs/AlsoMissing/State (NEVER)
   Files processed: 2
   Average matched values per file: 0.00
-  Minimum matched values in any file: 0 in 
-  Maximum matched values in any file: 0 in 
+  Minimum matched values in any file: 0 in akit_25-04-17_14-51-30_curie_q40.wpilog
+  Maximum matched values in any file: 0 in akit_25-04-17_14-51-30_curie_q40.wpilog
 No values found for this analysis
 
 === AGGREGATED VALUE ANALYSIS RESULTS ACROSS ALL FILES ===
@@ -51,6 +51,6 @@ No values found for this analysis
 Aggregated Value Analysis: /RealOutputs/NoSuchEntry/value when /Manipulator/IsIndexerIRBlocked = False
   Files processed: 2
   Average matched values per file: 0.00
-  Minimum matched values in any file: 0 in 
-  Maximum matched values in any file: 0 in 
+  Minimum matched values in any file: 0 in akit_25-04-17_14-51-30_curie_q40.wpilog
+  Maximum matched values in any file: 0 in akit_25-04-17_14-51-30_curie_q40.wpilog
 No values found for this analysis

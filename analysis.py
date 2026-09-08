@@ -208,7 +208,7 @@ def analyze_file_records(log: Log, log_file_name: str, time_analysis_configs: Li
         calculations = analysis.get('calculations', [])
         
         if not all([start_entry, end_entry, calculations]):
-            all_analysis_results[analysis_idx] = ("", [], [])
+            all_analysis_results[analysis_idx] = (log_file_name, [], [])
             continue
         
         # Find time differences between start and end events
@@ -221,13 +221,13 @@ def analyze_file_records(log: Log, log_file_name: str, time_analysis_configs: Li
 
         if not start_field or not end_field:
             print(f"  Skipping analysis {analysis_idx} due to missing fields: {start_entry} or {end_entry}")
-            all_analysis_results[analysis_idx] = ("", [], [])
+            all_analysis_results[analysis_idx] = (log_file_name, [], [])
             continue
 
         start_log_values = get_field_values(start_field, 0.0, log.get_last_timestamp())
         if start_log_values is None:
             print(f"  Skipping analysis {analysis_idx} due to unsupported type for: {start_entry} of {start_field.get_type()}")
-            all_analysis_results[analysis_idx] = ("", [], [])
+            all_analysis_results[analysis_idx] = (log_file_name, [], [])
             continue
             
         start_timestamp = 0.0
@@ -244,7 +244,7 @@ def analyze_file_records(log: Log, log_file_name: str, time_analysis_configs: Li
                 end_log_values = get_field_values(end_field, start_timestamp, next_timestamp)
                 if end_log_values is None:
                     print(f"  Skipping analysis {analysis_idx} due to unsupported type for: {end_entry} of {end_field.get_type()}")
-                    all_analysis_results[analysis_idx] = ("", [], [])
+                    all_analysis_results[analysis_idx] = (log_file_name, [], [])
                     continue
 
                 for k, end_timestamp in enumerate(end_log_values.timestamps):
@@ -278,7 +278,7 @@ def analyze_value_records(log: Log, log_file_name: str, value_analysis_configs: 
         calculations = analysis.get('calculations', [])
         
         if not all([entry_name, trigger_entry, calculations]) or trigger_value is None:
-            all_value_results[analysis_idx] = ("", [], [])
+            all_value_results[analysis_idx] = (log_file_name, [], [])
             continue
         
         # Find values when trigger condition is met
@@ -291,13 +291,13 @@ def analyze_value_records(log: Log, log_file_name: str, value_analysis_configs: 
 
         if not trigger_field or not field:
             print(f"  Skipping analysis {analysis_idx} due to missing fields: {trigger_entry} or {entry_name}")
-            all_value_results[analysis_idx] = ("", [], [])
+            all_value_results[analysis_idx] = (log_file_name, [], [])
             continue
 
         trigger_log_values = get_field_values(trigger_field, 0.0, log.get_last_timestamp())
         if trigger_log_values is None:
             print(f"  Skipping analysis {analysis_idx} due to unsupported type for: {trigger_entry} of {trigger_field.get_type()}")
-            all_value_results[analysis_idx] = ("", [], [])
+            all_value_results[analysis_idx] = (log_file_name, [], [])
             continue
             
         start_timestamp = 0.0
@@ -309,7 +309,7 @@ def analyze_value_records(log: Log, log_file_name: str, value_analysis_configs: 
                 log_values = get_field_values(field, start_timestamp, end_timestamp)
                 if log_values is None:
                     print(f"  Skipping analysis {analysis_idx} due to unsupported type for: {entry_name} of {field.get_type()}")
-                    all_value_results[analysis_idx] = ("", [], [])
+                    all_value_results[analysis_idx] = (log_file_name, [], [])
                     continue
 
                 if len(log_values.values) > 0:
@@ -615,7 +615,7 @@ def main() -> None:
                 
                 print(f"\nAnalyzing: {start_entry} ({start_value}) -> {end_entry} ({end_value})")
 
-                results = time_analysis_results.get(analysis_idx, ("", [], []))
+                results = time_analysis_results.get(analysis_idx, (os.path.basename(log_file), [], []))
 
                 # Print found cycles and perform calculations for this file
                 print_results_and_calculations([results], calculations, value_unit="s")
@@ -637,7 +637,7 @@ def main() -> None:
                 
                 print(f"\nAnalyzing: {entry_name} when {trigger_entry} = {trigger_value}")
 
-                results = value_analysis_results.get(analysis_idx, ("", [], []))
+                results = value_analysis_results.get(analysis_idx, (os.path.basename(log_file), [], []))
 
                 # Print captured values and perform calculations for this file
                 print_results_and_calculations([results], calculations, value_unit=entry_unit)

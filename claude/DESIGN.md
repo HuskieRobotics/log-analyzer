@@ -349,12 +349,11 @@ feature will run into.
    *inner* per-timestamp loop, not the analysis loop, after already overwriting the
    result slot with an empty tuple — so it re-prints the skip message once per
    matching start event.
-7. **Blank file name when every file matched nothing.** An analysis that is
-   skipped (missing fields, unsupported type) stores `("", [], [])`, so when no
-   file produced a match, `print_per_file_counts` reports
-   `Minimum matched values in any file: 0 in ` with an empty name. Visible in
-   `tests/fixtures/2025/golden/missing_entries.txt` and in the 2026 shipped-config
-   golden. Cosmetic, but it makes a skipped analysis look like a matched one.
+7. ~~**Blank file name when an analysis was skipped.**~~ **Fixed.** A skipped
+   analysis (missing fields, unsupported type) stored `("", [], [])`, so
+   `print_per_file_counts` reported `Minimum matched values in any file: 0 in `
+   with an empty name. All ten placeholders now carry the real log file name,
+   which is known at every one of those points.
 8. ~~`README.md` documents "Python 3.6+" and lists `datetime` among used
    modules.~~ **Fixed** — README now requires Python 3.9+, and the example output
    in it was realigned with what the code actually prints.
