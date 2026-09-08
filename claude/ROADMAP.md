@@ -22,6 +22,8 @@ logs in ~7 s; golden suite in [tests/](../tests/) is green).
    than naming each of the four cameras.
 6. **Absence checks** — flag what *didn't* happen: an entry that never appeared,
    or a signal that never reached its expected state.
+7. **Threshold and duration checks** — flag a value past a limit and report for
+   how long and across how many intervals (elevated motor temperatures).
 
 ## 2. How the Tool Is Used
 
@@ -114,7 +116,7 @@ Two findings worth carrying forward:
   Alerts stream first and treat status/counter fields as corroboration.
 - **`Connected` never went false while enabled in either file.** The motor-dropout
   detectors have no positive fixture yet — a green result would be
-  indistinguishable from a broken detector. See §9.
+  indistinguishable from a broken detector. See §10.
 
 ### 3.3 The blocker
 
@@ -415,7 +417,86 @@ Belongs with A4 (checks), and shares its rule format. The `present` and
 it can start as a static expected-entry list in the rule set and get better once
 B1 exists.
 
-## 8. Sequence
+## 8. Threshold and Duration Checks
+
+Feature 7. "Was any motor too hot, and for how long?"
+
+Every expectation in §7 is point-in-time: a sample either violates the rule or it
+does not. A threshold check is about **exposure** — how long a value stayed past a
+limit, and in how many separate excursions. Peak alone does not answer it. A motor
+touching 71 °C for two seconds is fine; sitting at 62 °C for four minutes is not.
+`max` reports the first and nothing reports the second.
+
+### 8.1 Shape
+
+```json
+{
+    "name": "Drive motor over temperature",
+    "entry": "/Drivetrain/*/DriveTemp",
+    "expect": {"above": 60},
+    "clearBelow": 55,
+    "minDuration": 2.0,
+    "severity": "warning"
+}
+```
+
+Per matched entry, report interval count, total time past the limit, longest
+interval, and the peak with its timestamp:
+
+```
+  [WARNING] Drive motor over temperature (/Drivetrain/FR/DriveTemp)
+    above 60 for 42.3 s across 3 intervals, longest 21.7 s, peak 71.0 at 233.4 s
+```
+
+`{"below": V}` is the mirror image, for things that must stay up — battery voltage,
+a pressure reading.
+
+### 8.2 Four things to get right
+
+**1. Duration comes from the gap to the next sample, not interpolation.** These
+entries log on change at 1 °C resolution, so a long gap means the value *held*.
+Measured across one 2026 match:
+
+| Entry | Samples | Median gap |
+|---|---:|---:|
+| `/Drivetrain/BL/SteerTemp` | 48 | 0.22 s |
+| `/Drivetrain/BR/SteerTemp` | 10 | **32.57 s** |
+| `/Drivetrain/FR/DriveTemp` | 125 | 1.25 s |
+
+Same quantity, same match, two orders of magnitude apart. "Value holds until the
+next sample" therefore gives an accurate duration, but the *crossing instant* is
+only known to within one gap. Report durations at the resolution the data
+supports rather than to six decimals, which would imply precision that is not
+there.
+
+**2. Hysteresis, not a bare threshold.** A value resting on the limit produces a
+burst of one-sample intervals. `clearBelow` (enter above 60, clear below 55)
+collapses those into one excursion and matches how thermal limits are actually
+specified; `minDuration` additionally drops blips. Without one or the other the
+report is noise exactly when the reading is most marginal.
+
+**3. Unresolved intervals at end of log.** If the log ends while the value is
+still past the limit, the interval runs to the last timestamp and must be marked
+as such. "Still elevated when the log ended" is a different and more alarming
+finding than a closed excursion, and in pit mode it is the one that matters —
+the next match starts from there.
+
+**4. The gate has to clip, not filter.** `"while": "enabled"` currently drops
+samples. For durations it must clip intervals to the enabled windows instead, or
+one excursion spanning a brief disable reads as two.
+
+### 8.3 Why it belongs with checks
+
+Mechanically this is the time analysis's windowing — find a start condition, find
+its end, measure the gap — and that interval-finding logic in
+`analyze_file_records` is worth extracting rather than writing twice.
+
+But the output is a finding, not a distribution. Nobody wants the mean of
+temperature excursions; they want to know whether any happened and how bad. Using
+`compute_checks`'s finding shape keeps it in the pit report beside the alerts and
+dropouts, where it will actually be read.
+
+## 9. Sequence
 
 ### Milestone A — Pit mode
 
@@ -423,14 +504,15 @@ The post-match checklist, end to end. Nothing here needs the index.
 
 | # | Step | Why | Depends on |
 |---|---|---|---|
-| A0 | ~~**Refresh fixtures to 2026 logs**~~ (§9) — **done** | Detector rules should be written against current entry names, not 2025 ones | — |
+| A0 | ~~**Refresh fixtures to 2026 logs**~~ (§10) — **done** | Detector rules should be written against current entry names, not 2025 ones | — |
 | A1 | ~~**Fix array support**~~ (defects #1–2) — **done** | Unlocks `Alerts/*` — most of feature 2's value | — |
 | A2 | ~~**Split computation from formatting**~~ — **done** | Prerequisite for HTML and JSON output | — |
 | A3 | ~~**Entry patterns / wildcards**~~ (§6) — **done** | Detector rules are unwritable without it; shortens every config | A1 |
-| A4 | **Checks as a third analysis kind**, incl. absence checks (§7) | Replaces the manual post-match pass | A2, A3 |
+| A4 | ~~**Checks as a third analysis kind**~~, incl. absence checks (§7) — **done** | Replaces the manual post-match pass | A2, A3 |
 | A5 | **roboRIO sync** | First link in the pit chain (§2.2) | — |
 | A6 | **HTML + JSON emitters** | The pit screen itself (§5.1) | A2, A4 |
 | A7 | **Watch mode** | Closes the pit chain: no commands typed between matches | A5, A6 |
+| A8 | **Threshold / duration checks** (§8) | Motor temperature exposure; the one concern class checks cannot yet express | A4 |
 
 ### Milestone B — Library / practice mode
 
@@ -478,7 +560,7 @@ stanzas byte for byte.
 Two things learned in the build, both worth keeping in mind:
 
 - **Interior empty segments are significant.** Normalising `//` away broke the
-  `/RealOutputs//ShooterModes/DistanceToHub` match (§9.1); only the leading
+  `/RealOutputs//ShooterModes/DistanceToHub` match (§10.1); only the leading
   slash's empty segment is dropped.
 - **Expansion order must be sorted, not first-seen.** Expanding per file means the
   first log decides the order, and the first 2026 log lacks BCL — which put the
@@ -487,12 +569,35 @@ Two things learned in the build, both worth keeping in mind:
 Not yet done from §6: the dry-run entry lister (§6.6), and `"combine": true`
 pooling (§6.3) — fan-out is per-match only, which is the useful default.
 
-**A4 — checks.** Different output shape from the existing analyses: a list of
-`(file, timestamp, severity, message)` incidents rather than a numeric series for
-statistics. Keep it declarative like `timeAnalysis` / `valueAnalysis`, but ship a
-**default rule set** so it runs with no config — pit mode is zero-config by
-definition. Rule shape: entry pattern, predicate, gating condition (e.g. "while
-enabled"), severity, message template.
+**A4 — checks.** Done. A `"checks"` array alongside `timeAnalysis` /
+`valueAnalysis`, producing findings rather than statistics. Rule shape:
+
+```json
+{"name": "...", "entry": "<pattern>", "expect": <expectation>,
+ "while": "enabled" | "disabled" | "any", "severity": "error" | "warning" | "info"}
+```
+
+Expectations, covering both halves of §7:
+
+| `expect` | Fires when |
+|---|---|
+| `"present"` | the entry never appears in the log |
+| `"empty"` | an array entry is non-empty — one finding per element, which is how `Alerts/*` becomes individual concerns |
+| `{"always": V}` | any sample differs from V |
+| `{"never": V}` | any sample equals V |
+| `{"atLeastOnce": V}` | no sample ever equals V |
+
+Findings collapse on `(rule, entry, detail)` with an occurrence count and the
+first timestamp, so an alert logged every cycle reads as one line. `merge_check_findings`
+does the same across files, adding a file count. Output sorts most severe first.
+
+`checks2026.json` at the repo root is a ready-to-run pit config — no config
+writing needed between matches. Checks were **not** made to run automatically on
+every invocation: that would have added a section to every existing report. Once
+A7 (watch mode) exists it can default to this file.
+
+Not yet done: per-rule message templates. The detail line is generated
+(`is False, expected True`), which reads well enough that templates can wait.
 
 **A5 — roboRIO sync.** A separate program sharing only an output folder. Reach the
 robot at `roborio-<team>-frc.local` or `10.TE.AM.2`; AdvantageKit commonly logs to
@@ -512,7 +617,7 @@ identity (content hash, not name) so re-imports from A4 are idempotent. Keep the
 schema versioned so a format change can rebuild rather than migrate — extraction
 is cheap and the `.wpilog` files remain authoritative.
 
-## 9. Test Fixtures and Logging Conventions
+## 10. Test Fixtures and Logging Conventions
 
 **Done.** The suite is season-parameterized; see
 [tests/README.md](../tests/README.md) for the mechanics.
@@ -539,7 +644,7 @@ Two seasons are set up:
 The 2025 set is kept deliberately: it lets a refactor prove it changed nothing on
 old data while new work is written against current conventions.
 
-### 9.1 What the 2026 changeover cost
+### 10.1 What the 2026 changeover cost
 
 Worth recording, because the next changeover will look the same. Entry names are
 **game-specific and do not survive a season**. Of the four entries
@@ -556,7 +661,7 @@ So a season changeover is "write a new config and record new goldens", not
 "re-record". Budget for it.
 
 Three failure modes showed up while validating `config2026.json`, all of which a
-config linter (§10) would have caught before a 30-second run:
+config linter (§11) would have caught before a 30-second run:
 
 - **A type mismatch that silently matches nothing** — `"12"` as a string against a
   `double` entry. `12.0 == "12"` is `False`, so the analysis simply never fired.
@@ -574,7 +679,7 @@ fixtures, and — more importantly — would give the motor-dropout detectors th
 positive fixture they currently lack (§3.2). Without it, those detectors cannot be
 distinguished from ones that never fire.
 
-## 10. Cross-Cutting Work
+## 11. Cross-Cutting Work
 
 Fix these along the way — each will otherwise distort a feature above:
 
@@ -586,14 +691,14 @@ Fix these along the way — each will otherwise distort a feature above:
   A3, not a nicety.
 - **`.schema` handling assumes `struct:`** (defect #4) and will `IndexError` on a
   protobuf schema entry.
-- **No config validation.** Every failure mode in §9.1 produced a clean run with
+- **No config validation.** Every failure mode in §10.1 produced a clean run with
   empty results rather than an error, which is the worst possible feedback. A
   linter — check each referenced entry exists in the target logs, that the
   configured value's type matches the entry's, and that the entry is actually
   recorded under the configured `robotMode` — would catch all three before a
   multi-minute run. Cheap once B1's manifest exists; useful enough to do sooner.
 
-## 11. What Must Not Regress
+## 12. What Must Not Regress
 
 The folder-wide aggregate analysis is the feature that replaced hours of
 one-file-at-a-time work in AdvantageScope. It is the thing to protect through

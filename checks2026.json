@@ -1,0 +1,80 @@
+{
+    "enabled": false,
+    "fmsAttached": false,
+    "robotMode": "both",
+    "checks": [
+        {
+            "name": "Alert reported as error",
+            "entry": "/RealOutputs/Alerts/errors",
+            "expect": "empty",
+            "severity": "error"
+        },
+        {
+            "name": "Alert reported as warning",
+            "entry": "/RealOutputs/Alerts/warnings",
+            "expect": "empty",
+            "severity": "warning"
+        },
+        {
+            "name": "Device disconnected while enabled",
+            "entry": "/**/*Connected*",
+            "expect": {
+                "always": true
+            },
+            "while": "enabled",
+            "severity": "error",
+            "excludeEntry": [
+                "/SystemStats/NTClients/**"
+            ]
+        },
+        {
+            "name": "Camera stopped sending frames",
+            "entry": "/RealOutputs/Vision/*/sending frames",
+            "expect": {
+                "always": true
+            },
+            "while": "enabled",
+            "severity": "error"
+        },
+        {
+            "name": "Camera never reported",
+            "entry": "/RealOutputs/Vision/BCH/sending frames",
+            "expect": "present",
+            "severity": "warning"
+        },
+        {
+            "name": "Camera never reported",
+            "entry": "/RealOutputs/Vision/BCL/sending frames",
+            "expect": "present",
+            "severity": "warning"
+        },
+        {
+            "name": "Camera never reported",
+            "entry": "/RealOutputs/Vision/BL/sending frames",
+            "expect": "present",
+            "severity": "warning"
+        },
+        {
+            "name": "Camera never reported",
+            "entry": "/RealOutputs/Vision/BR/sending frames",
+            "expect": "present",
+            "severity": "warning"
+        },
+        {
+            "name": "CANivore not OK",
+            "entry": "/RealOutputs/CANivoreStatus/Status",
+            "expect": {
+                "always": "OK"
+            },
+            "severity": "error"
+        },
+        {
+            "name": "Intake roller stalled",
+            "entry": "/RealOutputs/Intake/RollerStalled",
+            "expect": {
+                "always": false
+            },
+            "severity": "warning"
+        }
+    ]
+}

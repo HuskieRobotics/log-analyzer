@@ -186,6 +186,19 @@ match logged enum names directly.
 
 `get_range(start, end)` is half-open at the low end: `start < ts <= end`.
 
+### 3.5b Checks
+
+A third analysis kind, configured under `"checks"`. Where the time and value
+analyses report what happened, a check states what *normal* looks like and
+reports the deviation — including what did not happen at all (an entry that never
+appeared, a signal that never reached a state). `compute_checks()` returns a
+`CheckReport` of `CheckFinding`s; `merge_check_findings()` combines them across
+files; `format_check_findings()` renders them. Same compute/format split as §3.6.
+
+Findings collapse on `(rule, entry, detail)` with a count and first timestamp, so
+a recurring alert is one line rather than hundreds. `EnabledGate` answers whether
+the robot was enabled at a timestamp, backing the `"while": "enabled"` gate.
+
 ### 3.6 Reporting
 
 Computation and rendering are separate layers:
@@ -387,6 +400,7 @@ Where new features naturally attach:
 |---|---|
 | A new calculation type | if/elif chain in `compute_calculation`, a branch in `format_calculation`, plus README table |
 | A new analysis kind | new `analyze_*_records()` + config key + per-file and aggregate print blocks in `main()` |
+| A new check expectation | `check_sample_findings()` in [analysis.py](../analysis.py), plus the table in [ROADMAP.md §8](ROADMAP.md#8-sequence) |
 | Wildcards in entry names | Selection test in `process_log_file` and entry lookup in both analyzers; see [ROADMAP.md §6](ROADMAP.md#6-entry-patterns-wildcards). Keep the per-entry `entry_flags` memoization or §7's gains are lost |
 | Machine-readable output | Consume `AnalysisResult` / `PerFileCounts` from `compute_*`; `asdict()` gives JSON directly |
 | Anything that changes printed output | Re-record goldens with `UPDATE_GOLDEN=1` and review `git diff tests/golden/` — that diff is the review artifact |

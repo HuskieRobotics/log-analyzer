@@ -4,6 +4,7 @@ import json
 import mmap
 import os
 import sys
+import bisect
 import statistics
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple, Any, Union
@@ -210,6 +211,210 @@ def compute_per_file_counts(results: List[Tuple[str, List[Union[int, float, str,
     return computed
 
 
+# === Checks ===================================================================
+# A check states what normal looks like and reports the deviation. Unlike the
+# time and value analyses, which report what happened, a check can also report
+# what did *not* happen - an entry that never appeared, or a signal that never
+# reached its expected state. Absence is not self-interpreting: a stall flag that
+# never fires is good news, a camera that never reports is not, so every rule
+# declares its own expectation.
+
+SEVERITY_ORDER = {"error": 0, "warning": 1, "info": 2}
+
+
+@dataclass
+class CheckFinding:
+    """One deviation from a rule's stated expectation."""
+    rule_name: str
+    severity: str
+    entry: str
+    detail: str
+    log_file_name: str
+    timestamp: Optional[float] = None
+    occurrences: int = 1
+    file_count: int = 1
+
+
+@dataclass
+class CheckReport:
+    """Every finding from one log file, plus what was actually examined."""
+    findings: List[CheckFinding] = field(default_factory=list)
+    rules_run: int = 0
+    entries_checked: int = 0
+
+
+class EnabledGate:
+    """Answers whether the robot was enabled at a given timestamp."""
+
+    def __init__(self, log: Log):
+        field_data = log.get_field("/DriverStation/Enabled")
+        data = field_data.data if field_data else None
+        self.timestamps = list(data.timestamps) if data else []
+        self.values = list(data.values) if data else []
+
+    def is_enabled_at(self, timestamp: float) -> bool:
+        """The most recent Enabled value at or before this timestamp."""
+        if not self.timestamps:
+            return False
+        index = bisect.bisect_right(self.timestamps, timestamp) - 1
+        return bool(self.values[index]) if index >= 0 else False
+
+    def applies(self, gate: str, timestamp: float) -> bool:
+        """Whether a sample passes the rule's "while" gate."""
+        if gate == "enabled":
+            return self.is_enabled_at(timestamp)
+        if gate == "disabled":
+            return not self.is_enabled_at(timestamp)
+        return True
+
+
+def check_sample_findings(expectation: Any, value: Any) -> List[str]:
+    """Return a detail string for each way this sample violates the expectation.
+
+    Args:
+        expectation: The rule's "expect" clause
+        value: One logged sample
+
+    Returns:
+        Zero or more detail strings; empty means the sample is fine
+    """
+    if expectation == "empty":
+        # Array entries such as AdvantageKit's Alerts: each element is its own
+        # concern, so each becomes its own finding.
+        if isinstance(value, (list, tuple)):
+            return [str(item) for item in value]
+        return [] if not value else [str(value)]
+
+    if isinstance(expectation, dict):
+        if "always" in expectation and value != expectation["always"]:
+            return [f"is {value!r}, expected {expectation['always']!r}"]
+        if "never" in expectation and value == expectation["never"]:
+            return [f"is {value!r}"]
+
+    return []
+
+
+def compute_checks(log: Log, log_file_name: str,
+                   check_configs: List[Dict[str, Any]]) -> CheckReport:
+    """Run every check rule against one log, without rendering anything.
+
+    Args:
+        log: The Log for one file
+        log_file_name: Name of that file, carried on each finding
+        check_configs: Rule dictionaries from the config
+
+    Returns:
+        A CheckReport holding the findings, de-duplicated per (entry, detail)
+    """
+    report = CheckReport()
+    field_names = log.get_field_keys()
+    gate = EnabledGate(log)
+    last_timestamp = log.get_last_timestamp()
+
+    for rule in check_configs:
+        pattern_text = rule.get("entry")
+        if not pattern_text:
+            continue
+        report.rules_run += 1
+
+        name = rule.get("name", pattern_text)
+        severity = rule.get("severity", "warning")
+        expectation = rule.get("expect", "present")
+        gate_name = rule.get("while", "any")
+
+        pattern = EntryPattern(pattern_text)
+        matched = pattern.expand(field_names)
+
+        # A broad pattern can reach a subtree whose paths are ephemeral - NT
+        # client entries carry a session id that changes on every reconnect, so
+        # they are unbounded in number and useless as a per-device signal.
+        excludes = rule.get("excludeEntry") or []
+        if isinstance(excludes, str):
+            excludes = [excludes]
+        if excludes:
+            excluded = [EntryPattern(text) for text in excludes]
+            matched = [name for name in matched
+                       if not any(e.matches(name) for e in excluded)]
+
+        # Absence: the entry was expected and never arrived. Only reportable for
+        # a literal name or a pattern with a declared expected set, because a
+        # pattern that matches nothing has nothing to name.
+        if not matched:
+            if rule.get("expectPresent", expectation == "present"):
+                report.findings.append(CheckFinding(
+                    name, severity, pattern_text,
+                    "entry not present in this log", log_file_name))
+            continue
+
+        for entry in matched:
+            report.entries_checked += 1
+            field_data = log.get_field(entry)
+            samples = get_field_values(field_data, 0.0, last_timestamp)
+            if samples is None:
+                continue
+
+            if expectation == "present":
+                continue  # presence already established by the match
+
+            # Collapse repeats: the same alert logged every cycle is one concern.
+            seen: Dict[str, CheckFinding] = {}
+            reached = False
+            wanted = (expectation.get("atLeastOnce")
+                      if isinstance(expectation, dict) else None)
+
+            for timestamp, value in zip(samples.timestamps, samples.values):
+                if not gate.applies(gate_name, timestamp):
+                    continue
+                if isinstance(expectation, dict) and "atLeastOnce" in expectation:
+                    if value == wanted:
+                        reached = True
+                    continue
+                for detail in check_sample_findings(expectation, value):
+                    if detail in seen:
+                        seen[detail].occurrences += 1
+                    else:
+                        seen[detail] = CheckFinding(
+                            name, severity, entry, detail, log_file_name, timestamp)
+
+            if isinstance(expectation, dict) and "atLeastOnce" in expectation:
+                if not reached:
+                    report.findings.append(CheckFinding(
+                        name, severity, entry,
+                        f"never reached {wanted!r}", log_file_name))
+            else:
+                report.findings.extend(seen.values())
+
+    return report
+
+
+def merge_check_findings(reports: List[CheckReport]) -> List[CheckFinding]:
+    """Combine per-file findings into one cross-file list.
+
+    Findings for the same rule, entry and detail are merged, keeping the earliest
+    occurrence and summing counts, so a recurring concern reads as one line.
+    """
+    merged: Dict[Tuple[str, str, str], CheckFinding] = {}
+    files_seen: Dict[Tuple[str, str, str], set] = {}
+
+    for report in reports:
+        for finding in report.findings:
+            key = (finding.rule_name, finding.entry, finding.detail)
+            files_seen.setdefault(key, set()).add(finding.log_file_name)
+            if key not in merged:
+                merged[key] = CheckFinding(**vars(finding))
+            else:
+                merged[key].occurrences += finding.occurrences
+    for key, finding in merged.items():
+        finding.file_count = len(files_seen[key])
+    return sort_check_findings(list(merged.values()))
+
+
+def sort_check_findings(findings: List[CheckFinding]) -> List[CheckFinding]:
+    """Order findings so the most severe concerns are read first."""
+    return sorted(findings, key=lambda f: (SEVERITY_ORDER.get(f.severity, 9),
+                                           f.rule_name, f.entry, f.detail))
+
+
 # === Text rendering ===========================================================
 
 def format_value_locations(locations: List[ValueLocation], is_aggregate: bool) -> List[str]:
@@ -275,6 +480,43 @@ def format_per_file_counts(computed: PerFileCounts) -> List[str]:
     lines.append(f"  Minimum matched values in any file: {computed.min_count} in {computed.min_file}")
     lines.append(f"  Maximum matched values in any file: {computed.max_count} in {computed.max_file}")
     return lines
+
+
+def format_check_findings(findings: List[CheckFinding], is_aggregate: bool) -> List[str]:
+    """Render check findings as text lines, most severe first."""
+    if not findings:
+        return ["  No concerns found."]
+
+    lines = []
+    heading = None
+    for finding in sort_check_findings(findings):
+        # One heading per rule and entry; the details sit beneath it, so a rule
+        # that fired twenty times reads as one concern rather than twenty.
+        this_heading = (finding.severity, finding.rule_name, finding.entry)
+        if this_heading != heading:
+            heading = this_heading
+            lines.append(f"  [{finding.severity.upper()}] {finding.rule_name} ({finding.entry})")
+        lines.append(f"    {finding.detail}")
+
+        parts = []
+        if finding.occurrences > 1:
+            parts.append(f"x{finding.occurrences}")
+        if is_aggregate and finding.file_count > 1:
+            parts.append(f"in {finding.file_count} files")
+        if finding.timestamp is not None:
+            where = f"first @ {finding.timestamp:.6f} s" if parts else f"@ {finding.timestamp:.6f} s"
+            parts.append(where)
+            if is_aggregate:
+                parts.append(f"in {finding.log_file_name}")
+        if parts:
+            lines.append(f"      {', '.join(parts)}")
+    return lines
+
+
+def print_check_findings(findings: List[CheckFinding], is_aggregate: bool) -> None:
+    """Compute-free rendering of check findings to stdout."""
+    for line in format_check_findings(findings, is_aggregate):
+        print(line)
 
 
 # === Text output ==============================================================
@@ -700,6 +942,7 @@ def main() -> None:
             # Load analysis configurations
             time_analysis_configs = config.get('timeAnalysis', [])
             value_analysis_configs = config.get('valueAnalysis', [])
+            check_configs = config.get('checks', [])
             
     except (FileNotFoundError, json.JSONDecodeError) as e:
         print(f"Error loading config file: {e}", file=sys.stderr)
@@ -729,6 +972,11 @@ def main() -> None:
         if trigger_entry:
             target_entry_names.add(trigger_entry)
 
+    # Check rules name entries too, so they must be captured
+    for rule in check_configs:
+        if rule.get('entry'):
+            target_entry_names.add(rule['entry'])
+
     # Get list of files to process
     log_files = []
     for filename in os.listdir(log_folder):
@@ -754,6 +1002,7 @@ def main() -> None:
     # entries with wildcards contributes one key per matched entry).
     all_logs = []  # List to store records from all files
     processed_files = []  # Base names, in processing order
+    check_reports = []  # One CheckReport per file
     aggregated_time_analysis_results = {}  # key -> {log file name: result}
     aggregated_value_analysis_results = {}  # key -> {log file name: result}
     time_analysis_expansions = {}  # key -> concrete config, in first-seen order
@@ -765,6 +1014,13 @@ def main() -> None:
                                filter_on_enabled, filter_on_fms_attached, filter_on_robot_mode)
         all_logs.append(log)
         processed_files.append(os.path.basename(log_file))
+
+        # Run the check rules for this file
+        if check_configs:
+            report = compute_checks(log, os.path.basename(log_file), check_configs)
+            check_reports.append(report)
+            print(f"\n=== CHECK RESULTS FOR {os.path.basename(log_file)} ===\n")
+            print_check_findings(report.findings, is_aggregate=False)
 
         # Analyze time records and aggregate for later cross-file analysis
         if time_analysis_configs:
@@ -823,6 +1079,11 @@ def main() -> None:
 
                 # Print captured values and perform calculations for this file
                 print_results_and_calculations([results], calculations, value_unit=entry_unit)
+
+    # Aggregate the checks across all files
+    if check_configs and check_reports:
+        print(f"\n=== AGGREGATED CHECK RESULTS ACROSS ALL FILES ===\n")
+        print_check_findings(merge_check_findings(check_reports), is_aggregate=True)
 
     # Perform aggregated analysis across all files
     if time_analysis_configs and aggregated_time_analysis_results:
