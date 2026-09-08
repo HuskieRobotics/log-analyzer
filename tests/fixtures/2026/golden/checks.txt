@@ -20,12 +20,14 @@ Processing: akit_26-04-30_14-46-03_johnson_q12.wpilog
 
 === CHECK RESULTS FOR akit_26-04-30_14-46-03_johnson_q12.wpilog ===
 
-  [ERROR] Camera stopped sending frames (/RealOutputs/Vision/BCH/sending frames)
+  [ERROR] Camera frames (/RealOutputs/Vision/BCH/sending frames)
     is False, expected True
       @ 348.787961 s
-  [ERROR] Camera stopped sending frames (/RealOutputs/Vision/BL/sending frames)
+  [ERROR] Camera frames (/RealOutputs/Vision/BL/sending frames)
     is False, expected True
       @ 210.701594 s
+  [ERROR] Camera frames (/RealOutputs/Vision/FRONT/sending frames)
+    entry not present in this log
   [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Intake/RollerConnectedLead)
     is False, expected True
       x4, first @ 208.350400 s
@@ -44,18 +46,20 @@ Processing: akit_26-04-30_16-20-07_johnson_q22.wpilog
   [ERROR] CANivore not OK (/RealOutputs/CANivoreStatus/Status)
     is 'InvalidNetwork', expected 'OK'
       x2, first @ 263.697293 s
-  [ERROR] Camera stopped sending frames (/RealOutputs/Vision/BCH/sending frames)
+  [ERROR] Camera frames (/RealOutputs/Vision/BCH/sending frames)
     is False, expected True
       @ 210.545588 s
-  [ERROR] Camera stopped sending frames (/RealOutputs/Vision/BCL/sending frames)
+  [ERROR] Camera frames (/RealOutputs/Vision/BCL/sending frames)
     is False, expected True
       @ 299.022967 s
-  [ERROR] Camera stopped sending frames (/RealOutputs/Vision/BL/sending frames)
+  [ERROR] Camera frames (/RealOutputs/Vision/BL/sending frames)
     is False, expected True
       x3, first @ 202.724314 s
-  [ERROR] Camera stopped sending frames (/RealOutputs/Vision/BR/sending frames)
+  [ERROR] Camera frames (/RealOutputs/Vision/BR/sending frames)
     is False, expected True
       x2, first @ 210.571447 s
+  [ERROR] Camera frames (/RealOutputs/Vision/FRONT/sending frames)
+    entry not present in this log
   [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Drivetrain/GyroConnected)
     is False, expected True
       x3, first @ 264.002811 s
@@ -104,18 +108,20 @@ Processing: akit_26-04-30_20-48-03_johnson_q46.wpilog
 
 === CHECK RESULTS FOR akit_26-04-30_20-48-03_johnson_q46.wpilog ===
 
-  [ERROR] Camera stopped sending frames (/RealOutputs/Vision/BCH/sending frames)
+  [ERROR] Camera frames (/RealOutputs/Vision/BCH/sending frames)
     is False, expected True
       x2, first @ 207.848519 s
-  [ERROR] Camera stopped sending frames (/RealOutputs/Vision/BCL/sending frames)
+  [ERROR] Camera frames (/RealOutputs/Vision/BCL/sending frames)
     is False, expected True
       x2, first @ 207.827205 s
-  [ERROR] Camera stopped sending frames (/RealOutputs/Vision/BL/sending frames)
+  [ERROR] Camera frames (/RealOutputs/Vision/BL/sending frames)
     is False, expected True
       x2, first @ 207.848519 s
-  [ERROR] Camera stopped sending frames (/RealOutputs/Vision/BR/sending frames)
+  [ERROR] Camera frames (/RealOutputs/Vision/BR/sending frames)
     is False, expected True
       x2, first @ 206.735111 s
+  [ERROR] Camera frames (/RealOutputs/Vision/FRONT/sending frames)
+    entry not present in this log
   [ERROR] Device disconnected while enabled (/Vision/BR/Connected)
     is False, expected True
       @ 212.708341 s
@@ -134,18 +140,20 @@ Processing: akit_26-04-30_22-42-16_johnson_q59.wpilog
 
 === CHECK RESULTS FOR akit_26-04-30_22-42-16_johnson_q59.wpilog ===
 
-  [ERROR] Camera stopped sending frames (/RealOutputs/Vision/BCH/sending frames)
+  [ERROR] Camera frames (/RealOutputs/Vision/BCH/sending frames)
     is False, expected True
       x2, first @ 326.604823 s
-  [ERROR] Camera stopped sending frames (/RealOutputs/Vision/BCL/sending frames)
+  [ERROR] Camera frames (/RealOutputs/Vision/BCL/sending frames)
     is False, expected True
       @ 313.216341 s
-  [ERROR] Camera stopped sending frames (/RealOutputs/Vision/BL/sending frames)
+  [ERROR] Camera frames (/RealOutputs/Vision/BL/sending frames)
     is False, expected True
       x4, first @ 282.963536 s
-  [ERROR] Camera stopped sending frames (/RealOutputs/Vision/BR/sending frames)
+  [ERROR] Camera frames (/RealOutputs/Vision/BR/sending frames)
     is False, expected True
       @ 282.963536 s
+  [ERROR] Camera frames (/RealOutputs/Vision/FRONT/sending frames)
+    entry not present in this log
   [ERROR] Device disconnected while enabled (/Vision/BR/Connected)
     is False, expected True
       x3, first @ 386.813782 s
@@ -160,18 +168,20 @@ Processing: akit_26-05-01_13-38-09_johnson_q67.wpilog
 
 === CHECK RESULTS FOR akit_26-05-01_13-38-09_johnson_q67.wpilog ===
 
-  [ERROR] Camera stopped sending frames (/RealOutputs/Vision/BCH/sending frames)
+  [ERROR] Camera frames (/RealOutputs/Vision/BCH/sending frames)
     is False, expected True
       x2, first @ 374.450802 s
-  [ERROR] Camera stopped sending frames (/RealOutputs/Vision/BCL/sending frames)
+  [ERROR] Camera frames (/RealOutputs/Vision/BCL/sending frames)
     is False, expected True
       x2, first @ 374.450802 s
-  [ERROR] Camera stopped sending frames (/RealOutputs/Vision/BL/sending frames)
+  [ERROR] Camera frames (/RealOutputs/Vision/BL/sending frames)
     is False, expected True
       x4, first @ 285.636574 s
-  [ERROR] Camera stopped sending frames (/RealOutputs/Vision/BR/sending frames)
+  [ERROR] Camera frames (/RealOutputs/Vision/BR/sending frames)
     is False, expected True
       x4, first @ 290.906462 s
+  [ERROR] Camera frames (/RealOutputs/Vision/FRONT/sending frames)
+    entry not present in this log
   [ERROR] Device disconnected while enabled (/Vision/BR/Connected)
     is False, expected True
       @ 378.349808 s
@@ -190,18 +200,20 @@ Processing: akit_26-05-01_15-45-36_johnson_q80.wpilog
 
 === CHECK RESULTS FOR akit_26-05-01_15-45-36_johnson_q80.wpilog ===
 
-  [ERROR] Camera stopped sending frames (/RealOutputs/Vision/BCH/sending frames)
+  [ERROR] Camera frames (/RealOutputs/Vision/BCH/sending frames)
     is False, expected True
       x18, first @ 321.660955 s
-  [ERROR] Camera stopped sending frames (/RealOutputs/Vision/BCL/sending frames)
+  [ERROR] Camera frames (/RealOutputs/Vision/BCL/sending frames)
     is False, expected True
       @ 355.788002 s
-  [ERROR] Camera stopped sending frames (/RealOutputs/Vision/BL/sending frames)
+  [ERROR] Camera frames (/RealOutputs/Vision/BL/sending frames)
     is False, expected True
       x18, first @ 374.718462 s
-  [ERROR] Camera stopped sending frames (/RealOutputs/Vision/BR/sending frames)
+  [ERROR] Camera frames (/RealOutputs/Vision/BR/sending frames)
     is False, expected True
       x19, first @ 321.660955 s
+  [ERROR] Camera frames (/RealOutputs/Vision/FRONT/sending frames)
+    entry not present in this log
   [ERROR] Device disconnected while enabled (/Vision/BCL/Connected)
     is False, expected True
       x18, first @ 372.465806 s
@@ -220,12 +232,14 @@ Processing: akit_26-05-01_17-57-36_johnson_q89.wpilog
 
 === CHECK RESULTS FOR akit_26-05-01_17-57-36_johnson_q89.wpilog ===
 
-  [ERROR] Camera stopped sending frames (/RealOutputs/Vision/BCH/sending frames)
+  [ERROR] Camera frames (/RealOutputs/Vision/BCH/sending frames)
     is False, expected True
       @ 339.733456 s
-  [ERROR] Camera stopped sending frames (/RealOutputs/Vision/BR/sending frames)
+  [ERROR] Camera frames (/RealOutputs/Vision/BR/sending frames)
     is False, expected True
       x3, first @ 394.339945 s
+  [ERROR] Camera frames (/RealOutputs/Vision/FRONT/sending frames)
+    entry not present in this log
   [WARNING] Alert reported as warning (/RealOutputs/Alerts/warnings)
     No operator controller(s) connected.
       @ 23.260792 s
@@ -238,6 +252,8 @@ Processing: akit_26-05-01_20-28-19_q105.wpilog
 
 === CHECK RESULTS FOR akit_26-05-01_20-28-19_q105.wpilog ===
 
+  [ERROR] Camera frames (/RealOutputs/Vision/FRONT/sending frames)
+    entry not present in this log
   [WARNING] Alert reported as warning (/RealOutputs/Alerts/warnings)
     No operator controller(s) connected.
       @ 24.310019 s
@@ -250,12 +266,14 @@ Processing: akit_26-05-01_22-45-20_johnson_q121.wpilog
 
 === CHECK RESULTS FOR akit_26-05-01_22-45-20_johnson_q121.wpilog ===
 
-  [ERROR] Camera stopped sending frames (/RealOutputs/Vision/BL/sending frames)
+  [ERROR] Camera frames (/RealOutputs/Vision/BL/sending frames)
     is False, expected True
       @ 237.075193 s
-  [ERROR] Camera stopped sending frames (/RealOutputs/Vision/BR/sending frames)
+  [ERROR] Camera frames (/RealOutputs/Vision/BR/sending frames)
     is False, expected True
       @ 308.094851 s
+  [ERROR] Camera frames (/RealOutputs/Vision/FRONT/sending frames)
+    entry not present in this log
   [WARNING] Alert reported as warning (/RealOutputs/Alerts/warnings)
     No operator controller(s) connected.
       x2, first @ 23.876908 s
@@ -269,18 +287,21 @@ Processing: akit_26-05-01_22-45-20_johnson_q121.wpilog
   [ERROR] CANivore not OK (/RealOutputs/CANivoreStatus/Status)
     is 'InvalidNetwork', expected 'OK'
       x2, first @ 263.697293 s, in akit_26-04-30_16-20-07_johnson_q22.wpilog
-  [ERROR] Camera stopped sending frames (/RealOutputs/Vision/BCH/sending frames)
+  [ERROR] Camera frames (/RealOutputs/Vision/BCH/sending frames)
     is False, expected True
       x27, in 7 files, first @ 348.787961 s, in akit_26-04-30_14-46-03_johnson_q12.wpilog
-  [ERROR] Camera stopped sending frames (/RealOutputs/Vision/BCL/sending frames)
+  [ERROR] Camera frames (/RealOutputs/Vision/BCL/sending frames)
     is False, expected True
       x7, in 5 files, first @ 299.022967 s, in akit_26-04-30_16-20-07_johnson_q22.wpilog
-  [ERROR] Camera stopped sending frames (/RealOutputs/Vision/BL/sending frames)
+  [ERROR] Camera frames (/RealOutputs/Vision/BL/sending frames)
     is False, expected True
       x33, in 7 files, first @ 210.701594 s, in akit_26-04-30_14-46-03_johnson_q12.wpilog
-  [ERROR] Camera stopped sending frames (/RealOutputs/Vision/BR/sending frames)
+  [ERROR] Camera frames (/RealOutputs/Vision/BR/sending frames)
     is False, expected True
       x32, in 7 files, first @ 210.571447 s, in akit_26-04-30_16-20-07_johnson_q22.wpilog
+  [ERROR] Camera frames (/RealOutputs/Vision/FRONT/sending frames)
+    entry not present in this log
+      x9, in 9 files
   [ERROR] Device disconnected while enabled (/Vision/BCL/Connected)
     is False, expected True
       x18, first @ 372.465806 s, in akit_26-05-01_15-45-36_johnson_q80.wpilog

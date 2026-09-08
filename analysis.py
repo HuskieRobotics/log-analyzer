@@ -336,11 +336,25 @@ def compute_checks(log: Log, log_file_name: str,
             matched = [name for name in matched
                        if not any(e.matches(name) for e in excluded)]
 
-        # Absence: the entry was expected and never arrived. Only reportable for
-        # a literal name or a pattern with a declared expected set, because a
-        # pattern that matches nothing has nothing to name.
+        # A wildcard can only expand over entries that exist, so an entry that
+        # never arrived produces no rule and no finding - silence exactly where a
+        # concern belongs. "expectEntries" closes that gap by declaring the set
+        # the rule expects to find, named by what the wildcard should have
+        # matched (e.g. ["BCH", "BCL", "BL", "BR"]).
+        expected_entries = rule.get("expectEntries") or []
+        if expected_entries and pattern.has_wildcard:
+            seen = {pattern.captures(entry) for entry in matched}
+            seen.discard(None)
+            for item in expected_entries:
+                wanted = tuple(item) if isinstance(item, (list, tuple)) else (item,)
+                if wanted not in seen:
+                    report.findings.append(CheckFinding(
+                        name, severity, pattern.substitute(wanted),
+                        "entry not present in this log", log_file_name))
+
+        # Absence for a rule that only asks for presence.
         if not matched:
-            if rule.get("expectPresent", expectation == "present"):
+            if expectation == "present" and not expected_entries:
                 report.findings.append(CheckFinding(
                     name, severity, pattern_text,
                     "entry not present in this log", log_file_name))

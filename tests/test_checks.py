@@ -158,6 +158,62 @@ class WildcardRuleTest(unittest.TestCase):
         ])
 
 
+class ExpectEntriesTest(unittest.TestCase):
+    """One rule covering both halves: the expected set, and the value expectation."""
+
+    def rule(self):
+        return [{"name": "Camera frames",
+                 "entry": "/RealOutputs/Vision/*/sending frames",
+                 "expectEntries": ["BCH", "BCL", "BL", "BR"],
+                 "expect": {"always": True},
+                 "while": "enabled", "severity": "error"}]
+
+    def log_with(self, cameras):
+        log = log_with_enabled([(0.0, True)])
+        for camera, value in cameras.items():
+            log.put_boolean(f"/RealOutputs/Vision/{camera}/sending frames", 1.0, value)
+        return log
+
+    def test_a_missing_camera_is_named_concretely(self):
+        log = self.log_with({"BCH": True, "BL": True, "BR": True})
+        findings = compute_checks(log, "a.wpilog", self.rule()).findings
+        self.assertEqual([f.entry for f in findings],
+                         ["/RealOutputs/Vision/BCL/sending frames"])
+        self.assertEqual(findings[0].detail, "entry not present in this log")
+
+    def test_a_present_camera_dropping_frames_is_still_caught(self):
+        log = self.log_with({"BCH": True, "BCL": False, "BL": True, "BR": True})
+        findings = compute_checks(log, "a.wpilog", self.rule()).findings
+        self.assertEqual([f.entry for f in findings],
+                         ["/RealOutputs/Vision/BCL/sending frames"])
+        self.assertIn("expected True", findings[0].detail)
+
+    def test_both_kinds_reported_together(self):
+        log = self.log_with({"BCH": True, "BL": False})
+        findings = compute_checks(log, "a.wpilog", self.rule()).findings
+        by_entry = {f.entry: f.detail for f in findings}
+        self.assertEqual(by_entry["/RealOutputs/Vision/BCL/sending frames"],
+                         "entry not present in this log")
+        self.assertEqual(by_entry["/RealOutputs/Vision/BR/sending frames"],
+                         "entry not present in this log")
+        self.assertIn("expected True", by_entry["/RealOutputs/Vision/BL/sending frames"])
+
+    def test_all_present_and_healthy_reports_nothing(self):
+        log = self.log_with({c: True for c in ("BCH", "BCL", "BL", "BR")})
+        self.assertEqual(compute_checks(log, "a.wpilog", self.rule()).findings, [])
+
+    def test_absence_and_deviation_share_the_rule_severity(self):
+        log = self.log_with({"BCH": True, "BCL": False, "BL": True})
+        findings = compute_checks(log, "a.wpilog", self.rule()).findings
+        self.assertEqual({f.severity for f in findings}, {"error"})
+
+    def test_no_camera_at_all_still_names_every_expected_one(self):
+        log = log_with_enabled([(0.0, True)])
+        findings = compute_checks(log, "a.wpilog", self.rule()).findings
+        self.assertEqual(len(findings), 4)
+        self.assertTrue(all(f.detail == "entry not present in this log" for f in findings))
+
+
 class MergeAndFormatTest(unittest.TestCase):
 
     def reports(self):

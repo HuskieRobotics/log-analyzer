@@ -27,6 +27,7 @@ driven by a JSON config; there is no CLI beyond `analysis.py <log_folder> <confi
 | [analysis.py](../analysis.py) | Entry point: config, filtering, analysis, reporting | Original to this repo |
 | [config2025.json](../config2025.json), [config2026.json](../config2026.json) | Per-season example/default analysis configs | — |
 | [entry_patterns.py](../entry_patterns.py) | Segment-scoped glob matching for entry names | — |
+| [sync_logs.py](../sync_logs.py) | Standalone roboRIO log fetcher; shares only the destination folder | — |
 | [tests/](../tests/) | Season-parameterized golden-output suite (stdlib `unittest`) | — |
 | `test/<season>/` | `.wpilog` fixtures per season; gitignored (~108 MB for 2025, ~433 MB for 2026) | — |
 | [test.log](../test.log) | Stray plain-text sample; **not** a `.wpilog` and unused by any code | — |
@@ -198,6 +199,13 @@ files; `format_check_findings()` renders them. Same compute/format split as §3.
 Findings collapse on `(rule, entry, detail)` with a count and first timestamp, so
 a recurring alert is one line rather than hundreds. `EnabledGate` answers whether
 the robot was enabled at a timestamp, backing the `"while": "enabled"` gate.
+
+`expectEntries` declares the set a wildcard rule expects, so an entry that never
+appeared is still reported — a pattern alone can only expand over entries that
+exist. `EntryPattern.substitute()` rebuilds the concrete name for one that is
+missing, which is why the finding can name `/RealOutputs/Vision/BCL/sending frames`
+rather than the pattern. `excludeEntry` trims a broad pattern away from subtrees
+whose paths are ephemeral.
 
 ### 3.6 Reporting
 

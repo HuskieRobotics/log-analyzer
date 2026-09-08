@@ -55,48 +55,9 @@
         ]
     },
     {
-        "startEntry": "/RealOutputs/Vision/BCH/sending frames",
+        "startEntry": "/RealOutputs/Vision/*/sending frames",
         "startValue": false,
-        "endEntry": "/RealOutputs/Vision/BCH/sending frames",
-        "endValue": true,
-        "calculations": [
-            {"type": "average", "name": "Average Camera Loss Time"},
-            {"type": "max", "name": "Max Camera Loss Time"},
-            {"type": "min", "name": "Min Camera Loss Time"},
-            {"type": "count", "name": "Camera Loss Count"},
-            {"type": "outlier_2std", "name": "Outliers (2 std dev)"}
-        ]
-    },
-    {
-        "startEntry": "/RealOutputs/Vision/BCL/sending frames",
-        "startValue": false,
-        "endEntry": "/RealOutputs/Vision/BCL/sending frames",
-        "endValue": true,
-        "calculations": [
-            {"type": "average", "name": "Average Camera Loss Time"},
-            {"type": "max", "name": "Max Camera Loss Time"},
-            {"type": "min", "name": "Min Camera Loss Time"},
-            {"type": "count", "name": "Camera Loss Count"},
-            {"type": "outlier_2std", "name": "Outliers (2 std dev)"}
-        ]
-    },
-    {
-        "startEntry": "/RealOutputs/Vision/BL/sending frames",
-        "startValue": false,
-        "endEntry": "/RealOutputs/Vision/BL/sending frames",
-        "endValue": true,
-        "calculations": [
-            {"type": "average", "name": "Average Camera Loss Time"},
-            {"type": "max", "name": "Max Camera Loss Time"},
-            {"type": "min", "name": "Min Camera Loss Time"},
-            {"type": "count", "name": "Camera Loss Count"},
-            {"type": "outlier_2std", "name": "Outliers (2 std dev)"}
-        ]
-    },
-    {
-        "startEntry": "/RealOutputs/Vision/BR/sending frames",
-        "startValue": false,
-        "endEntry": "/RealOutputs/Vision/BR/sending frames",
+        "endEntry": "/RealOutputs/Vision/*/sending frames",
         "endValue": true,
         "calculations": [
             {"type": "average", "name": "Average Camera Loss Time"},

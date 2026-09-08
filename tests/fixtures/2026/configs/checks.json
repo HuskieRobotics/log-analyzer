@@ -10,19 +10,20 @@
             "severity": "warning"
         },
         {
-            "name": "Camera stopped sending frames",
+            "name": "Camera frames",
             "entry": "/RealOutputs/Vision/*/sending frames",
+            "expectEntries": [
+                "BCH",
+                "BCL",
+                "BL",
+                "BR",
+                "FRONT"
+            ],
             "expect": {
                 "always": true
             },
             "while": "enabled",
             "severity": "error"
-        },
-        {
-            "name": "Camera never reported",
-            "entry": "/RealOutputs/Vision/BCL/sending frames",
-            "expect": "present",
-            "severity": "warning"
         },
         {
             "name": "Device disconnected while enabled",

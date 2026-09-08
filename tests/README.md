@@ -101,6 +101,14 @@ used to read the *time* analysis's local variables, which raised
 time analysis. The shipped config never requests `count` on a value analysis, so
 a golden test of the shipped config alone would not have caught it.
 
+## A deliberate absence in the 2026 fixture
+
+`fixtures/2026/configs/checks.json` lists `FRONT` in the camera rule's
+`expectEntries` alongside the four real cameras. **The robot has no FRONT
+camera** — it is there so the golden exercises the absence path end to end, since
+all four real cameras are present in all nine logs. The resulting
+`entry not present in this log` finding is expected, not a defect.
+
 ## Updating goldens
 
 When you change the output deliberately, re-record and **review the diff** before

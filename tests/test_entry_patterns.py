@@ -122,6 +122,29 @@ class CaptureTest(unittest.TestCase):
         )
 
 
+class SubstituteTest(unittest.TestCase):
+    """substitute() is the inverse of captures(), used to name a missing entry."""
+
+    def test_round_trips_with_captures(self):
+        pattern = EntryPattern("/RealOutputs/Vision/*/sending frames")
+        for name in CAMERAS[:4]:
+            self.assertEqual(pattern.substitute(pattern.captures(name)), name)
+
+    def test_names_an_entry_that_is_not_in_the_log(self):
+        pattern = EntryPattern("/RealOutputs/Vision/*/sending frames")
+        self.assertEqual(pattern.substitute(("FRONT",)),
+                         "/RealOutputs/Vision/FRONT/sending frames")
+
+    def test_double_star_capture_carries_its_own_separators(self):
+        pattern = EntryPattern("/RealOutputs/**/Connected")
+        name = "/RealOutputs/a/b/Connected"
+        self.assertEqual(pattern.substitute(pattern.captures(name)), name)
+
+    def test_multiple_wildcards_fill_in_order(self):
+        pattern = EntryPattern("/Drivetrain/*/*Temp")
+        self.assertEqual(pattern.substitute(("FL", "Drive")), "/Drivetrain/FL/DriveTemp")
+
+
 class ExpandRolesTest(unittest.TestCase):
 
     def test_literal_analysis_is_returned_unchanged(self):

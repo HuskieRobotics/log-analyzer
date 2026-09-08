@@ -509,7 +509,7 @@ The post-match checklist, end to end. Nothing here needs the index.
 | A2 | ~~**Split computation from formatting**~~ — **done** | Prerequisite for HTML and JSON output | — |
 | A3 | ~~**Entry patterns / wildcards**~~ (§6) — **done** | Detector rules are unwritable without it; shortens every config | A1 |
 | A4 | ~~**Checks as a third analysis kind**~~, incl. absence checks (§7) — **done** | Replaces the manual post-match pass | A2, A3 |
-| A5 | **roboRIO sync** | First link in the pit chain (§2.2) | — |
+| A5 | ~~**roboRIO sync**~~ — **done** (`sync_logs.py`) | First link in the pit chain (§2.2) | — |
 | A6 | **HTML + JSON emitters** | The pit screen itself (§5.1) | A2, A4 |
 | A7 | **Watch mode** | Closes the pit chain: no commands typed between matches | A5, A6 |
 | A8 | **Threshold / duration checks** (§8) | Motor temperature exposure; the one concern class checks cannot yet express | A4 |
@@ -587,6 +587,20 @@ Expectations, covering both halves of §7:
 | `{"never": V}` | any sample equals V |
 | `{"atLeastOnce": V}` | no sample ever equals V |
 
+Two modifiers:
+
+- **`expectEntries`** declares the set a wildcard rule expects to find, named by
+  what the wildcard should have matched (`["BCH", "BCL", "BL", "BR"]`). Without it
+  a pattern can only expand over entries that *exist*, so a camera that never
+  reported produces no rule and no finding — §7.3's invisible silence. With it,
+  one rule covers both halves: a listed entry that never arrived is reported as
+  missing, and a present one that misbehaves is reported as a deviation, at the
+  same severity. This collapsed `checks2026.json` from ten rules to six.
+- **`excludeEntry`** removes matches from a broad pattern. Needed because
+  `/**/*Connected*` otherwise reaches `/SystemStats/NTClients/**`, whose paths
+  carry a per-connection session id (`northstar_BCL@5`) and so are unbounded in
+  number and useless as a per-device signal.
+
 Findings collapse on `(rule, entry, detail)` with an occurrence count and the
 first timestamp, so an alert logged every cycle reads as one line. `merge_check_findings`
 does the same across files, adding a file count. Output sorts most severe first.
@@ -599,11 +613,83 @@ A7 (watch mode) exists it can default to this file.
 Not yet done: per-rule message templates. The detail line is generated
 (`is False, expected True`), which reads well enough that templates can wait.
 
-**A5 — roboRIO sync.** A separate program sharing only an output folder. Reach the
-robot at `roborio-<team>-frc.local` or `10.TE.AM.2`; AdvantageKit commonly logs to
-USB (`/media/sda1` / `/media/sdb1`) rather than `/home/lvuser/logs`, so check both.
-Copy-then-verify, never move; dedupe on content hash. Must degrade quietly when
-the robot is absent — it will be, most of the time.
+An unbounded-cardinality subtree is a general hazard for wildcard rules, not a
+one-off: any path that embeds a session id, a connection index or a timestamp
+grows without limit, and a broad pattern will happily match all of it.
+`excludeEntry` is the escape hatch; §6.6's dry-run entry lister would let you see
+the problem before writing the rule.
+
+**A5 — roboRIO sync.** A **standalone program**, sharing nothing with the analyzer
+but an output folder. It has different failure modes (network, not parsing), a
+different lifetime (it wants to poll for a robot that is usually absent), and
+different dependencies. A7 joins the two: sync drops files in a folder, watch
+notices them.
+
+That composition imposes one hard requirement: **downloads must be atomic.**
+Fetch to a temporary name in the destination folder and `rename` into place only
+after the size is verified. A partially-written file bearing its final name would
+be analyzed mid-copy by A7 and, worse, would look complete on the next sync.
+
+*Network.* The robot is at `10.TE.AM.2` — `10.30.61.2` for team 3061. The pit
+laptop needs a **static address on the robot interface**, because the radio's DHCP
+server comes and goes with robot power. Pick one outside the radio's DHCP pool and
+clear of `.1` (radio) and `.2` (roboRIO) — `10.30.61.5/24` is a safe choice —
+and set **no gateway on that interface**, so the wired hotspot on the other
+interface keeps providing internet. Prefer the literal IP over
+`roborio-3061-frc.local`: mDNS is the thing most likely to be flaky in a pit, and
+the address is fixed anyway. Keep the host configurable regardless.
+
+*Where the logs are.* Search a configurable candidate list, defaulting to
+`/media/sda1`, `/media/sda2`, `/U`, `/home/lvuser/logs`. AdvantageKit commonly
+writes to USB rather than internal storage, and which mount point appears depends
+on the stick.
+
+*What is new.* Determine it from the **destination folder, not a state file**: a
+remote file whose name and size already match a local file is skipped. Names are
+timestamped and unique, so name+size is sufficient, and combined with atomic
+download it means a partial transfer never has the final name and is simply
+retried next run. No state to corrupt, survives a laptop reimage, and a restart
+mid-event neither redoes the day nor skips a match — the same restartability A7
+needs. Content hashing is B1's concern, where re-imports must be idempotent
+across renames; here it would mean hashing every remote file over SSH for no gain.
+
+*Transport.* Shell out to `ssh` / `scp` rather than adding `paramiko`; the repo
+has one dependency and this does not need to be the second. The roboRIO image is
+minimal, so do not assume `rsync` is present remotely. If `scp` proves unreliable
+against the robot's SSH server, `ssh <host> 'cat <path>'` needs only `cat` and is
+the bulletproof fallback.
+
+*Testability.* There is no roboRIO in this repo and there will not be one in CI,
+so **the decision logic must be separable from the transport**: a pure function
+taking a remote listing and a local listing and returning what to fetch, unit
+tested; a thin transport behind it. Add a `--dry-run` that prints what it would
+copy, and allow a local directory as the "remote" so the whole flow can be
+exercised without a robot.
+
+*Safety.* Copy, never move — never delete from the robot. Verify size before the
+rename. Degrade quietly when the robot is unreachable (that is the normal case,
+not an error), so a polling loop does not fill the terminal with failures.
+
+*Windows.* The pit laptop runs Windows, which changes three things and breaks one
+outright. `UserKnownHostsFile=/dev/null` is rejected by Win32-OpenSSH — it wants
+`NUL` — so the null device is selected per platform. The remote listing script is
+kept to a **single line**, because Windows flattens the argument list into one
+command string before `CreateProcess` sees it and embedded newlines are a good way
+to have a remote script arrive mangled; a test round-trips the script through
+`subprocess.list2cmdline` and a reference implementation of `CommandLineToArgvW`
+to prove it survives. And `sshpass` has no Windows build, so key-based auth is the
+only non-interactive option there — `ssh-copy-id` does not exist on Windows
+either, so the key has to be appended manually the first time. `ssh`/`scp` come
+from the OpenSSH Client optional feature; the tool checks for them up front and
+says so rather than failing obscurely.
+
+**Built as `sync_logs.py`**, all of the above implemented. One thing could not be
+verified from here and needs a real robot: **non-interactive auth**. `ssh` reads a
+password from the tty rather than stdin, so an empty password cannot be supplied
+on its own — `BatchMode=yes` makes it fail fast instead of hanging. If plain
+`scp` is refused, the fix is `ssh-copy-id admin@10.30.61.2` once, or `--sshpass`;
+the tool detects the auth failure and prints both. Everything else is exercised
+by `tests/test_sync_logs.py` through a local directory standing in for the robot.
 
 **A7 — watch mode.** A long-running `--watch <folder>` that notices new `.wpilog`
 files (dropped there by A5), analyzes each once, and rewrites the report. Debounce

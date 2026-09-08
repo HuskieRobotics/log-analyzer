@@ -16,6 +16,21 @@
             "severity": "warning"
         },
         {
+            "name": "Camera frames",
+            "entry": "/RealOutputs/Vision/*/sending frames",
+            "expectEntries": [
+                "BCH",
+                "BCL",
+                "BL",
+                "BR"
+            ],
+            "expect": {
+                "always": true
+            },
+            "while": "enabled",
+            "severity": "error"
+        },
+        {
             "name": "Device disconnected while enabled",
             "entry": "/**/*Connected*",
             "expect": {
@@ -26,39 +41,6 @@
             "excludeEntry": [
                 "/SystemStats/NTClients/**"
             ]
-        },
-        {
-            "name": "Camera stopped sending frames",
-            "entry": "/RealOutputs/Vision/*/sending frames",
-            "expect": {
-                "always": true
-            },
-            "while": "enabled",
-            "severity": "error"
-        },
-        {
-            "name": "Camera never reported",
-            "entry": "/RealOutputs/Vision/BCH/sending frames",
-            "expect": "present",
-            "severity": "warning"
-        },
-        {
-            "name": "Camera never reported",
-            "entry": "/RealOutputs/Vision/BCL/sending frames",
-            "expect": "present",
-            "severity": "warning"
-        },
-        {
-            "name": "Camera never reported",
-            "entry": "/RealOutputs/Vision/BL/sending frames",
-            "expect": "present",
-            "severity": "warning"
-        },
-        {
-            "name": "Camera never reported",
-            "entry": "/RealOutputs/Vision/BR/sending frames",
-            "expect": "present",
-            "severity": "warning"
         },
         {
             "name": "CANivore not OK",

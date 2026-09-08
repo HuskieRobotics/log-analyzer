@@ -120,6 +120,46 @@ class EntryPattern:
         found = self._captured.match(name)
         return found.groups() if found else None
 
+    def substitute(self, captures: Sequence[str]) -> str:
+        """Rebuild a concrete entry name by filling wildcards with captured text.
+
+        The inverse of `captures()`: given ("BCL",) and the pattern
+        "/RealOutputs/Vision/*/sending frames", returns
+        "/RealOutputs/Vision/BCL/sending frames". Used to name an entry that a
+        rule expected but never saw, which by definition is not in the log.
+        """
+        values = list(captures)
+
+        def take() -> str:
+            return values.pop(0) if values else ""
+
+        parts = []
+        for segment in self.segments:
+            if segment == "**":
+                # A "**" capture already carries its own leading separators.
+                parts.append(take())
+                continue
+            out = []
+            i = 0
+            while i < len(segment):
+                char = segment[i]
+                if char in "*?":
+                    out.append(take())
+                    i += 1
+                elif char == "[":
+                    close = segment.find("]", i + 1)
+                    if close == -1:
+                        out.append(char)
+                        i += 1
+                    else:
+                        out.append(take())
+                        i = close + 1
+                else:
+                    out.append(char)
+                    i += 1
+            parts.append("/" + "".join(out))
+        return "".join(parts)
+
     def expand(self, names: Sequence[str]) -> List[str]:
         """Every name matching this pattern, in sorted order."""
         return sorted(name for name in names if self.matches(name))
