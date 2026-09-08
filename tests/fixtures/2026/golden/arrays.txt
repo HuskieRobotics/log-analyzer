@@ -1,0 +1,255 @@
+
+=== FILTERING CRITERIA ===
+Filter for enabled: False
+Filter for FMS attached: False
+Filter for robot mode: both
+
+=== ANALYSIS ===
+Found 9 log files to process:
+  akit_26-04-30_14-46-03_johnson_q12.wpilog
+  akit_26-04-30_16-20-07_johnson_q22.wpilog
+  akit_26-04-30_20-48-03_johnson_q46.wpilog
+  akit_26-04-30_22-42-16_johnson_q59.wpilog
+  akit_26-05-01_13-38-09_johnson_q67.wpilog
+  akit_26-05-01_15-45-36_johnson_q80.wpilog
+  akit_26-05-01_17-57-36_johnson_q89.wpilog
+  akit_26-05-01_20-28-19_q105.wpilog
+  akit_26-05-01_22-45-20_johnson_q121.wpilog
+
+Processing: akit_26-04-30_14-46-03_johnson_q12.wpilog
+
+=== TIME ANALYSIS RESULTS FOR akit_26-04-30_14-46-03_johnson_q12.wpilog ===
+
+Analyzing: /RealOutputs/Alerts/warnings (['Please wait to enable, JITing in progress.']) -> /RealOutputs/Alerts/warnings ([])
+  Total values captured in this file: 1
+  JIT Warning Count: 1
+  Average JIT Warning Duration: 16.206727 s
+  Max JIT Warning Duration: 16.206727 s
+    @ 28.806100 s 
+
+=== VALUE ANALYSIS RESULTS FOR akit_26-04-30_14-46-03_johnson_q12.wpilog ===
+
+Analyzing: /RealOutputs//ShooterModes/DistanceToHub when /RealOutputs/Alerts/errors = []
+  Total values captured in this file: 5
+  Samples With No Active Errors: 5
+  Average Distance To Hub (no errors): 4.221912 m
+  Max Distance To Hub (no errors): 5.786643 m
+    @ 31.053117 s 
+
+Analyzing: /RealOutputs/Alerts/errors when /RealOutputs/ShooterModes/CurrentMode = SHOOT_OTM
+  Total values captured in this file: 9
+  No numeric values found for calculations
+
+Processing: akit_26-04-30_16-20-07_johnson_q22.wpilog
+
+=== TIME ANALYSIS RESULTS FOR akit_26-04-30_16-20-07_johnson_q22.wpilog ===
+
+Analyzing: /RealOutputs/Alerts/warnings (['Please wait to enable, JITing in progress.']) -> /RealOutputs/Alerts/warnings ([])
+  Total values captured in this file: 1
+  JIT Warning Count: 1
+  Average JIT Warning Duration: 15.564822 s
+  Max JIT Warning Duration: 15.564822 s
+    @ 29.440065 s 
+
+=== VALUE ANALYSIS RESULTS FOR akit_26-04-30_16-20-07_johnson_q22.wpilog ===
+
+Analyzing: /RealOutputs//ShooterModes/DistanceToHub when /RealOutputs/Alerts/errors = []
+  Total values captured in this file: 11
+  Samples With No Active Errors: 11
+  Average Distance To Hub (no errors): 8.653044 m
+  Max Distance To Hub (no errors): 15.283939 m
+    @ 299.804014 s 
+
+Analyzing: /RealOutputs/Alerts/errors when /RealOutputs/ShooterModes/CurrentMode = SHOOT_OTM
+  Total values captured in this file: 5
+  No numeric values found for calculations
+
+Processing: akit_26-04-30_20-48-03_johnson_q46.wpilog
+
+=== TIME ANALYSIS RESULTS FOR akit_26-04-30_20-48-03_johnson_q46.wpilog ===
+
+Analyzing: /RealOutputs/Alerts/warnings (['Please wait to enable, JITing in progress.']) -> /RealOutputs/Alerts/warnings ([])
+  Total values captured in this file: 1
+  JIT Warning Count: 1
+  Average JIT Warning Duration: 15.713668 s
+  Max JIT Warning Duration: 15.713668 s
+    @ 29.337399 s 
+
+=== VALUE ANALYSIS RESULTS FOR akit_26-04-30_20-48-03_johnson_q46.wpilog ===
+
+Analyzing: /RealOutputs//ShooterModes/DistanceToHub when /RealOutputs/Alerts/errors = []
+No values found for this analysis
+
+Analyzing: /RealOutputs/Alerts/errors when /RealOutputs/ShooterModes/CurrentMode = SHOOT_OTM
+  Total values captured in this file: 2
+  No numeric values found for calculations
+
+Processing: akit_26-04-30_22-42-16_johnson_q59.wpilog
+
+=== TIME ANALYSIS RESULTS FOR akit_26-04-30_22-42-16_johnson_q59.wpilog ===
+
+Analyzing: /RealOutputs/Alerts/warnings (['Please wait to enable, JITing in progress.']) -> /RealOutputs/Alerts/warnings ([])
+  Total values captured in this file: 1
+  JIT Warning Count: 1
+  Average JIT Warning Duration: 16.683369 s
+  Max JIT Warning Duration: 16.683369 s
+    @ 28.321490 s 
+
+=== VALUE ANALYSIS RESULTS FOR akit_26-04-30_22-42-16_johnson_q59.wpilog ===
+
+Analyzing: /RealOutputs//ShooterModes/DistanceToHub when /RealOutputs/Alerts/errors = []
+No values found for this analysis
+
+Analyzing: /RealOutputs/Alerts/errors when /RealOutputs/ShooterModes/CurrentMode = SHOOT_OTM
+  Total values captured in this file: 5
+  No numeric values found for calculations
+
+Processing: akit_26-05-01_13-38-09_johnson_q67.wpilog
+
+=== TIME ANALYSIS RESULTS FOR akit_26-05-01_13-38-09_johnson_q67.wpilog ===
+
+Analyzing: /RealOutputs/Alerts/warnings (['Please wait to enable, JITing in progress.']) -> /RealOutputs/Alerts/warnings ([])
+  Total values captured in this file: 1
+  JIT Warning Count: 1
+  Average JIT Warning Duration: 15.757520 s
+  Max JIT Warning Duration: 15.757520 s
+    @ 29.253574 s 
+
+=== VALUE ANALYSIS RESULTS FOR akit_26-05-01_13-38-09_johnson_q67.wpilog ===
+
+Analyzing: /RealOutputs//ShooterModes/DistanceToHub when /RealOutputs/Alerts/errors = []
+  Total values captured in this file: 4
+  Samples With No Active Errors: 4
+  Average Distance To Hub (no errors): 4.910518 m
+  Max Distance To Hub (no errors): 5.984978 m
+    @ 31.433885 s 
+
+Analyzing: /RealOutputs/Alerts/errors when /RealOutputs/ShooterModes/CurrentMode = SHOOT_OTM
+  Total values captured in this file: 2
+  No numeric values found for calculations
+
+Processing: akit_26-05-01_15-45-36_johnson_q80.wpilog
+
+=== TIME ANALYSIS RESULTS FOR akit_26-05-01_15-45-36_johnson_q80.wpilog ===
+
+Analyzing: /RealOutputs/Alerts/warnings (['Please wait to enable, JITing in progress.']) -> /RealOutputs/Alerts/warnings ([])
+  Total values captured in this file: 1
+  JIT Warning Count: 1
+  Average JIT Warning Duration: 15.056404 s
+  Max JIT Warning Duration: 15.056404 s
+    @ 29.944638 s 
+
+=== VALUE ANALYSIS RESULTS FOR akit_26-05-01_15-45-36_johnson_q80.wpilog ===
+
+Analyzing: /RealOutputs//ShooterModes/DistanceToHub when /RealOutputs/Alerts/errors = []
+  Total values captured in this file: 1
+  Samples With No Active Errors: 1
+  Average Distance To Hub (no errors): 12.580687 m
+  Max Distance To Hub (no errors): 12.580687 m
+    @ 31.481839 s 
+
+Analyzing: /RealOutputs/Alerts/errors when /RealOutputs/ShooterModes/CurrentMode = SHOOT_OTM
+  Total values captured in this file: 12
+  No numeric values found for calculations
+
+Processing: akit_26-05-01_17-57-36_johnson_q89.wpilog
+
+=== TIME ANALYSIS RESULTS FOR akit_26-05-01_17-57-36_johnson_q89.wpilog ===
+
+Analyzing: /RealOutputs/Alerts/warnings (['Please wait to enable, JITing in progress.']) -> /RealOutputs/Alerts/warnings ([])
+  Total values captured in this file: 1
+  JIT Warning Count: 1
+  Average JIT Warning Duration: 15.767797 s
+  Max JIT Warning Duration: 15.767797 s
+    @ 29.247415 s 
+
+=== VALUE ANALYSIS RESULTS FOR akit_26-05-01_17-57-36_johnson_q89.wpilog ===
+
+Analyzing: /RealOutputs//ShooterModes/DistanceToHub when /RealOutputs/Alerts/errors = []
+  Total values captured in this file: 1
+  Samples With No Active Errors: 1
+  Average Distance To Hub (no errors): 5.928688 m
+  Max Distance To Hub (no errors): 5.928688 m
+    @ 29.247415 s 
+
+Analyzing: /RealOutputs/Alerts/errors when /RealOutputs/ShooterModes/CurrentMode = SHOOT_OTM
+  Total values captured in this file: 3
+  No numeric values found for calculations
+
+Processing: akit_26-05-01_20-28-19_q105.wpilog
+
+=== TIME ANALYSIS RESULTS FOR akit_26-05-01_20-28-19_q105.wpilog ===
+
+Analyzing: /RealOutputs/Alerts/warnings (['Please wait to enable, JITing in progress.']) -> /RealOutputs/Alerts/warnings ([])
+  Total values captured in this file: 1
+  JIT Warning Count: 1
+  Average JIT Warning Duration: 14.819558 s
+  Max JIT Warning Duration: 14.819558 s
+    @ 30.222461 s 
+
+=== VALUE ANALYSIS RESULTS FOR akit_26-05-01_20-28-19_q105.wpilog ===
+
+Analyzing: /RealOutputs//ShooterModes/DistanceToHub when /RealOutputs/Alerts/errors = []
+  Total values captured in this file: 2
+  Samples With No Active Errors: 2
+  Average Distance To Hub (no errors): 11.170290 m
+  Max Distance To Hub (no errors): 12.483458 m
+    @ 34.155209 s 
+
+Analyzing: /RealOutputs/Alerts/errors when /RealOutputs/ShooterModes/CurrentMode = SHOOT_OTM
+  Total values captured in this file: 2
+  No numeric values found for calculations
+
+Processing: akit_26-05-01_22-45-20_johnson_q121.wpilog
+
+=== TIME ANALYSIS RESULTS FOR akit_26-05-01_22-45-20_johnson_q121.wpilog ===
+
+Analyzing: /RealOutputs/Alerts/warnings (['Please wait to enable, JITing in progress.']) -> /RealOutputs/Alerts/warnings ([])
+No values found for this analysis
+
+=== VALUE ANALYSIS RESULTS FOR akit_26-05-01_22-45-20_johnson_q121.wpilog ===
+
+Analyzing: /RealOutputs//ShooterModes/DistanceToHub when /RealOutputs/Alerts/errors = []
+  Total values captured in this file: 4
+  Samples With No Active Errors: 4
+  Average Distance To Hub (no errors): 5.286190 m
+  Max Distance To Hub (no errors): 6.645670 m
+    @ 242.187146 s 
+
+Analyzing: /RealOutputs/Alerts/errors when /RealOutputs/ShooterModes/CurrentMode = SHOOT_OTM
+  Total values captured in this file: 3
+  No numeric values found for calculations
+
+=== AGGREGATED TIME ANALYSIS RESULTS ACROSS ALL FILES ===
+
+Aggregated Analysis: /RealOutputs/Alerts/warnings (['Please wait to enable, JITing in progress.']) -> /RealOutputs/Alerts/warnings ([])
+  Files processed: 9
+  Average matched values per file: 0.89
+  Minimum matched values in any file: 0 in akit_26-05-01_22-45-20_johnson_q121.wpilog
+  Maximum matched values in any file: 1 in akit_26-04-30_14-46-03_johnson_q12.wpilog
+  Total values captured across all files: 8
+  JIT Warning Count: 8
+  Average JIT Warning Duration: 15.696233 s
+  Max JIT Warning Duration: 16.683369 s
+    @ 28.321490 s in akit_26-04-30_22-42-16_johnson_q59.wpilog
+
+=== AGGREGATED VALUE ANALYSIS RESULTS ACROSS ALL FILES ===
+
+Aggregated Value Analysis: /RealOutputs//ShooterModes/DistanceToHub when /RealOutputs/Alerts/errors = []
+  Files processed: 9
+  Average matched values per file: 3.11
+  Minimum matched values in any file: 0 in akit_26-04-30_20-48-03_johnson_q46.wpilog
+  Maximum matched values in any file: 11 in akit_26-04-30_16-20-07_johnson_q22.wpilog
+  Total values captured across all files: 28
+  Samples With No Active Errors: 28
+  Average Distance To Hub (no errors): 7.068923 m
+  Max Distance To Hub (no errors): 15.283939 m
+    @ 299.804014 s in akit_26-04-30_16-20-07_johnson_q22.wpilog
+
+Aggregated Value Analysis: /RealOutputs/Alerts/errors when /RealOutputs/ShooterModes/CurrentMode = SHOOT_OTM
+  Files processed: 9
+  Average matched values per file: 4.78
+  Minimum matched values in any file: 2 in akit_26-04-30_20-48-03_johnson_q46.wpilog
+  Maximum matched values in any file: 12 in akit_26-05-01_15-45-36_johnson_q80.wpilog
+  Total values captured across all files: 43
+  No numeric values found for calculations

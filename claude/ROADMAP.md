@@ -80,8 +80,13 @@ records, 515 distinct entries).
 |---|---|
 | CANivore health | `/RealOutputs/CANivoreStatus/Status` (string), `ReceiveErrorCount` / `TransmitErrorCount` / `OffCount` / `TxFullCount` (int64), `Utilization` (float); same set under `/RealOutputs/CANStatus/` and `/SystemStats/CANBus/` |
 | Motor dropouts | `/<Subsystem>/Connected`, `/Elevator/ConnectedLead`, `/Elevator/ConnectedFollower`, `/Climber/Connected`, `/Drivetrain/GyroConnected` (boolean; 62 status-ish entries total) |
-| Faults | `/RealOutputs/SystemStatus/<Subsystem>/Faults` (string[]), `.../LastFault` (string), `/PowerDistribution/StickyFaults` (int64 bitfield) |
+| Faults | `/PowerDistribution/StickyFaults` (int64 bitfield) |
 | General concerns | `/RealOutputs/Alerts/errors` \| `warnings` \| `infos` (string[]) — AdvantageKit's Alerts API |
+
+`/RealOutputs/SystemStatus/<Subsystem>/Faults` also exists, but is **not a useful
+source here**: it is only populated while running system tests in the pit, and
+that workflow already has its own reporting. `Alerts/*` is the stream that matters
+for post-match checks — it is live during matches.
 
 **No robot-code changes are needed to build feature 2.** The detection work is
 already being done on-robot; the analyzer just cannot read the results.
@@ -353,8 +358,8 @@ The post-match checklist, end to end. Nothing here needs the index.
 
 | # | Step | Why | Depends on |
 |---|---|---|---|
-| A0 | **Refresh fixtures to 2026 logs** (§8) — *fixture layout done; `config2026.json` still to write* | Detector rules should be written against current entry names, not 2025 ones | — |
-| A1 | **Fix array support** (defects #1–2) | Unlocks `Alerts/*` and `SystemStatus/*/Faults` — most of feature 2's value | — |
+| A0 | ~~**Refresh fixtures to 2026 logs**~~ (§8) — **done** | Detector rules should be written against current entry names, not 2025 ones | — |
+| A1 | ~~**Fix array support**~~ (defects #1–2) — **done** | Unlocks `Alerts/*` — most of feature 2's value | — |
 | A2 | **Split computation from formatting** | Prerequisite for HTML and JSON output | — |
 | A3 | **Entry patterns / wildcards** (§6) | Detector rules are unwritable without it; shortens every config | A1 |
 | A4 | **Checks as a third analysis kind** | Replaces the manual post-match pass | A2, A3 |
@@ -382,6 +387,16 @@ The post-match checklist, end to end. Nothing here needs the index.
 `put_string_array`; `LogField` needs the matching `get_*_array`. Then extend the
 `LoggableType` dispatch in both analyzers, which currently skip anything that is
 not STRING / BOOLEAN / NUMBER.
+
+Done. Covered by the `arrays` scenario in the 2026 fixture set, which exercises
+`string[]` in all three positions: as a time-analysis start/end value, as a value
+analysis trigger (`"triggerValue": []`), and as a captured value.
+
+Scope note: this makes array entries *ingestible and capturable* — the
+prerequisite for reading `Alerts/*`. It does not make them statistically
+interesting: `average` / `min` / `max` over a list is meaningless, and
+`print_results_and_calculations` will report "no numeric values". Turning an
+alert stream into findings is A4's job, not this step's.
 
 **A3 — entry patterns.** Designed in §6; it replaces the reversed-substring
 matching rather than layering on top of it.
@@ -413,34 +428,59 @@ is cheap and the `.wpilog` files remain authoritative.
 
 ## 8. Test Fixtures and Logging Conventions
 
-The suite is currently pinned to two 2025-season logs, in two ways:
-
-- `REQUIRED_LOGS` in [tests/test_integration.py](../tests/test_integration.py#L51)
-  hardcodes the two filenames.
-- Every config references 2025 game-specific paths — `/RealOutputs/Manipulator/State`,
-  `/RealOutputs/DriveToReef/difference (reef frame)/...`, `WAITING_FOR_CORAL`.
-
-**2026 entry names will not carry over**, so a 2026 fixture set needs its own
-configs and its own goldens; the existing ones cannot simply be re-recorded
-against new logs.
-
-Suggested shape:
+**Done.** The suite is season-parameterized; see
+[tests/README.md](../tests/README.md) for the mechanics.
 
 ```
-tests/fixtures/2025/{configs,golden}/   + a manifest naming its .wpilog files
-tests/fixtures/2026/{configs,golden}/   + a manifest naming its .wpilog files
+tests/fixtures/<season>/manifest.json    logs, log folder, shipped config
+tests/fixtures/<season>/configs/*.json   extra scenarios beyond the shipped config
+tests/fixtures/<season>/golden/*.txt     recorded stdout, one per scenario
 ```
 
-with `REQUIRED_LOGS` becoming a per-set manifest and the golden tests
-parameterized over available sets — a set whose logs are absent skips, exactly as
-the whole suite does today.
+Scenarios are discovered rather than registered — a season's `shippedConfig` plus
+every `configs/*.json` — so a new case is a config plus a recorded golden. A
+season whose logs are absent skips; the manifest lists exact filenames and the
+suite flags *unexpected* logs too, since an extra file changes output and would
+invalidate the goldens.
 
-**Recommendation:** keep 2025 as a frozen regression baseline and add 2026 as the
-development baseline. The logs are gitignored, so the extra ~100 MB costs nothing
-in the repo, and it means a refactor can prove it changed nothing on old data
-while new detectors are written against current conventions. If you would rather
-retire 2025 outright, that is a one-time golden re-record — but the regression
-value goes with it.
+Two seasons are set up:
+
+| Season | Logs | Config | Role |
+|---|---:|---|---|
+| 2025 | 2 (~108 MB) | `config2025.json` | Frozen regression baseline |
+| 2026 | 9 (~387 MB) | `config2026.json` | Development baseline |
+
+The 2025 set is kept deliberately: it lets a refactor prove it changed nothing on
+old data while new work is written against current conventions.
+
+### 8.1 What the 2026 changeover cost
+
+Worth recording, because the next changeover will look the same. Entry names are
+**game-specific and do not survive a season**. Of the four entries
+`config2025.json` referenced, three vanished in 2026:
+
+| 2025 | 2026 |
+|---|---|
+| `/RealOutputs/Manipulator/State` (`SHOOT_CORAL`, `WAITING_FOR_CORAL`) | `/RealOutputs/ShooterModes/CurrentMode` (`SHOOT_OTM`, `COLLECT_AND_HOLD`, …) |
+| `/Manipulator/IsIndexerIRBlocked` | `/Shooter/FuelDetectorHasFuel` |
+| `/RealOutputs/DriveToReef/...` | gone |
+| `/RealOutputs/LEDS/state` | same entry, entirely new value set |
+
+So a season changeover is "write a new config and record new goldens", not
+"re-record". Budget for it.
+
+Three failure modes showed up while validating `config2026.json`, all of which a
+config linter (§9) would have caught before a 30-second run:
+
+- **A type mismatch that silently matches nothing** — `"12"` as a string against a
+  `double` entry. `12.0 == "12"` is `False`, so the analysis simply never fired.
+- **A filter/entry conflict** — an auto-only entry analyzed under
+  `robotMode: "teleop"`, so its records were filtered out at capture.
+- **A typo in the *robot code*, not the config** —
+  `/RealOutputs//ShooterModes/DistanceToHub` is logged with a double slash in all
+  nine files. `config2026.json` matches the log deliberately. Do not "correct" it:
+  the single-slash form captures nothing and reports no values rather than
+  erroring.
 
 **Also worth building here:** a small `.wpilog` synthesizer. A few-KB synthetic log
 committed to the repo would let the suite run anywhere without 100+ MB of
@@ -460,6 +500,12 @@ Fix these along the way — each will otherwise distort a feature above:
   A3, not a nicety.
 - **`.schema` handling assumes `struct:`** (defect #4) and will `IndexError` on a
   protobuf schema entry.
+- **No config validation.** Every failure mode in §8.1 produced a clean run with
+  empty results rather than an error, which is the worst possible feedback. A
+  linter — check each referenced entry exists in the target logs, that the
+  configured value's type matches the entry's, and that the entry is actually
+  recorded under the configured `robotMode` — would catch all three before a
+  multi-minute run. Cheap once B1's manifest exists; useful enough to do sooner.
 
 ## 10. What Must Not Regress
 

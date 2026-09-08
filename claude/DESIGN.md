@@ -319,15 +319,18 @@ lists, so peak memory scales with total captured records across all files.
 These are live bugs in the current code, listed because they shape what any new
 feature will run into.
 
-1. **`Log.put_boolean_array` / `put_number_array` / `put_string_array` do not
-   exist.** `LogField` defines them; `Log` does not. [analysis.py:425-433](../analysis.py#L425-L433)
-   calls `log.put_boolean_array(...)` for any `boolean[]` / `int64[]` / `float[]` /
-   `double[]` / `string[]` entry, and `Log._put_unknown_struct` calls them for
-   homogeneous JSON/msgpack arrays. Both paths raise `AttributeError`. Array-typed
-   entries are effectively unsupported today, despite the README listing them.
-2. **`LogField.get_boolean_array` / `get_number_array` / `get_string_array` do not
-   exist either**, so `Log.get_*_array` ([Log.py:372-386](../Log.py#L372-L386))
-   would also raise. Nothing currently calls them.
+1. ~~**`Log.put_boolean_array` / `put_number_array` / `put_string_array` do not
+   exist.**~~ **Fixed.** `LogField` defined them; `Log` did not, so every
+   `boolean[]` / `int64[]` / `float[]` / `double[]` / `string[]` entry raised
+   `AttributeError` on capture, as did `_put_unknown_struct` on homogeneous
+   JSON/msgpack arrays. All three now exist on `Log`; `put_number_array` coerces
+   `array.array` to a plain list so values compare equal to a JSON list in a config.
+2. ~~**`LogField.get_boolean_array` / `get_number_array` / `get_string_array` do
+   not exist either.**~~ **Fixed.** All three now mirror the scalar getters, so
+   `Log.get_*_array` works. Both analyzers route type dispatch through one
+   `get_field_values()` helper ([analysis.py:144](../analysis.py#L144)) that covers
+   the three scalar and three array types; adding a type is a one-line change in
+   one place rather than four if/elif chains.
 3. ~~**Copy-paste leak in the aggregated value analysis.**~~ **Fixed.** The
    aggregated value block used `all_results_by_file`, `cycle_counts`,
    `min_cycles_per_file` and `max_cycles_per_file` — variables belonging to the
@@ -346,7 +349,13 @@ feature will run into.
    *inner* per-timestamp loop, not the analysis loop, after already overwriting the
    result slot with an empty tuple — so it re-prints the skip message once per
    matching start event.
-7. ~~`README.md` documents "Python 3.6+" and lists `datetime` among used
+7. **Blank file name when every file matched nothing.** An analysis that is
+   skipped (missing fields, unsupported type) stores `("", [], [])`, so when no
+   file produced a match, `print_per_file_counts` reports
+   `Minimum matched values in any file: 0 in ` with an empty name. Visible in
+   `tests/fixtures/2025/golden/missing_entries.txt` and in the 2026 shipped-config
+   golden. Cosmetic, but it makes a skipped analysis look like a matched one.
+8. ~~`README.md` documents "Python 3.6+" and lists `datetime` among used
    modules.~~ **Fixed** — README now requires Python 3.9+, and the example output
    in it was realigned with what the code actually prints.
 

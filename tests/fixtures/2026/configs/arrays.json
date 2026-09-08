@@ -1,0 +1,62 @@
+{
+    "enabled": false,
+    "fmsAttached": false,
+    "robotMode": "both",
+    "timeAnalysis": [
+        {
+            "startEntry": "/RealOutputs/Alerts/warnings",
+            "startValue": [
+                "Please wait to enable, JITing in progress."
+            ],
+            "endEntry": "/RealOutputs/Alerts/warnings",
+            "endValue": [],
+            "calculations": [
+                {
+                    "type": "count",
+                    "name": "JIT Warning Count"
+                },
+                {
+                    "type": "average",
+                    "name": "Average JIT Warning Duration"
+                },
+                {
+                    "type": "max",
+                    "name": "Max JIT Warning Duration"
+                }
+            ]
+        }
+    ],
+    "valueAnalysis": [
+        {
+            "entry": "/RealOutputs//ShooterModes/DistanceToHub",
+            "entryUnit": "m",
+            "triggerEntry": "/RealOutputs/Alerts/errors",
+            "triggerValue": [],
+            "calculations": [
+                {
+                    "type": "count",
+                    "name": "Samples With No Active Errors"
+                },
+                {
+                    "type": "average",
+                    "name": "Average Distance To Hub (no errors)"
+                },
+                {
+                    "type": "max",
+                    "name": "Max Distance To Hub (no errors)"
+                }
+            ]
+        },
+        {
+            "entry": "/RealOutputs/Alerts/errors",
+            "triggerEntry": "/RealOutputs/ShooterModes/CurrentMode",
+            "triggerValue": "SHOOT_OTM",
+            "calculations": [
+                {
+                    "type": "count",
+                    "name": "Alert Snapshots At Shot"
+                }
+            ]
+        }
+    ]
+}

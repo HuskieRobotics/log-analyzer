@@ -141,6 +141,24 @@ class LogField:
         range_data = self.get_range(start, end)
         return LogValueSetString(range_data.timestamps, range_data.values)
     
+    def get_boolean_array(self, start: float, end: float) -> Optional[LogValueSetBooleanArray]:
+        if self.type != LoggableType.BOOLEAN_ARRAY:
+            return None
+        range_data = self.get_range(start, end)
+        return LogValueSetBooleanArray(range_data.timestamps, range_data.values)
+
+    def get_number_array(self, start: float, end: float) -> Optional[LogValueSetNumberArray]:
+        if self.type != LoggableType.NUMBER_ARRAY:
+            return None
+        range_data = self.get_range(start, end)
+        return LogValueSetNumberArray(range_data.timestamps, range_data.values)
+
+    def get_string_array(self, start: float, end: float) -> Optional[LogValueSetStringArray]:
+        if self.type != LoggableType.STRING_ARRAY:
+            return None
+        range_data = self.get_range(start, end)
+        return LogValueSetStringArray(range_data.timestamps, range_data.values)
+
     # Putters for different types
     def put_raw(self, timestamp: float, value: bytes) -> None:
         """Writes a new Raw value to the field."""
@@ -421,6 +439,30 @@ class Log:
         if self.fields[key].get_type() == LoggableType.STRING:
             self._process_timestamp(key, timestamp)
     
+    def put_boolean_array(self, key: str, timestamp: float, value: List[bool]) -> None:
+        """Writes a new BooleanArray value to the field."""
+        self.create_blank_field(key, LoggableType.BOOLEAN_ARRAY)
+        self.fields[key].put_boolean_array(timestamp, list(value))
+        if self.fields[key].get_type() == LoggableType.BOOLEAN_ARRAY:
+            self._process_timestamp(key, timestamp)
+
+    def put_number_array(self, key: str, timestamp: float, value: List[float]) -> None:
+        """Writes a new NumberArray value to the field."""
+        self.create_blank_field(key, LoggableType.NUMBER_ARRAY)
+        # datalog hands back an array.array for numeric arrays, which never
+        # compares equal to the JSON list a config would specify. Store a plain
+        # list so `values[i] == configured_value` behaves like the scalar cases.
+        self.fields[key].put_number_array(timestamp, list(value))
+        if self.fields[key].get_type() == LoggableType.NUMBER_ARRAY:
+            self._process_timestamp(key, timestamp)
+
+    def put_string_array(self, key: str, timestamp: float, value: List[str]) -> None:
+        """Writes a new StringArray value to the field."""
+        self.create_blank_field(key, LoggableType.STRING_ARRAY)
+        self.fields[key].put_string_array(timestamp, list(value))
+        if self.fields[key].get_type() == LoggableType.STRING_ARRAY:
+            self._process_timestamp(key, timestamp)
+
     def put_json(self, key: str, timestamp: float, value: str) -> None:
         """Writes a JSON-encoded string value to the field."""
         self.put_string(key, timestamp, value)

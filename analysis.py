@@ -164,6 +164,29 @@ def print_per_file_counts(results: List[Tuple[str, List[Union[int, float, str, b
     print(f"  Minimum matched values in any file: {min_count} in {results[counts.index(min_count)][0]}")
     print(f"  Maximum matched values in any file: {max_count} in {results[counts.index(max_count)][0]}")
 
+def get_field_values(field, start: float, end: float):
+    """Read a field's values over a time range, whatever its logged type.
+
+    Args:
+        field: The LogField to read
+        start: Range start (exclusive)
+        end: Range end (inclusive)
+
+    Returns:
+        The field's LogValueSet over the range, or None if its type is one the
+        analyzers cannot compare against a configured value.
+    """
+    getters = {
+        LoggableType.STRING: field.get_string,
+        LoggableType.BOOLEAN: field.get_boolean,
+        LoggableType.NUMBER: field.get_number,
+        LoggableType.BOOLEAN_ARRAY: field.get_boolean_array,
+        LoggableType.NUMBER_ARRAY: field.get_number_array,
+        LoggableType.STRING_ARRAY: field.get_string_array,
+    }
+    getter = getters.get(field.get_type())
+    return getter(start, end) if getter else None
+
 def analyze_file_records(log: Log, log_file_name: str, time_analysis_configs: List[Dict[str, Any]]) -> Dict[int, Tuple[str, List[float], List[float]]]:
     """
     Analyze file records and return time differences and start timestamps for each analysis configuration.
@@ -201,13 +224,8 @@ def analyze_file_records(log: Log, log_file_name: str, time_analysis_configs: Li
             all_analysis_results[analysis_idx] = ("", [], [])
             continue
 
-        if start_field.get_type() == LoggableType.STRING:
-            start_log_values = start_field.get_string(0.0, log.get_last_timestamp())
-        elif start_field.get_type() == LoggableType.BOOLEAN:
-            start_log_values = start_field.get_boolean(0.0, log.get_last_timestamp())
-        elif start_field.get_type() == LoggableType.NUMBER:
-            start_log_values = start_field.get_number(0.0, log.get_last_timestamp())
-        else:
+        start_log_values = get_field_values(start_field, 0.0, log.get_last_timestamp())
+        if start_log_values is None:
             print(f"  Skipping analysis {analysis_idx} due to unsupported type for: {start_entry} of {start_field.get_type()}")
             all_analysis_results[analysis_idx] = ("", [], [])
             continue
@@ -223,13 +241,8 @@ def analyze_file_records(log: Log, log_file_name: str, time_analysis_configs: Li
                         next_timestamp = next_ts
                         break
 
-                if end_field.get_type() == LoggableType.STRING:
-                    end_log_values = end_field.get_string(start_timestamp, next_timestamp)
-                elif end_field.get_type() == LoggableType.BOOLEAN:
-                    end_log_values = end_field.get_boolean(start_timestamp, next_timestamp)
-                elif end_field.get_type() == LoggableType.NUMBER:
-                    end_log_values = end_field.get_number(start_timestamp, next_timestamp)
-                else:
+                end_log_values = get_field_values(end_field, start_timestamp, next_timestamp)
+                if end_log_values is None:
                     print(f"  Skipping analysis {analysis_idx} due to unsupported type for: {end_entry} of {end_field.get_type()}")
                     all_analysis_results[analysis_idx] = ("", [], [])
                     continue
@@ -281,13 +294,8 @@ def analyze_value_records(log: Log, log_file_name: str, value_analysis_configs: 
             all_value_results[analysis_idx] = ("", [], [])
             continue
 
-        if trigger_field.get_type() == LoggableType.STRING:
-            trigger_log_values = trigger_field.get_string(0.0, log.get_last_timestamp())
-        elif trigger_field.get_type() == LoggableType.BOOLEAN:
-            trigger_log_values = trigger_field.get_boolean(0.0, log.get_last_timestamp())
-        elif trigger_field.get_type() == LoggableType.NUMBER:
-            trigger_log_values = trigger_field.get_number(0.0, log.get_last_timestamp())
-        else:
+        trigger_log_values = get_field_values(trigger_field, 0.0, log.get_last_timestamp())
+        if trigger_log_values is None:
             print(f"  Skipping analysis {analysis_idx} due to unsupported type for: {trigger_entry} of {trigger_field.get_type()}")
             all_value_results[analysis_idx] = ("", [], [])
             continue
@@ -298,13 +306,8 @@ def analyze_value_records(log: Log, log_file_name: str, value_analysis_configs: 
             if trigger_log_values.values[i] == trigger_value:
                 end_timestamp = timestamp
                 
-                if field.get_type() == LoggableType.STRING:
-                    log_values = field.get_string(start_timestamp, end_timestamp)
-                elif field.get_type() == LoggableType.BOOLEAN:
-                    log_values = field.get_boolean(start_timestamp, end_timestamp)
-                elif field.get_type() == LoggableType.NUMBER:
-                    log_values = field.get_number(start_timestamp, end_timestamp)
-                else:
+                log_values = get_field_values(field, start_timestamp, end_timestamp)
+                if log_values is None:
                     print(f"  Skipping analysis {analysis_idx} due to unsupported type for: {entry_name} of {field.get_type()}")
                     all_value_results[analysis_idx] = ("", [], [])
                     continue
