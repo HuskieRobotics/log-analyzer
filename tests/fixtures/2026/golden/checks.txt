@@ -31,13 +31,6 @@ Processing: akit_26-04-30_14-46-03_johnson_q12.wpilog
   [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Intake/RollerConnectedLead)
     is False, expected True
       x4, first @ 208.350400 s
-  [WARNING] Alert reported as warning (/RealOutputs/Alerts/warnings)
-    No operator controller(s) connected.
-      @ 23.858945 s
-    Non-competition operator controller connected.
-      @ 23.858945 s
-    Please wait to enable, JITing in progress.
-      x2, first @ 23.858945 s
 
 Processing: akit_26-04-30_16-20-07_johnson_q22.wpilog
 
@@ -96,13 +89,6 @@ Processing: akit_26-04-30_16-20-07_johnson_q22.wpilog
   [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Shooter/TurretConnected)
     is False, expected True
       x3, first @ 264.002811 s
-  [WARNING] Alert reported as warning (/RealOutputs/Alerts/warnings)
-    No operator controller(s) connected.
-      @ 23.071590 s
-    Non-competition operator controller connected.
-      @ 23.071590 s
-    Please wait to enable, JITing in progress.
-      x2, first @ 23.071590 s
 
 Processing: akit_26-04-30_20-48-03_johnson_q46.wpilog
 
@@ -128,13 +114,6 @@ Processing: akit_26-04-30_20-48-03_johnson_q46.wpilog
   [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Vision/BR/Connected)
     is False, expected True
       @ 212.708341 s
-  [WARNING] Alert reported as warning (/RealOutputs/Alerts/warnings)
-    No operator controller(s) connected.
-      @ 26.519023 s
-    Non-competition operator controller connected.
-      @ 26.519023 s
-    Please wait to enable, JITing in progress.
-      x2, first @ 26.519023 s
 
 Processing: akit_26-04-30_22-42-16_johnson_q59.wpilog
 
@@ -160,9 +139,6 @@ Processing: akit_26-04-30_22-42-16_johnson_q59.wpilog
   [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Vision/BR/Connected)
     is False, expected True
       x3, first @ 386.813782 s
-  [WARNING] Alert reported as warning (/RealOutputs/Alerts/warnings)
-    Please wait to enable, JITing in progress.
-      @ 28.321490 s
 
 Processing: akit_26-05-01_13-38-09_johnson_q67.wpilog
 
@@ -188,13 +164,6 @@ Processing: akit_26-05-01_13-38-09_johnson_q67.wpilog
   [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Vision/BR/Connected)
     is False, expected True
       @ 378.349808 s
-  [WARNING] Alert reported as warning (/RealOutputs/Alerts/warnings)
-    No operator controller(s) connected.
-      @ 24.271248 s
-    Non-competition operator controller connected.
-      @ 24.271248 s
-    Please wait to enable, JITing in progress.
-      x2, first @ 24.271248 s
 
 Processing: akit_26-05-01_15-45-36_johnson_q80.wpilog
 
@@ -220,13 +189,6 @@ Processing: akit_26-05-01_15-45-36_johnson_q80.wpilog
   [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Vision/BCL/Connected)
     is False, expected True
       x18, first @ 372.465806 s
-  [WARNING] Alert reported as warning (/RealOutputs/Alerts/warnings)
-    No operator controller(s) connected.
-      @ 23.971167 s
-    Non-competition operator controller connected.
-      @ 23.971167 s
-    Please wait to enable, JITing in progress.
-      x2, first @ 23.971167 s
 
 Processing: akit_26-05-01_17-57-36_johnson_q89.wpilog
 
@@ -241,12 +203,8 @@ Processing: akit_26-05-01_17-57-36_johnson_q89.wpilog
   [ERROR] Camera frames (/RealOutputs/Vision/FRONT/sending frames)
     entry not present in this log
   [WARNING] Alert reported as warning (/RealOutputs/Alerts/warnings)
-    No operator controller(s) connected.
-      @ 23.260792 s
     Non-competition operator controller connected.
-      x2, first @ 23.260792 s
-    Please wait to enable, JITing in progress.
-      x2, first @ 23.260792 s
+      @ 455.742040 s
 
 Processing: akit_26-05-01_20-28-19_q105.wpilog
 
@@ -254,13 +212,6 @@ Processing: akit_26-05-01_20-28-19_q105.wpilog
 
   [ERROR] Camera frames (/RealOutputs/Vision/FRONT/sending frames)
     entry not present in this log
-  [WARNING] Alert reported as warning (/RealOutputs/Alerts/warnings)
-    No operator controller(s) connected.
-      @ 24.310019 s
-    Non-competition operator controller connected.
-      @ 24.310019 s
-    Please wait to enable, JITing in progress.
-      x2, first @ 24.310019 s
 
 Processing: akit_26-05-01_22-45-20_johnson_q121.wpilog
 
@@ -274,13 +225,6 @@ Processing: akit_26-05-01_22-45-20_johnson_q121.wpilog
       @ 308.094851 s
   [ERROR] Camera frames (/RealOutputs/Vision/FRONT/sending frames)
     entry not present in this log
-  [WARNING] Alert reported as warning (/RealOutputs/Alerts/warnings)
-    No operator controller(s) connected.
-      x2, first @ 23.876908 s
-    Non-competition operator controller connected.
-      x2, first @ 23.876908 s
-    Please wait to enable, JITing in progress.
-      @ 23.876908 s
 
 === AGGREGATED CHECK RESULTS ACROSS ALL FILES ===
 
@@ -351,9 +295,5 @@ Processing: akit_26-05-01_22-45-20_johnson_q121.wpilog
     is False, expected True
       x5, in 3 files, first @ 212.708341 s, in akit_26-04-30_20-48-03_johnson_q46.wpilog
   [WARNING] Alert reported as warning (/RealOutputs/Alerts/warnings)
-    No operator controller(s) connected.
-      x9, in 8 files, first @ 23.858945 s, in akit_26-04-30_14-46-03_johnson_q12.wpilog
     Non-competition operator controller connected.
-      x10, in 8 files, first @ 23.858945 s, in akit_26-04-30_14-46-03_johnson_q12.wpilog
-    Please wait to enable, JITing in progress.
-      x16, in 9 files, first @ 23.858945 s, in akit_26-04-30_14-46-03_johnson_q12.wpilog
+      @ 455.742040 s, in akit_26-05-01_17-57-36_johnson_q89.wpilog

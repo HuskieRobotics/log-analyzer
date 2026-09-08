@@ -4,16 +4,26 @@
     "robotMode": "both",
     "checks": [
         {
+            "name": "Robot never enabled",
+            "entry": "/DriverStation/Enabled",
+            "expect": {
+                "atLeastOnce": true
+            },
+            "severity": "error"
+        },
+        {
             "name": "Alert reported as error",
             "entry": "/RealOutputs/Alerts/errors",
             "expect": "empty",
-            "severity": "error"
+            "severity": "error",
+            "while": "afterFirstEnable"
         },
         {
             "name": "Alert reported as warning",
             "entry": "/RealOutputs/Alerts/warnings",
             "expect": "empty",
-            "severity": "warning"
+            "severity": "warning",
+            "while": "afterFirstEnable"
         },
         {
             "name": "Camera frames",
@@ -48,7 +58,8 @@
             "expect": {
                 "always": "OK"
             },
-            "severity": "error"
+            "severity": "error",
+            "while": "afterFirstEnable"
         },
         {
             "name": "Intake roller stalled",
@@ -56,7 +67,8 @@
             "expect": {
                 "always": false
             },
-            "severity": "warning"
+            "severity": "warning",
+            "while": "afterFirstEnable"
         }
     ]
 }

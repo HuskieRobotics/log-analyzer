@@ -96,6 +96,65 @@ class ExpectAlwaysTest(unittest.TestCase):
         self.assertEqual(findings[0].occurrences, 2)
 
 
+class AfterFirstEnableGateTest(unittest.TestCase):
+    """Boot noise recurs every match and hides real problems, but gating strictly
+    on "enabled" discards sticky faults, which surface after the fact."""
+
+    def rule(self, gate):
+        return [{"name": "Alert", "entry": "/Alerts/errors", "expect": "empty",
+                 "severity": "error", "while": gate}]
+
+    def match_log(self):
+        """Boot, then enabled, then disabled again - one match."""
+        log = log_with_enabled([(0.0, False), (10.0, True), (20.0, False)])
+        log.put_string_array("/Alerts/errors", 5.0, ["JITing in progress"])
+        log.put_string_array("/Alerts/errors", 15.0, ["camera dropped frames"])
+        log.put_string_array("/Alerts/errors", 25.0, ["[STICKY] Bridge was disabled"])
+        return log
+
+    def details(self, gate):
+        findings = compute_checks(self.match_log(), "a.wpilog", self.rule(gate)).findings
+        return sorted(f.detail for f in findings)
+
+    def test_boot_noise_is_excluded(self):
+        self.assertNotIn("JITing in progress", self.details("afterFirstEnable"))
+
+    def test_faults_reported_after_the_match_are_kept(self):
+        # The case a strict "enabled" gate loses.
+        self.assertIn("[STICKY] Bridge was disabled", self.details("afterFirstEnable"))
+
+    def test_enabled_gate_would_drop_that_fault(self):
+        self.assertNotIn("[STICKY] Bridge was disabled", self.details("enabled"))
+
+    def test_alerts_during_the_enabled_window_are_kept_either_way(self):
+        for gate in ("enabled", "afterFirstEnable"):
+            self.assertIn("camera dropped frames", self.details(gate))
+
+    def test_ungated_keeps_everything(self):
+        self.assertEqual(len(self.details("any")), 3)
+
+    def test_a_sample_exactly_at_first_enable_is_included(self):
+        log = log_with_enabled([(0.0, False), (10.0, True)])
+        log.put_string_array("/Alerts/errors", 10.0, ["right at enable"])
+        self.assertEqual(len(compute_checks(
+            log, "a.wpilog", self.rule("afterFirstEnable")).findings), 1)
+
+    def test_a_log_where_the_robot_never_enabled_reports_nothing(self):
+        """Which is why "robot never enabled" must be a rule of its own."""
+        log = log_with_enabled([(0.0, False)])
+        log.put_string_array("/Alerts/errors", 5.0, ["boot noise"])
+        self.assertEqual(compute_checks(
+            log, "a.wpilog", self.rule("afterFirstEnable")).findings, [])
+
+    def test_never_enabled_is_itself_detectable(self):
+        log = log_with_enabled([(0.0, False)])
+        rule = [{"name": "Robot never enabled", "entry": "/DriverStation/Enabled",
+                 "expect": {"atLeastOnce": True}, "severity": "error"}]
+        findings = compute_checks(log, "a.wpilog", rule).findings
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].detail, "never reached True")
+
+
 class AbsenceTest(unittest.TestCase):
     """The half that scanning cannot express: what did not happen."""
 

@@ -24,10 +24,12 @@ After an intentional output change, re-record and review the diff:
 import difflib
 import json
 import os
+import tempfile
 import subprocess
 import sys
 import unittest
 from pathlib import Path
+from xml.etree import ElementTree
 
 TESTS_DIR = Path(__file__).resolve().parent
 REPO_ROOT = TESTS_DIR.parent
@@ -208,7 +210,8 @@ class ArgumentHandlingTest(unittest.TestCase):
     def test_no_arguments_exits_nonzero(self):
         result = self.run_cli()
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Usage:", result.stderr)
+        self.assertIn("usage:", result.stderr)
+        self.assertIn("log_folder", result.stderr)
 
     def test_missing_log_folder_exits_nonzero(self):
         result = self.run_cli("no_such_folder", str(self.any_shipped_config()))
@@ -224,6 +227,123 @@ class ArgumentHandlingTest(unittest.TestCase):
         result = self.run_cli(str(FIXTURES_DIR), str(self.any_shipped_config()))
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("No log files found", result.stderr)
+
+
+class ReportArtifactTest(unittest.TestCase):
+    """--html and --json must produce valid artifacts from a real run.
+
+    The unit tests cover the emitters; this covers the wiring that fills the
+    report while main() runs, which they cannot reach.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        available = [s for s in discover_seasons() if not s.log_problems()]
+        if not available:
+            raise unittest.SkipTest("no season fixtures with logs present")
+        cls.season = available[0]
+        cls._tmp = tempfile.TemporaryDirectory()
+        folder = Path(cls._tmp.name)
+        cls.html_path = folder / "report.html"
+        cls.json_path = folder / "report.json"
+        completed = subprocess.run(
+            [sys.executable, str(ANALYSIS), str(cls.season.log_dir),
+             str(cls.season.shipped_config),
+             "--html", str(cls.html_path), "--json", str(cls.json_path),
+             "--refresh", "15"],
+            cwd=str(REPO_ROOT), capture_output=True, text=True,
+            timeout=RUN_TIMEOUT_SECONDS)
+        if completed.returncode != 0:
+            raise AssertionError(f"analysis.py failed:\n{completed.stderr}")
+        cls.stdout = completed.stdout
+
+    @classmethod
+    def tearDownClass(cls):
+        if hasattr(cls, "_tmp"):
+            cls._tmp.cleanup()
+
+    def test_both_artifacts_are_written(self):
+        self.assertTrue(self.html_path.is_file())
+        self.assertTrue(self.json_path.is_file())
+        self.assertIn("Wrote HTML report", self.stdout)
+        self.assertIn("Wrote JSON report", self.stdout)
+
+    def test_json_describes_the_run(self):
+        data = json.loads(self.json_path.read_text())
+        self.assertEqual(len(data["files"]), len(self.season.expected_logs))
+        self.assertIn("filters", data)
+        self.assertTrue(data["generated_at"])
+
+    def test_html_is_self_contained_and_well_formed(self):
+        page = self.html_path.read_text()
+        for forbidden in ("http://", "https://", "<script", " src=", "fetch("):
+            self.assertNotIn(forbidden, page)
+        self.assertIn('content="15"', page)
+        body = page[page.index("<body>"):page.index("</body>") + len("</body>")]
+        ElementTree.fromstring(body)
+
+    def test_html_names_every_log_file(self):
+        page = self.html_path.read_text()
+        for name in self.season.expected_logs:
+            self.assertIn(name, page)
+
+
+class LatestFlagTest(unittest.TestCase):
+    """--latest must narrow a whole folder to one match, end to end."""
+
+    @classmethod
+    def setUpClass(cls):
+        available = [s for s in discover_seasons()
+                     if not s.log_problems() and len(s.expected_logs) > 1]
+        if not available:
+            raise unittest.SkipTest("no multi-log season fixture present")
+        cls.season = available[0]
+        cls._tmp = tempfile.TemporaryDirectory()
+        cls.json_path = Path(cls._tmp.name) / "report.json"
+        cls.html_path = Path(cls._tmp.name) / "report.html"
+        completed = subprocess.run(
+            [sys.executable, str(ANALYSIS), str(cls.season.log_dir),
+             str(cls.season.shipped_config), "--latest",
+             "--json", str(cls.json_path), "--html", str(cls.html_path)],
+            cwd=str(REPO_ROOT), capture_output=True, text=True,
+            timeout=RUN_TIMEOUT_SECONDS)
+        if completed.returncode != 0:
+            raise AssertionError(f"analysis.py failed:\n{completed.stderr}")
+        cls.stdout = completed.stdout
+
+    @classmethod
+    def tearDownClass(cls):
+        if hasattr(cls, "_tmp"):
+            cls._tmp.cleanup()
+
+    def newest_expected(self):
+        # Names embed their recording time, so lexical order is chronological.
+        return sorted(self.season.expected_logs)[-1]
+
+    def test_only_one_file_is_analyzed(self):
+        data = json.loads(self.json_path.read_text())
+        self.assertEqual(len(data["files"]), 1)
+
+    def test_it_is_the_most_recent_one(self):
+        data = json.loads(self.json_path.read_text())
+        self.assertEqual(data["files"][0]["name"], self.newest_expected())
+
+    def test_stdout_says_what_it_did(self):
+        self.assertIn("most recent match", self.stdout)
+        self.assertIn(self.newest_expected(), self.stdout)
+
+    def test_the_page_names_the_match_it_is_showing(self):
+        # A screen left open must make clear which match it is displaying.
+        page = self.html_path.read_text()
+        self.assertIn(self.newest_expected(), page)
+        self.assertIn("most recent match", page)
+
+    def test_older_matches_are_absent(self):
+        data = json.loads(self.json_path.read_text())
+        older = [n for n in self.season.expected_logs if n != self.newest_expected()]
+        rendered = json.dumps(data)
+        for name in older:
+            self.assertNotIn(name, rendered)
 
 
 if __name__ == "__main__":

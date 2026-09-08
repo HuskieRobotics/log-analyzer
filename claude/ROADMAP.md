@@ -24,6 +24,8 @@ logs in ~7 s; golden suite in [tests/](../tests/) is green).
    or a signal that never reached its expected state.
 7. **Threshold and duration checks** — flag a value past a limit and report for
    how long and across how many intervals (elevated motor temperatures).
+8. **Comparative checks** — flag a value that is unusual *for this robot*: a motor
+   running hotter than it normally does, as an early warning of failure.
 
 ## 2. How the Tool Is Used
 
@@ -116,7 +118,7 @@ Two findings worth carrying forward:
   Alerts stream first and treat status/counter fields as corroboration.
 - **`Connected` never went false while enabled in either file.** The motor-dropout
   detectors have no positive fixture yet — a green result would be
-  indistinguishable from a broken detector. See §10.
+  indistinguishable from a broken detector. See §11.
 
 ### 3.3 The blocker
 
@@ -496,7 +498,172 @@ temperature excursions; they want to know whether any happened and how bad. Usin
 `compute_checks`'s finding shape keeps it in the pit report beside the alerts and
 dropouts, where it will actually be read.
 
-## 9. Sequence
+## 9. Comparative Checks
+
+Feature 8. "Is this motor running hotter than usual?" — the question that turns a
+report from *what went wrong* into *what is about to*.
+
+There are two ways to answer it, and measurement says the cheaper one is also the
+better one.
+
+### 9.1 Sibling comparison beats historical, and needs no history
+
+Peak drive-motor temperature, all nine 2026 matches:
+
+| Entry | q12 | q22 | q46 | q59 | q67 | q80 | q89 | q105 | q121 |
+|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|
+| `/Drivetrain/FL/DriveTemp` | 46 | 42 | 46 | 45 | 48 | 44 | 47 | 44 | 44 |
+| `/Drivetrain/FR/DriveTemp` | 45 | 42 | 48 | 46 | 48 | 45 | 49 | 45 | 47 |
+| `/Drivetrain/BL/DriveTemp` | 45 | 42 | 46 | 45 | 47 | 42 | 47 | 44 | 44 |
+| `/Drivetrain/BR/DriveTemp` | 45 | 44 | 47 | 46 | 49 | 42 | 48 | 45 | 45 |
+
+- Spread **across the four motors within one match**: 1–3 °C.
+- Spread **across matches for one motor**: 5–7 °C.
+
+Sibling comparison is **2.3x tighter**. The reason is visible in the table: match
+variation is *correlated across motors* — q22 is cool everywhere (42/42/42/44),
+q67 hot everywhere (48/48/47/49). Ambient temperature, match intensity and how
+long the robot was enabled move every motor together. Comparing a motor to its own
+history mixes that confounder in; comparing it to its siblings cancels it.
+
+Sibling comparison also **works from the first match of an event**, needs no
+index, and A3's wildcards already produce the sibling set from
+`/Drivetrain/*/DriveTemp`. It should be built first.
+
+### 9.2 What historical comparison adds
+
+Sibling comparison is blind to anything that degrades every sibling equally — a
+battery losing capacity, a drivetrain-wide gearbox issue, a hotter venue. Only
+history catches those, so it is worth having, with two cautions.
+
+**Small n.** A qualification schedule is 8–12 matches. Two-sigma outlier detection
+is unreliable there: measured while building A2's tests, five points with one
+extreme inflate the standard deviation past the extreme's own deviation, so the
+outlier hides itself. Prefer robust statistics (median and MAD), or better, just
+**show the comparison** — "peak 71 °C, previous matches 42–49 °C" is more use to
+someone in a pit than a binary verdict.
+
+**Baseline scope.** Restrict it to the same event by default; ambient conditions
+differ between venues. The event name is already in the log filename
+(`akit_26-05-01_22-45-20_johnson_q121`).
+
+### 9.3 A trend is not an outlier
+
+"Hotter than usual" is two different findings:
+
+- a **step change** — something broke between matches;
+- a **monotonic trend** — something is wearing out.
+
+The second is the actual pre-failure signal, and an outlier test misses it
+entirely, because each match is only slightly worse than the last and never
+deviates enough on its own. That needs a separate rule kind: is the slope over the
+last *k* matches positive and beyond a threshold?
+
+### 9.4 Normalise before comparing
+
+Measured, the same motors by *rise* above their starting temperature: 19–30 °C,
+against peaks of 42–49 °C. Similar relative spread, but rise removes the
+starting-temperature component — which matters directly for back-to-back matches,
+where the robot starts warm. Prefer rise over absolute peak, and consider
+normalising by enabled time so a match cut short does not read as an improvement.
+
+### 9.5 Shape
+
+```json
+{
+    "name": "Drive motor hotter than its peers",
+    "entry": "/Drivetrain/*/DriveTemp",
+    "compare": "siblings",
+    "statistic": "rise",
+    "deviation": {"aboveSiblingsBy": 8},
+    "severity": "warning"
+}
+```
+
+```json
+{
+    "name": "Drive motor hotter than usual",
+    "entry": "/Drivetrain/*/DriveTemp",
+    "compare": "history",
+    "scope": "event",
+    "statistic": "rise",
+    "deviation": {"aboveBaselineBy": 10},
+    "minimumBaseline": 3,
+    "severity": "warning"
+}
+```
+
+`statistic` reduces a match to one number per entry — `peak`, `rise`, `mean`,
+`timeAbove` (§8), or a finding count. That per-match summary is exactly what B1's
+numeric manifest already proposes to store, so the two features share a data
+structure.
+
+### 9.6 Motors with no sibling
+
+Sibling comparison covers the drive, steer and flywheel motors. The spindexer,
+kicker, turret, hood, deployer and climber are singletons, and **no cheap
+substitute was found**. Two candidates were measured over the nine 2026 matches,
+using coefficient of variation of the per-match temperature rise:
+
+| Metric | Spindexer | Kicker |
+|---|---:|---:|
+| Raw rise | 0.164 | 0.221 |
+| Normalised by drivetrain mean rise | 0.161 | **0.307** |
+| Normalised by work done (°C per kA·s of stator current) | **0.150** | 0.215 |
+| *(drive motors, for reference)* | *0.089* | |
+
+**Normalising against the drivetrain fails**, and makes the kicker worse. The
+drivetrain is not a proxy for hopper duty: q22 had the coolest drivetrain (20.2 °C
+rise) and the hottest kicker (25 °C) — heavy shooting, light driving. For a
+singleton the confounder is not ambient, it is **workload**, and workload differs
+per mechanism.
+
+**Normalising by work barely tightens the distribution either**, which is the
+honest result. Temperature is logged at 1 °C resolution against rises of only
+12–25 °C, thermal lag means peak rise depends on *when* the work happened rather
+than only how much, and nine matches is a thin basis for a variance estimate.
+
+But it does change **which** match looks anomalous, and that is worth having:
+
+| Match | Spindexer rise | Work (A·s) | °C per kA·s |
+|---|---:|---:|---:|
+| q105 | **20.0** (highest) | 3017 (highest) | 6.63 (unremarkable) |
+| q67 | 15.0 | 1483 (lowest) | **10.12** (highest) |
+
+Raw rise flags q105, which simply did the most work — a false positive.
+Work-normalised flags q67, which independently contains the brownout that
+disabled every motor bridge. Normalising did not reduce the noise, but it made the
+metric *mean* something: heat for the same work is degradation, heat from more
+work is not.
+
+**Practical consequence — say the sensitivity out loud.** With CV around 0.16–0.22
+and mean rises of 14–17 °C, one standard deviation is 2.4–3.7 °C, so a
+single-match threshold has to sit near 7–11 °C to avoid false positives. Sibling
+comparison resolves roughly 4 °C. **Singletons are 2–3x less sensitive**, and a
+rule that pretends otherwise will cry wolf every event.
+
+So for singletons, in order of dependability:
+
+1. **Absolute thresholds (§8).** For a motor with no peer, "above 70 °C for more
+   than 30 s" is more dependable than any comparison, needs no baseline, and the
+   manufacturer publishes the limit.
+2. **Trend across matches (§9.3).** A trend is detectable where a single-match
+   outlier is not, because it is fitted across *k* points instead of testing one.
+   This is the strongest argument for the trend rule, and it applies specifically
+   to the motors sibling comparison cannot reach.
+3. **Trend in work-normalised units.** Combining the two: a rising °C-per-kA·s
+   means the motor is getting hotter *for the same work*, which is what a failing
+   bearing or a shorted winding looks like. A rising raw temperature may only mean
+   the mechanism is being used more.
+
+### 9.7 Cold start must be visible
+
+The first match of an event has no baseline, and neither does a newly added entry.
+That must report "no baseline yet" rather than nothing — a silent pass is
+indistinguishable from a clean result, the same trap as §7.1. `minimumBaseline`
+guards it.
+
+## 10. Sequence
 
 ### Milestone A — Pit mode
 
@@ -504,15 +671,17 @@ The post-match checklist, end to end. Nothing here needs the index.
 
 | # | Step | Why | Depends on |
 |---|---|---|---|
-| A0 | ~~**Refresh fixtures to 2026 logs**~~ (§10) — **done** | Detector rules should be written against current entry names, not 2025 ones | — |
+| A0 | ~~**Refresh fixtures to 2026 logs**~~ (§11) — **done** | Detector rules should be written against current entry names, not 2025 ones | — |
 | A1 | ~~**Fix array support**~~ (defects #1–2) — **done** | Unlocks `Alerts/*` — most of feature 2's value | — |
 | A2 | ~~**Split computation from formatting**~~ — **done** | Prerequisite for HTML and JSON output | — |
 | A3 | ~~**Entry patterns / wildcards**~~ (§6) — **done** | Detector rules are unwritable without it; shortens every config | A1 |
 | A4 | ~~**Checks as a third analysis kind**~~, incl. absence checks (§7) — **done** | Replaces the manual post-match pass | A2, A3 |
 | A5 | ~~**roboRIO sync**~~ — **done** (`sync_logs.py`) | First link in the pit chain (§2.2) | — |
-| A6 | **HTML + JSON emitters** | The pit screen itself (§5.1) | A2, A4 |
+| A6 | ~~**HTML + JSON emitters**~~ — **done** (`report_output.py`) | The pit screen itself (§5.1) | A2, A4 |
 | A7 | **Watch mode** | Closes the pit chain: no commands typed between matches | A5, A6 |
 | A8 | **Threshold / duration checks** (§8) | Motor temperature exposure; the one concern class checks cannot yet express | A4 |
+| A9 | **Sibling comparison** (§9.1) | "hotter than its peers" — 2.3x tighter than history and needs none | A3, A8 |
+| A10 | **Absolute thresholds for singletons** (§9.6) | The dependable option for motors with no peer; §8 already provides the mechanism | A8 |
 
 ### Milestone B — Library / practice mode
 
@@ -520,7 +689,7 @@ The post-match checklist, end to end. Nothing here needs the index.
 |---|---|---|---|
 | B1 | **Extract / index layer** (SQLite) | Makes search viable, checks instant across a season | A2 |
 | B2 | **Event search** (feature 3) | The reason the index exists | B1 |
-| B3 | **Baseline comparison** | "Is this match worse than our normal?" — needs history | B1, A4 |
+| B3 | **Historical comparison and trends** (§9.2–9.3, §9.6) | Catches what sibling comparison cannot: wear affecting every peer equally, and slow trends | B1, A9 |
 
 ### Milestone C — Optional
 
@@ -560,7 +729,7 @@ stanzas byte for byte.
 Two things learned in the build, both worth keeping in mind:
 
 - **Interior empty segments are significant.** Normalising `//` away broke the
-  `/RealOutputs//ShooterModes/DistanceToHub` match (§10.1); only the leading
+  `/RealOutputs//ShooterModes/DistanceToHub` match (§11.1); only the leading
   slash's empty segment is dropped.
 - **Expansion order must be sorted, not first-seen.** Expanding per file means the
   first log decides the order, and the first 2026 log lacks BCL — which put the
@@ -586,6 +755,44 @@ Expectations, covering both halves of §7:
 | `{"always": V}` | any sample differs from V |
 | `{"never": V}` | any sample equals V |
 | `{"atLeastOnce": V}` | no sample ever equals V |
+
+Gates, via `"while"`:
+
+| Gate | Samples considered |
+|---|---|
+| `"any"` (default) | all of them |
+| `"enabled"` | only while the robot is enabled |
+| `"disabled"` | only while it is not |
+| `"afterFirstEnable"` | everything from the first enable onward |
+
+**`afterFirstEnable` is usually the right one for a post-match report, and the
+obvious choice — `enabled` — is a trap.** Measured over the nine 2026 logs, the
+alert stream holds 2,835 occurrences of 46 distinct messages:
+
+| Gate | Occurrences kept | Distinct messages kept |
+|---|---:|---:|
+| `any` | 2,835 | 46 |
+| `afterFirstEnable` | 2,697 | **42** |
+| `enabled` | 1,041 | **25** |
+
+`afterFirstEnable` drops exactly the four boot-only messages that recur every
+match and bury everything else — the JIT warning, the operator-controller
+warnings, and two cameras disconnecting from NT while threads are still starved
+during boot.
+
+`enabled` drops a further **17** messages, and they are the ones that matter:
+every `[STICKY] Bridge was disabled` across the drivetrain, hopper, intake and
+shooter, the Pigeon's saturated accelerometer, and
+`Intake: [Roller Motor]: [STICKY] Device booted while enabled`. Sticky faults are
+published after the fact, so a fault caused during a match commonly appears only
+once the robot has been disabled again. Twelve of those messages never appear
+during an enabled window at all.
+
+One consequence to design around: `afterFirstEnable` silences every gated rule in
+a log where the robot never enabled. That must not read as a clean report, so
+`checks2026.json` carries a `Robot never enabled` rule
+(`{"atLeastOnce": true}` on `/DriverStation/Enabled`) that is deliberately
+ungated.
 
 Two modifiers:
 
@@ -691,6 +898,34 @@ on its own — `BatchMode=yes` makes it fail fast instead of hanging. If plain
 the tool detects the auth failure and prints both. Everything else is exercised
 by `tests/test_sync_logs.py` through a local directory standing in for the robot.
 
+**A6 — emitters.** Done, in `report_output.py`. `analysis.py --html PATH
+--json PATH` writes both alongside the usual terminal output; neither changes
+stdout, which the goldens enforce. `main()` now computes each result once and
+renders it, rather than recomputing inside the print helpers — the payoff of A2.
+
+The page is self-contained by necessity, not preference: browsers block
+fetch/XHR against `file://`, so a page loading a sibling `report.json` would fail
+silently on exactly the setup this is for. Data is inlined, there is no
+JavaScript and nothing is fetched, and a `<meta http-equiv="refresh">` means
+rewriting the file in place updates a screen showing it. Tests assert the absence
+of `http://`, `<script`, `src=` and `fetch(` rather than trusting that to stay
+true.
+
+`analysis.py` moved to argparse in the process, which also turned the `VERBOSE`
+module constant into `--verbose`. The only visible change is that bad arguments
+now produce argparse's own message.
+
+`--latest` narrows a folder to the single most recent match, which is what makes
+the page usable as a standing pit display: left open, the meta refresh means it
+always shows the newest match as logs arrive.
+
+"Most recent" comes from the timestamp embedded in the log name
+(`akit_26-05-01_22-45-20_...`, or DataLogManager's `FRC_20260501_133809`), with
+mtime only as a fallback. That ordering matters: plain `scp` resets mtime to copy
+time, so a re-copied old log would otherwise masquerade as the newest and the pit
+screen would quietly show the wrong match. The page header names the match it is
+displaying for the same reason.
+
 **A7 — watch mode.** A long-running `--watch <folder>` that notices new `.wpilog`
 files (dropped there by A5), analyzes each once, and rewrites the report. Debounce
 on file size settling — a log still being copied must not be analyzed early. Keep
@@ -703,7 +938,7 @@ identity (content hash, not name) so re-imports from A4 are idempotent. Keep the
 schema versioned so a format change can rebuild rather than migrate — extraction
 is cheap and the `.wpilog` files remain authoritative.
 
-## 10. Test Fixtures and Logging Conventions
+## 11. Test Fixtures and Logging Conventions
 
 **Done.** The suite is season-parameterized; see
 [tests/README.md](../tests/README.md) for the mechanics.
@@ -730,7 +965,7 @@ Two seasons are set up:
 The 2025 set is kept deliberately: it lets a refactor prove it changed nothing on
 old data while new work is written against current conventions.
 
-### 10.1 What the 2026 changeover cost
+### 11.1 What the 2026 changeover cost
 
 Worth recording, because the next changeover will look the same. Entry names are
 **game-specific and do not survive a season**. Of the four entries
@@ -747,7 +982,7 @@ So a season changeover is "write a new config and record new goldens", not
 "re-record". Budget for it.
 
 Three failure modes showed up while validating `config2026.json`, all of which a
-config linter (§11) would have caught before a 30-second run:
+config linter (§12) would have caught before a 30-second run:
 
 - **A type mismatch that silently matches nothing** — `"12"` as a string against a
   `double` entry. `12.0 == "12"` is `False`, so the analysis simply never fired.
@@ -765,7 +1000,7 @@ fixtures, and — more importantly — would give the motor-dropout detectors th
 positive fixture they currently lack (§3.2). Without it, those detectors cannot be
 distinguished from ones that never fire.
 
-## 11. Cross-Cutting Work
+## 12. Cross-Cutting Work
 
 Fix these along the way — each will otherwise distort a feature above:
 
@@ -777,14 +1012,14 @@ Fix these along the way — each will otherwise distort a feature above:
   A3, not a nicety.
 - **`.schema` handling assumes `struct:`** (defect #4) and will `IndexError` on a
   protobuf schema entry.
-- **No config validation.** Every failure mode in §10.1 produced a clean run with
+- **No config validation.** Every failure mode in §11.1 produced a clean run with
   empty results rather than an error, which is the worst possible feedback. A
   linter — check each referenced entry exists in the target logs, that the
   configured value's type matches the entry's, and that the entry is actually
   recorded under the configured `robotMode` — would catch all three before a
   multi-minute run. Cheap once B1's manifest exists; useful enough to do sooner.
 
-## 12. What Must Not Regress
+## 13. What Must Not Regress
 
 The folder-wide aggregate analysis is the feature that replaced hours of
 one-file-at-a-time work in AdvantageScope. It is the thing to protect through

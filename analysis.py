@@ -1,16 +1,22 @@
 #! /usr/bin/env python3
 
+import argparse
 import json
+import re
 import mmap
 import os
 import sys
 import bisect
 import statistics
+from datetime import datetime
+from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple, Any, Union
 from datalog import DataLogReader
 from Log import Log, LoggableType
 from entry_patterns import EntryPattern, expand_roles
+from report_output import (FileReport, Report, ReportSection,
+                           now_text, render_html, render_json)
 
 # Constants for structured types
 STRUCT_PREFIX = "struct:"
@@ -251,6 +257,12 @@ class EnabledGate:
         data = field_data.data if field_data else None
         self.timestamps = list(data.timestamps) if data else []
         self.values = list(data.values) if data else []
+        # Everything before the robot is first enabled is boot: threads starve,
+        # NT connections drop, JIT is still running. That noise recurs every
+        # match and hides real problems.
+        self.first_enabled_at = next(
+            (timestamp for timestamp, value in zip(self.timestamps, self.values)
+             if value), None)
 
     def is_enabled_at(self, timestamp: float) -> bool:
         """The most recent Enabled value at or before this timestamp."""
@@ -260,11 +272,20 @@ class EnabledGate:
         return bool(self.values[index]) if index >= 0 else False
 
     def applies(self, gate: str, timestamp: float) -> bool:
-        """Whether a sample passes the rule's "while" gate."""
+        """Whether a sample passes the rule's "while" gate.
+
+        "afterFirstEnable" is usually what a post-match report wants rather than
+        "enabled": sticky faults are published after the fact, so a fault caused
+        during a match commonly appears only once the robot has been disabled
+        again. Gating strictly on "enabled" discards them.
+        """
         if gate == "enabled":
             return self.is_enabled_at(timestamp)
         if gate == "disabled":
             return not self.is_enabled_at(timestamp)
+        if gate == "afterFirstEnable":
+            return (self.first_enabled_at is not None
+                    and timestamp >= self.first_enabled_at)
         return True
 
 
@@ -572,6 +593,61 @@ def get_field_values(field, start: float, end: float):
     }
     getter = getters.get(field.get_type())
     return getter(start, end) if getter else None
+
+# Log names normally carry their own start time. AdvantageKit writes
+# "akit_26-05-01_13-38-09_johnson_q67.wpilog"; WPILib's DataLogManager writes
+# "FRC_20260501_133809.wpilog". Reading the name is more trustworthy than the
+# file's mtime, which reflects when it was copied rather than when it was
+# recorded, and which plain scp resets.
+LOG_NAME_TIMESTAMPS = (
+    re.compile(r"(?P<year>\d{2})-(?P<month>\d{2})-(?P<day>\d{2})_"
+               r"(?P<hour>\d{2})-(?P<minute>\d{2})-(?P<second>\d{2})"),
+    re.compile(r"(?P<year>\d{4})(?P<month>\d{2})(?P<day>\d{2})_"
+               r"(?P<hour>\d{2})(?P<minute>\d{2})(?P<second>\d{2})"),
+)
+
+
+def log_recorded_at(path: str) -> datetime:
+    """When a log was recorded, from its name if possible, else its mtime.
+
+    Args:
+        path: Path to a .wpilog file
+
+    Returns:
+        A datetime usable as a sort key. Names without a recognisable timestamp
+        fall back to the file's modification time, which for a freshly synced
+        log is when it was copied - still the right order in the pit, just less
+        trustworthy if old logs are re-copied.
+    """
+    name = os.path.basename(path)
+    for pattern in LOG_NAME_TIMESTAMPS:
+        found = pattern.search(name)
+        if not found:
+            continue
+        parts = {key: int(value) for key, value in found.groupdict().items()}
+        if parts["year"] < 100:
+            parts["year"] += 2000
+        try:
+            return datetime(parts["year"], parts["month"], parts["day"],
+                            parts["hour"], parts["minute"], parts["second"])
+        except ValueError:
+            continue  # matched digits that are not a real date
+    try:
+        return datetime.fromtimestamp(os.path.getmtime(path))
+    except OSError:
+        return datetime.min
+
+
+def select_latest_log(log_files: List[str]) -> List[str]:
+    """Return just the most recently recorded log.
+
+    Ties break on the file name so the choice is deterministic.
+    """
+    if not log_files:
+        return []
+    return [max(log_files, key=lambda path: (log_recorded_at(path),
+                                             os.path.basename(path)))]
+
 
 TIME_ANALYSIS_ROLES = ("startEntry", "endEntry")
 VALUE_ANALYSIS_ROLES = ("entry", "triggerEntry")
@@ -934,18 +1010,37 @@ def process_log_file(log_file_path: str, mandatory_entries: Set[str], target_ent
 
 def main() -> None:
     """Main analysis function."""
-    if len(sys.argv) != 3:
-        print("Usage: analysis.py <log_folder> <config_json_file>", file=sys.stderr)
-        sys.exit(1)
+    global VERBOSE
 
-    log_folder = sys.argv[1]
+    parser = argparse.ArgumentParser(
+        description="Analyze a folder of WPILib .wpilog files.",
+        usage="analysis.py <log_folder> <config_json_file> [options]")
+    parser.add_argument("log_folder", help="directory containing .wpilog files")
+    parser.add_argument("config_json_file", help="JSON configuration file")
+    parser.add_argument("--html", metavar="PATH",
+                        help="also write a self-contained HTML report here")
+    parser.add_argument("--json", metavar="PATH", dest="json_path",
+                        help="also write the whole run as JSON here")
+    parser.add_argument("--refresh", type=int, default=30, metavar="SECONDS",
+                        help="HTML auto-refresh interval, 0 to disable "
+                             "(default 30)")
+    parser.add_argument("--latest", action="store_true",
+                        help="analyze only the most recently recorded log, so a "
+                             "page left open always shows the newest match")
+    parser.add_argument("--verbose", action="store_true",
+                        help="include captured values and a record summary")
+    args = parser.parse_args()
+
+    VERBOSE = args.verbose
+
+    log_folder = args.log_folder
     if not os.path.isdir(log_folder):
         print(f"Error: {log_folder} is not a directory", file=sys.stderr)
         sys.exit(1)
 
     # Load configuration from JSON file
     try:
-        with open(sys.argv[2], 'r') as config_file:
+        with open(args.config_json_file, 'r') as config_file:
             config = json.load(config_file)
             
             # Load filtering criteria
@@ -1000,6 +1095,11 @@ def main() -> None:
     if not log_files:
         print(f"No log files found in {log_folder}", file=sys.stderr)
         sys.exit(1)
+
+    selection = f"{len(log_files)} log files"
+    if args.latest:
+        log_files = select_latest_log(log_files)
+        selection = f"most recent match: {os.path.basename(log_files[0])}"
     
      # Print filtering criteria and final states
     print(f"\n=== FILTERING CRITERIA ===")
@@ -1008,7 +1108,10 @@ def main() -> None:
     print(f"Filter for robot mode: {filter_on_robot_mode}")
 
     print(f"\n=== ANALYSIS ===")
-    print(f"Found {len(log_files)} log files to process:")
+    if args.latest:
+        print(f"Analyzing the most recent match only:")
+    else:
+        print(f"Found {len(log_files)} log files to process:")
     for log_file in sorted(log_files):
         print(f"  {os.path.basename(log_file)}")
 
@@ -1016,6 +1119,13 @@ def main() -> None:
     # entries with wildcards contributes one key per matched entry).
     all_logs = []  # List to store records from all files
     processed_files = []  # Base names, in processing order
+    run_report = Report(
+        log_folder=log_folder, config_path=args.config_json_file,
+        filters={"enabled": filter_on_enabled,
+                 "fmsAttached": filter_on_fms_attached,
+                 "robotMode": filter_on_robot_mode},
+        selection=selection,
+        generated_at=now_text())
     check_reports = []  # One CheckReport per file
     aggregated_time_analysis_results = {}  # key -> {log file name: result}
     aggregated_value_analysis_results = {}  # key -> {log file name: result}
@@ -1028,11 +1138,14 @@ def main() -> None:
                                filter_on_enabled, filter_on_fms_attached, filter_on_robot_mode)
         all_logs.append(log)
         processed_files.append(os.path.basename(log_file))
+        file_report = FileReport(name=os.path.basename(log_file))
+        run_report.files.append(file_report)
 
         # Run the check rules for this file
         if check_configs:
             report = compute_checks(log, os.path.basename(log_file), check_configs)
             check_reports.append(report)
+            file_report.findings = report.findings
             print(f"\n=== CHECK RESULTS FOR {os.path.basename(log_file)} ===\n")
             print_check_findings(report.findings, is_aggregate=False)
 
@@ -1069,10 +1182,15 @@ def main() -> None:
                     print(f"Skipping incomplete analysis configuration")
                     continue
 
-                print(f"\nAnalyzing: {start_entry} ({start_value}) -> {end_entry} ({end_value})")
+                title = f"{start_entry} ({start_value}) -> {end_entry} ({end_value})"
+                print(f"\nAnalyzing: {title}")
 
-                # Print found cycles and perform calculations for this file
-                print_results_and_calculations([results], calculations, value_unit="s")
+                # Computed once, then rendered; the emitters consume the same object.
+                computed = compute_analysis([results], calculations, "s")
+                file_report.sections.append(
+                    ReportSection(kind="time", title=title, unit="s", result=computed))
+                for line in format_analysis(computed):
+                    print(line)
 
         # Perform value analysis calculations on individual file data
         if value_analysis_configs:
@@ -1089,15 +1207,21 @@ def main() -> None:
                     print(f"Skipping incomplete value analysis configuration")
                     continue
 
-                print(f"\nAnalyzing: {entry_name} when {trigger_entry} = {trigger_value}")
+                title = f"{entry_name} when {trigger_entry} = {trigger_value}"
+                print(f"\nAnalyzing: {title}")
 
-                # Print captured values and perform calculations for this file
-                print_results_and_calculations([results], calculations, value_unit=entry_unit)
+                computed = compute_analysis([results], calculations, entry_unit)
+                file_report.sections.append(
+                    ReportSection(kind="value", title=title, unit=entry_unit,
+                                  result=computed))
+                for line in format_analysis(computed):
+                    print(line)
 
     # Aggregate the checks across all files
     if check_configs and check_reports:
         print(f"\n=== AGGREGATED CHECK RESULTS ACROSS ALL FILES ===\n")
-        print_check_findings(merge_check_findings(check_reports), is_aggregate=True)
+        run_report.aggregate_findings = merge_check_findings(check_reports)
+        print_check_findings(run_report.aggregate_findings, is_aggregate=True)
 
     # Perform aggregated analysis across all files
     if time_analysis_configs and aggregated_time_analysis_results:
@@ -1128,10 +1252,17 @@ def main() -> None:
                                    for name in processed_files]
             
             if all_results_by_file:
-                print_per_file_counts(all_results_by_file, calculations)
-
-                # Print aggregated cycles summary and perform calculations
-                print_results_and_calculations(all_results_by_file, calculations, value_unit="s")
+                counts = compute_per_file_counts(all_results_by_file, calculations)
+                computed = compute_analysis(all_results_by_file, calculations, "s")
+                run_report.aggregate_sections.append(
+                    ReportSection(kind="time",
+                                  title=f"{start_entry} ({start_value}) -> "
+                                        f"{end_entry} ({end_value})",
+                                  unit="s", result=computed, counts=counts))
+                for line in format_per_file_counts(counts):
+                    print(line)
+                for line in format_analysis(computed):
+                    print(line)
             else:
                 print(f"  No complete cycles found for this analysis across all files")
 
@@ -1159,12 +1290,37 @@ def main() -> None:
                                   for name in processed_files]
             
             if all_values_by_file:
-                print_per_file_counts(all_values_by_file, calculations)
-
-                print_results_and_calculations(all_values_by_file, calculations, value_unit=entry_unit)
+                counts = compute_per_file_counts(all_values_by_file, calculations)
+                computed = compute_analysis(all_values_by_file, calculations, entry_unit)
+                run_report.aggregate_sections.append(
+                    ReportSection(kind="value",
+                                  title=f"{entry_name} when {trigger_entry} = "
+                                        f"{trigger_value}",
+                                  unit=entry_unit, result=computed, counts=counts))
+                for line in format_per_file_counts(counts):
+                    print(line)
+                for line in format_analysis(computed):
+                    print(line)
                     
             else:
                 print(f"  No values captured for this analysis across all files")
+
+    # Emit the non-terminal outputs, from the same computed objects the text
+    # rendering used.
+    if args.html:
+        path = Path(args.html)
+        if path.parent != Path(""):
+            path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(render_html(run_report, refresh_seconds=args.refresh),
+                        encoding="utf-8")
+        print(f"\nWrote HTML report to {path}")
+
+    if args.json_path:
+        path = Path(args.json_path)
+        if path.parent != Path(""):
+            path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(render_json(run_report), encoding="utf-8")
+        print(f"Wrote JSON report to {path}")
 
     # Print summary of captured records
     if(VERBOSE):

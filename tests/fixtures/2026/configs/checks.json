@@ -7,7 +7,8 @@
             "name": "Alert reported as warning",
             "entry": "/RealOutputs/Alerts/warnings",
             "expect": "empty",
-            "severity": "warning"
+            "severity": "warning",
+            "while": "afterFirstEnable"
         },
         {
             "name": "Camera frames",

@@ -27,6 +27,7 @@ driven by a JSON config; there is no CLI beyond `analysis.py <log_folder> <confi
 | [analysis.py](../analysis.py) | Entry point: config, filtering, analysis, reporting | Original to this repo |
 | [config2025.json](../config2025.json), [config2026.json](../config2026.json) | Per-season example/default analysis configs | — |
 | [entry_patterns.py](../entry_patterns.py) | Segment-scoped glob matching for entry names | — |
+| [report_output.py](../report_output.py) | JSON and self-contained HTML renderings of a run | — |
 | [sync_logs.py](../sync_logs.py) | Standalone roboRIO log fetcher; shares only the destination folder | — |
 | [tests/](../tests/) | Season-parameterized golden-output suite (stdlib `unittest`) | — |
 | `test/<season>/` | `.wpilog` fixtures per season; gitignored (~108 MB for 2025, ~433 MB for 2026) | — |
@@ -283,12 +284,19 @@ not O(one file), though only the VERBOSE summary uses the retained list.
 
 ## 6. Cross-Cutting Characteristics
 
-- **Report-only.** Output is unstructured text on stdout. No JSON/CSV export, no
-  exit code signalling analysis outcomes, no plotting.
+- **`--latest`** narrows the folder to the most recent match, ordered by the
+  timestamp in the log's name rather than its mtime (which `scp` resets to copy
+  time). Paired with the HTML meta refresh, a page left open tracks the newest
+  match on its own.
+- **Three output formats from one computation.** Terminal text by default;
+  `--html` writes a self-contained page for the pit screen and `--json` the whole
+  run for scripting and archiving ([report_output.py](../report_output.py)).
+  There is still no exit code signalling analysis outcomes, and no plotting.
 - **Config-driven, not scriptable.** All extension happens through JSON; there is
   no plugin point for a new calculation short of adding a branch to the if/elif
   chain in `print_results_and_calculations`.
-- **`VERBOSE` is a module-level constant** in `analysis.py`, not a flag.
+- **`--verbose`** replaced the old module-level `VERBOSE` constant when
+  `analysis.py` moved to argparse.
 - **Golden-output integration tests, no CI, no packaging.** [tests/](../tests/)
   runs `analysis.py` end-to-end over real logs and diffs full stdout against
   recorded expectations; see [tests/README.md](../tests/README.md). There are no
