@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple, Any, Union
 from datalog import DataLogReader
 from Log import Log, LoggableType
+from entry_patterns import EntryPattern, expand_roles
 
 # Constants for structured types
 STRUCT_PREFIX = "struct:"
@@ -316,20 +317,60 @@ def get_field_values(field, start: float, end: float):
     getter = getters.get(field.get_type())
     return getter(start, end) if getter else None
 
-def analyze_file_records(log: Log, log_file_name: str, time_analysis_configs: List[Dict[str, Any]]) -> Dict[int, Tuple[str, List[float], List[float]]]:
+TIME_ANALYSIS_ROLES = ("startEntry", "endEntry")
+VALUE_ANALYSIS_ROLES = ("entry", "triggerEntry")
+
+
+def expand_analyses(configs: List[Dict[str, Any]], roles: Tuple[str, ...],
+                    field_names: List[str]) -> List[Tuple[Tuple, Dict[str, Any]]]:
+    """Expand each configured analysis into concrete analyses.
+
+    An entry name containing no wildcard is a literal and yields exactly one
+    expansion, so configs without patterns behave precisely as before. A pattern
+    yields one expansion per matched entry, paired across roles by what the
+    wildcards matched.
+
+    Args:
+        configs: The analysis configs as written
+        roles: The keys naming entries in this kind of analysis
+        field_names: Concrete field names available in this log
+
+    Returns:
+        List of (key, concrete config). The key embeds the config's position and
+        its concrete entry names, so it is stable across log files and can be
+        used to aggregate them.
+    """
+    expanded = []
+    for index, analysis in enumerate(configs):
+        role_values = {role: analysis.get(role) for role in roles}
+        for expansion in expand_roles(role_values, field_names):
+            concrete = dict(analysis)
+            concrete.update(expansion)
+            expanded.append(((index,) + tuple(concrete.get(r) for r in roles), concrete))
+    return expanded
+
+
+def analyze_file_records(log: Log, log_file_name: str, time_analysis_configs: List[Dict[str, Any]]) -> List[Tuple[Tuple, Dict[str, Any], Tuple[str, List[float], List[float]]]]:
     """
     Analyze file records and return time differences and start timestamps for each analysis configuration.
-    
+
     Args:
         log: The Log object containing the analyzed data
+        log_file_name: Name of the log file being analyzed
         time_analysis_configs: List of analysis configuration dictionaries
-        
+
     Returns:
-        Dictionary mapping analysis index to tuple of (time_differences, start_timestamps)
+        List of (key, concrete config, (log file name, time differences, start
+        timestamps)). A config naming entries with wildcards contributes one
+        entry per matched entry; the key is stable across log files.
     """
     all_analysis_results = {}
-    
-    for analysis_idx, analysis in enumerate(time_analysis_configs):
+    all_analysis_configs = {}
+
+    for key, analysis in expand_analyses(time_analysis_configs, TIME_ANALYSIS_ROLES,
+                                         log.get_field_keys()):
+        analysis_idx = key[0]
+        all_analysis_configs[key] = analysis
         start_entry = analysis.get('startEntry')
         start_value = analysis.get('startValue')
         end_entry = analysis.get('endEntry')
@@ -337,7 +378,7 @@ def analyze_file_records(log: Log, log_file_name: str, time_analysis_configs: Li
         calculations = analysis.get('calculations', [])
         
         if not all([start_entry, end_entry, calculations]):
-            all_analysis_results[analysis_idx] = (log_file_name, [], [])
+            all_analysis_results[key] = (log_file_name, [], [])
             continue
         
         # Find time differences between start and end events
@@ -350,13 +391,13 @@ def analyze_file_records(log: Log, log_file_name: str, time_analysis_configs: Li
 
         if not start_field or not end_field:
             print(f"  Skipping analysis {analysis_idx} due to missing fields: {start_entry} or {end_entry}")
-            all_analysis_results[analysis_idx] = (log_file_name, [], [])
+            all_analysis_results[key] = (log_file_name, [], [])
             continue
 
         start_log_values = get_field_values(start_field, 0.0, log.get_last_timestamp())
         if start_log_values is None:
             print(f"  Skipping analysis {analysis_idx} due to unsupported type for: {start_entry} of {start_field.get_type()}")
-            all_analysis_results[analysis_idx] = (log_file_name, [], [])
+            all_analysis_results[key] = (log_file_name, [], [])
             continue
             
         start_timestamp = 0.0
@@ -373,7 +414,7 @@ def analyze_file_records(log: Log, log_file_name: str, time_analysis_configs: Li
                 end_log_values = get_field_values(end_field, start_timestamp, next_timestamp)
                 if end_log_values is None:
                     print(f"  Skipping analysis {analysis_idx} due to unsupported type for: {end_entry} of {end_field.get_type()}")
-                    all_analysis_results[analysis_idx] = (log_file_name, [], [])
+                    all_analysis_results[key] = (log_file_name, [], [])
                     continue
 
                 for k, end_timestamp in enumerate(end_log_values.timestamps):
@@ -383,11 +424,12 @@ def analyze_file_records(log: Log, log_file_name: str, time_analysis_configs: Li
                         start_timestamps.append(start_timestamp)
                         break
         
-        all_analysis_results[analysis_idx] = (log_file_name, time_differences, start_timestamps)
-    
-    return all_analysis_results
+        all_analysis_results[key] = (log_file_name, time_differences, start_timestamps)
 
-def analyze_value_records(log: Log, log_file_name: str, value_analysis_configs: List[Dict[str, Any]]) -> Dict[int, Tuple[str, List[Union[int, float, str, bool]], List[float]]]:
+    return [(key, all_analysis_configs[key], result)
+            for key, result in all_analysis_results.items()]
+
+def analyze_value_records(log: Log, log_file_name: str, value_analysis_configs: List[Dict[str, Any]]) -> List[Tuple[Tuple, Dict[str, Any], Tuple[str, List[Union[int, float, str, bool]], List[float]]]]:
     """
     Analyze file records and return captured values and timestamps for each value analysis configuration.
     
@@ -396,18 +438,24 @@ def analyze_value_records(log: Log, log_file_name: str, value_analysis_configs: 
         value_analysis_configs: List of value analysis configuration dictionaries
         
     Returns:
-        Dictionary mapping analysis index to tuple of (captured values, timestamps)
+        List of (key, concrete config, (log file name, captured values,
+        timestamps)). A config naming entries with wildcards contributes one
+        entry per matched entry; the key is stable across log files.
     """
     all_value_results = {}
-    
-    for analysis_idx, analysis in enumerate(value_analysis_configs):
+    all_value_configs = {}
+
+    for key, analysis in expand_analyses(value_analysis_configs, VALUE_ANALYSIS_ROLES,
+                                         log.get_field_keys()):
+        analysis_idx = key[0]
+        all_value_configs[key] = analysis
         entry_name = analysis.get('entry')
         trigger_entry = analysis.get('triggerEntry')
         trigger_value = analysis.get('triggerValue')
         calculations = analysis.get('calculations', [])
         
         if not all([entry_name, trigger_entry, calculations]) or trigger_value is None:
-            all_value_results[analysis_idx] = (log_file_name, [], [])
+            all_value_results[key] = (log_file_name, [], [])
             continue
         
         # Find values when trigger condition is met
@@ -420,13 +468,13 @@ def analyze_value_records(log: Log, log_file_name: str, value_analysis_configs: 
 
         if not trigger_field or not field:
             print(f"  Skipping analysis {analysis_idx} due to missing fields: {trigger_entry} or {entry_name}")
-            all_value_results[analysis_idx] = (log_file_name, [], [])
+            all_value_results[key] = (log_file_name, [], [])
             continue
 
         trigger_log_values = get_field_values(trigger_field, 0.0, log.get_last_timestamp())
         if trigger_log_values is None:
             print(f"  Skipping analysis {analysis_idx} due to unsupported type for: {trigger_entry} of {trigger_field.get_type()}")
-            all_value_results[analysis_idx] = (log_file_name, [], [])
+            all_value_results[key] = (log_file_name, [], [])
             continue
             
         start_timestamp = 0.0
@@ -438,7 +486,7 @@ def analyze_value_records(log: Log, log_file_name: str, value_analysis_configs: 
                 log_values = get_field_values(field, start_timestamp, end_timestamp)
                 if log_values is None:
                     print(f"  Skipping analysis {analysis_idx} due to unsupported type for: {entry_name} of {field.get_type()}")
-                    all_value_results[analysis_idx] = (log_file_name, [], [])
+                    all_value_results[key] = (log_file_name, [], [])
                     continue
 
                 if len(log_values.values) > 0:
@@ -446,9 +494,10 @@ def analyze_value_records(log: Log, log_file_name: str, value_analysis_configs: 
                     end_timestamps.append(end_timestamp)
                 start_timestamp = timestamp  # Update start timestamp for next trigger match
         
-        all_value_results[analysis_idx] = (log_file_name, captured_values, end_timestamps)
-    
-    return all_value_results
+        all_value_results[key] = (log_file_name, captured_values, end_timestamps)
+
+    return [(key, all_value_configs[key], result)
+            for key, result in all_value_results.items()]
 
 def process_log_file(log_file_path: str, mandatory_entries: Set[str], target_entry_names: Set[str], 
                      filter_enabled: bool = False, filter_fms_attached: bool = False, robot_mode: str = 'both') -> Log:
@@ -510,10 +559,15 @@ def process_log_file(log_file_path: str, mandatory_entries: Set[str], target_ent
         # scans over the configured names for every one of millions of data records.
         entry_flags = {}
 
+        # Patterns are compiled once per file, then tested once per entry (not
+        # once per record), which keeps matching off the hot path.
+        mandatory_patterns = [EntryPattern(name) for name in mandatory_entries]
+        target_patterns = [EntryPattern(name) for name in target_entry_names]
+
         def flags_for(name: str) -> Tuple[bool, bool, bool]:
             """Return (is_mandatory, is_target, is_schema) for an entry name."""
-            return (any(name in target for target in mandatory_entries),
-                    any(name in target for target in target_entry_names),
+            return (any(pattern.could_contain(name) for pattern in mandatory_patterns),
+                    any(pattern.could_contain(name) for pattern in target_patterns),
                     ".schema" in name)
 
         # Track most recent values of DriverStation entries for filtering
@@ -696,55 +750,56 @@ def main() -> None:
     for log_file in sorted(log_files):
         print(f"  {os.path.basename(log_file)}")
 
-    # Aggregated data across all files
+    # Aggregated data across all files, keyed by expansion (a config that names
+    # entries with wildcards contributes one key per matched entry).
     all_logs = []  # List to store records from all files
-    aggregated_time_analysis_results = {}  # Dictionary to store aggregated times by analysis index
-    aggregated_value_analysis_results = {}  # Dictionary to store aggregated values by analysis index
+    processed_files = []  # Base names, in processing order
+    aggregated_time_analysis_results = {}  # key -> {log file name: result}
+    aggregated_value_analysis_results = {}  # key -> {log file name: result}
+    time_analysis_expansions = {}  # key -> concrete config, in first-seen order
+    value_analysis_expansions = {}  # key -> concrete config, in first-seen order
 
     # Process all log files
     for log_file in sorted(log_files):
         log = process_log_file(log_file, mandatory_entries, target_entry_names, 
                                filter_on_enabled, filter_on_fms_attached, filter_on_robot_mode)
         all_logs.append(log)
+        processed_files.append(os.path.basename(log_file))
 
         # Analyze time records and aggregate for later cross-file analysis
         if time_analysis_configs:
             time_analysis_results = analyze_file_records(log, os.path.basename(log_file), time_analysis_configs)
 
             # Aggregate results for later cross-file analysis (even empty results)
-            for analysis_idx, (log_file_name, time_differences, timestamps) in time_analysis_results.items():
-                if analysis_idx not in aggregated_time_analysis_results:
-                    aggregated_time_analysis_results[analysis_idx] = []
-                aggregated_time_analysis_results[analysis_idx].append((log_file_name, time_differences, timestamps))
+            for key, concrete, result in time_analysis_results:
+                time_analysis_expansions.setdefault(key, concrete)
+                aggregated_time_analysis_results.setdefault(key, {})[result[0]] = result
 
         # Analyze value records and aggregate for later cross-file analysis  
         if value_analysis_configs:
             value_analysis_results = analyze_value_records(log, os.path.basename(log_file), value_analysis_configs)
             
             # Aggregate results for later cross-file analysis (even empty results)
-            for analysis_idx, (log_file_name, values, end_timestamps) in value_analysis_results.items():
-                if analysis_idx not in aggregated_value_analysis_results:
-                    aggregated_value_analysis_results[analysis_idx] = []
-                aggregated_value_analysis_results[analysis_idx].append((log_file_name, values, end_timestamps))
+            for key, concrete, result in value_analysis_results:
+                value_analysis_expansions.setdefault(key, concrete)
+                aggregated_value_analysis_results.setdefault(key, {})[result[0]] = result
 
         # Perform cycle time analysis calculations on individual file data
         if time_analysis_configs:
             print(f"\n=== TIME ANALYSIS RESULTS FOR {os.path.basename(log_file)} ===")
             
-            for analysis_idx, analysis in enumerate(time_analysis_configs):
+            for _key, analysis, results in time_analysis_results:
                 start_entry = analysis.get('startEntry')
                 start_value = analysis.get('startValue')
                 end_entry = analysis.get('endEntry')
                 end_value = analysis.get('endValue')
                 calculations = analysis.get('calculations', [])
-                
+
                 if not all([start_entry, end_entry, calculations]):
                     print(f"Skipping incomplete analysis configuration")
                     continue
-                
-                print(f"\nAnalyzing: {start_entry} ({start_value}) -> {end_entry} ({end_value})")
 
-                results = time_analysis_results.get(analysis_idx, (os.path.basename(log_file), [], []))
+                print(f"\nAnalyzing: {start_entry} ({start_value}) -> {end_entry} ({end_value})")
 
                 # Print found cycles and perform calculations for this file
                 print_results_and_calculations([results], calculations, value_unit="s")
@@ -753,20 +808,18 @@ def main() -> None:
         if value_analysis_configs:
             print(f"\n=== VALUE ANALYSIS RESULTS FOR {os.path.basename(log_file)} ===")
             
-            for analysis_idx, analysis in enumerate(value_analysis_configs):
+            for _key, analysis, results in value_analysis_results:
                 entry_name = analysis.get('entry')
                 entry_unit = analysis.get('entryUnit', "")
                 trigger_entry = analysis.get('triggerEntry')
                 trigger_value = analysis.get('triggerValue')
                 calculations = analysis.get('calculations', [])
-                
+
                 if not all([entry_name, trigger_entry, calculations]) or trigger_value is None:
                     print(f"Skipping incomplete value analysis configuration")
                     continue
-                
-                print(f"\nAnalyzing: {entry_name} when {trigger_entry} = {trigger_value}")
 
-                results = value_analysis_results.get(analysis_idx, (os.path.basename(log_file), [], []))
+                print(f"\nAnalyzing: {entry_name} when {trigger_entry} = {trigger_value}")
 
                 # Print captured values and perform calculations for this file
                 print_results_and_calculations([results], calculations, value_unit=entry_unit)
@@ -775,20 +828,29 @@ def main() -> None:
     if time_analysis_configs and aggregated_time_analysis_results:
         print(f"\n=== AGGREGATED TIME ANALYSIS RESULTS ACROSS ALL FILES ===")
         
-        for analysis_idx, analysis in enumerate(time_analysis_configs):
+        # Sorted so expansion order does not depend on which file happened to
+        # contain which entry first. Names may be None for an incomplete config,
+        # so compare them as strings.
+        for key, analysis in sorted(time_analysis_expansions.items(),
+                                    key=lambda item: (item[0][0],
+                                                      tuple(str(part) for part in item[0][1:]))):
             start_entry = analysis.get('startEntry')
             start_value = analysis.get('startValue')
             end_entry = analysis.get('endEntry')
             end_value = analysis.get('endValue')
             calculations = analysis.get('calculations', [])
-            
+
             if not all([start_entry, end_entry, calculations]):
                 print(f"Skipping incomplete analysis configuration")
                 continue
-            
+
             print(f"\nAggregated Analysis: {start_entry} ({start_value}) -> {end_entry} ({end_value})")
-            
-            all_results_by_file = aggregated_time_analysis_results.get(analysis_idx, [])
+
+            # Every processed file is represented, so per-file counts stay
+            # meaningful when a wildcard matched in some files but not others.
+            by_file = aggregated_time_analysis_results.get(key, {})
+            all_results_by_file = [by_file.get(name, (name, [], []))
+                                   for name in processed_files]
             
             if all_results_by_file:
                 print_per_file_counts(all_results_by_file, calculations)
@@ -802,20 +864,24 @@ def main() -> None:
     if value_analysis_configs and aggregated_value_analysis_results:
         print(f"\n=== AGGREGATED VALUE ANALYSIS RESULTS ACROSS ALL FILES ===")
         
-        for analysis_idx, analysis in enumerate(value_analysis_configs):
+        for key, analysis in sorted(value_analysis_expansions.items(),
+                                    key=lambda item: (item[0][0],
+                                                      tuple(str(part) for part in item[0][1:]))):
             entry_name = analysis.get('entry')
             entry_unit = analysis.get('entryUnit', "")
             trigger_entry = analysis.get('triggerEntry')
             trigger_value = analysis.get('triggerValue')
             calculations = analysis.get('calculations', [])
-            
+
             if not all([entry_name, trigger_entry, calculations]) or trigger_value is None:
                 print(f"Skipping incomplete value analysis configuration")
                 continue
-            
+
             print(f"\nAggregated Value Analysis: {entry_name} when {trigger_entry} = {trigger_value}")
-            
-            all_values_by_file = aggregated_value_analysis_results.get(analysis_idx, [])
+
+            by_file = aggregated_value_analysis_results.get(key, {})
+            all_values_by_file = [by_file.get(name, (name, [], []))
+                                  for name in processed_files]
             
             if all_values_by_file:
                 print_per_file_counts(all_values_by_file, calculations)

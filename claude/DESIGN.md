@@ -26,6 +26,7 @@ driven by a JSON config; there is no CLI beyond `analysis.py <log_folder> <confi
 | [Log.py](../Log.py) | In-memory field store (timestamps → values) | Simplified port of AdvantageScope's `shared/log` |
 | [analysis.py](../analysis.py) | Entry point: config, filtering, analysis, reporting | Original to this repo |
 | [config2025.json](../config2025.json), [config2026.json](../config2026.json) | Per-season example/default analysis configs | — |
+| [entry_patterns.py](../entry_patterns.py) | Segment-scoped glob matching for entry names | — |
 | [tests/](../tests/) | Season-parameterized golden-output suite (stdlib `unittest`) | — |
 | `test/<season>/` | `.wpilog` fixtures per season; gitignored (~108 MB for 2025, ~433 MB for 2026) | — |
 | [test.log](../test.log) | Stray plain-text sample; **not** a `.wpilog` and unused by any code | — |
@@ -154,12 +155,15 @@ Target entries are derived automatically from the analysis configs (commit
 `66db43b` removed an explicit `entryNames` key), so the config never has to list
 what to capture.
 
-There is **no pattern matching**: every entry must be named in full, so watching
-four cameras takes four near-identical config stanzas. Wildcard support
-(`/RealOutputs/Vision/*/sending frames`) is designed in
-[ROADMAP.md §6](ROADMAP.md#6-entry-patterns-wildcards), which replaces this
-substring test rather than layering on it — §6.4 there covers how the struct-leaf
-case survives the change.
+**Entry names are matched as segment-scoped glob patterns**
+([entry_patterns.py](../entry_patterns.py)): `*` matches within one `/`-delimited
+segment, `**` spans segments, and a name with no wildcard is a literal matching
+only itself. Capture uses `EntryPattern.could_contain()`, which is true for a full
+match *or any ancestor of one* — that is what keeps a struct parent captured for a
+leaf pattern, now as an explicit rule rather than a side effect of substring
+matching. Analyses resolve their patterns against real field names after
+flattening, fanning out into one analysis per matched entry, paired across roles
+by what the wildcards matched.
 
 ### 3.5 Analysis semantics
 

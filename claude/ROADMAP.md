@@ -426,7 +426,7 @@ The post-match checklist, end to end. Nothing here needs the index.
 | A0 | ~~**Refresh fixtures to 2026 logs**~~ (§9) — **done** | Detector rules should be written against current entry names, not 2025 ones | — |
 | A1 | ~~**Fix array support**~~ (defects #1–2) — **done** | Unlocks `Alerts/*` — most of feature 2's value | — |
 | A2 | ~~**Split computation from formatting**~~ — **done** | Prerequisite for HTML and JSON output | — |
-| A3 | **Entry patterns / wildcards** (§6) | Detector rules are unwritable without it; shortens every config | A1 |
+| A3 | ~~**Entry patterns / wildcards**~~ (§6) — **done** | Detector rules are unwritable without it; shortens every config | A1 |
 | A4 | **Checks as a third analysis kind**, incl. absence checks (§7) | Replaces the manual post-match pass | A2, A3 |
 | A5 | **roboRIO sync** | First link in the pit chain (§2.2) | — |
 | A6 | **HTML + JSON emitters** | The pit screen itself (§5.1) | A2, A4 |
@@ -470,8 +470,22 @@ lines; the `print_*` functions are thin wrappers over the pair. A6's emitters
 attach at the dataclass, which `dataclasses.asdict()` serializes straight to JSON
 (covered by `tests/test_computation.py`).
 
-**A3 — entry patterns.** Designed in §6; it replaces the reversed-substring
-matching rather than layering on top of it.
+**A3 — entry patterns.** Done, in `entry_patterns.py`. Replaces the
+reversed-substring matching rather than layering on it. Verified equivalent: one
+`/RealOutputs/Vision/*/sending frames` stanza reproduces the four explicit camera
+stanzas byte for byte.
+
+Two things learned in the build, both worth keeping in mind:
+
+- **Interior empty segments are significant.** Normalising `//` away broke the
+  `/RealOutputs//ShooterModes/DistanceToHub` match (§9.1); only the leading
+  slash's empty segment is dropped.
+- **Expansion order must be sorted, not first-seen.** Expanding per file means the
+  first log decides the order, and the first 2026 log lacks BCL — which put the
+  cameras in BCH, BL, BCL, BR order. The aggregate now sorts by key.
+
+Not yet done from §6: the dry-run entry lister (§6.6), and `"combine": true`
+pooling (§6.3) — fan-out is per-match only, which is the useful default.
 
 **A4 — checks.** Different output shape from the existing analyses: a list of
 `(file, timestamp, severity, message)` incidents rather than a numeric series for
