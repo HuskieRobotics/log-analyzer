@@ -182,12 +182,29 @@ match logged enum names directly.
 
 `get_range(start, end)` is half-open at the low end: `start < ts <= end`.
 
-### 3.6 Reporting (`print_results_and_calculations`)
+### 3.6 Reporting
 
-One function serves both the per-file case (a one-element `results` list) and the
-aggregate case (one element per file); it switches wording and appends
-`in <file>` to locations only when `len(results) > 1`. Calculations are a flat
-if/elif chain over `calc_type`: `average`, `min`, `max`, `count`,
+Computation and rendering are separate layers:
+
+```
+compute_analysis(results, calculations, unit)  -> AnalysisResult
+compute_per_file_counts(results, calculations) -> PerFileCounts
+        │  dataclasses: every figure plus the (file, timestamp) locations it
+        │  came from; no formatting decisions, no output
+        ▼
+format_analysis(...) / format_per_file_counts(...) -> List[str]
+        ▼
+print_results_and_calculations(...) / print_per_file_counts(...)
+```
+
+`AnalysisResult` and `PerFileCounts` are plain dataclasses, so
+`dataclasses.asdict()` serializes them directly — that is the attachment point for
+the HTML and JSON emitters in [ROADMAP.md §8](ROADMAP.md#8-sequence).
+
+One computation serves both the per-file case (a one-element `results` list) and
+the aggregate case (one element per file); `is_aggregate` drives the wording and
+whether `in <file>` is appended to locations. Calculations are a flat if/elif
+chain over `calc_type` in `compute_calculation`: `average`, `min`, `max`, `count`,
 `abs_average`, `abs_min`, `abs_max`, `outlier_2std`, `abs_outlier_2std`.
 
 Locating *where* an extreme value occurred is done by **value equality search** —
@@ -364,10 +381,10 @@ Where new features naturally attach:
 
 | Want to add | Touch |
 |---|---|
-| A new calculation type | if/elif chain in `print_results_and_calculations`, plus README table |
+| A new calculation type | if/elif chain in `compute_calculation`, a branch in `format_calculation`, plus README table |
 | A new analysis kind | new `analyze_*_records()` + config key + per-file and aggregate print blocks in `main()` |
 | Wildcards in entry names | Selection test in `process_log_file` and entry lookup in both analyzers; see [ROADMAP.md §6](ROADMAP.md#6-entry-patterns-wildcards). Keep the per-entry `entry_flags` memoization or §7's gains are lost |
-| Machine-readable output | `print_results_and_calculations` currently computes *and* prints; separating computation from formatting is the prerequisite |
+| Machine-readable output | Consume `AnalysisResult` / `PerFileCounts` from `compute_*`; `asdict()` gives JSON directly |
 | Anything that changes printed output | Re-record goldens with `UPDATE_GOLDEN=1` and review `git diff tests/golden/` — that diff is the review artifact |
 | Support for array/raw fields | fix defects 1–2 first, then extend the `LoggableType` dispatch in both analyzers |
 | Faster ingest on large logs | Already optimized; see §7. The remaining cost is `DataLogIterator.__next__` walking every record |

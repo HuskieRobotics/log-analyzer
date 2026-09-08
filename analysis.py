@@ -5,6 +5,7 @@ import mmap
 import os
 import sys
 import statistics
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple, Any, Union
 from datalog import DataLogReader
 from Log import Log, LoggableType
@@ -16,153 +17,281 @@ STRUCT_PREFIX = "struct:"
 VERBOSE = False
 
 
-def print_results_and_calculations(results: List[Tuple[str, List[Union[int, float, str, bool]], List[float]]], calculations: List[Dict[str, Any]], 
-                                 value_unit: str = "") -> None:
-    """Print results and perform calculations on time differences or captured values.
-    
+# === Computed results =========================================================
+# These carry everything an analysis produced, with no formatting decisions baked
+# in, so the same computation can be rendered as terminal text, HTML or JSON.
+
+@dataclass
+class ValueLocation:
+    """Where a particular value occurred."""
+    log_file_name: str
+    timestamp: float
+
+
+@dataclass
+class CalculationResult:
+    """One configured calculation, computed."""
+    calc_type: str
+    name: str
+    unit: str
+    value: Optional[Union[int, float]] = None
+    locations: List[ValueLocation] = field(default_factory=list)
+    # Outlier calculations yield several values, each with its own locations.
+    outliers: List[Tuple[float, List[ValueLocation]]] = field(default_factory=list)
+    error: Optional[str] = None
+    unknown_type: bool = False
+
+
+@dataclass
+class AnalysisResult:
+    """Everything one analysis produced, across one file or across all files."""
+    is_aggregate: bool
+    total_count: int
+    all_values: List[Union[int, float, str, bool]]
+    unit: str
+    has_values: bool
+    has_numeric: bool
+    calculations: List[CalculationResult] = field(default_factory=list)
+
+
+@dataclass
+class PerFileCounts:
+    """Per-file match counts for an aggregated analysis."""
+    files_processed: int
+    counts: List[int]
+    show_detail: bool
+    average: Optional[float] = None
+    min_count: Optional[int] = None
+    min_file: Optional[str] = None
+    max_count: Optional[int] = None
+    max_file: Optional[str] = None
+
+
+# === Computation ==============================================================
+
+def find_value_locations(results: List[Tuple[str, List[Union[int, float, str, bool]], List[float]]],
+                         target: Union[int, float], use_abs: bool) -> List[ValueLocation]:
+    """Find where a value occurs, reporting its first position in each file.
+
     Args:
-        results: List of tuples containing log file name, data (time differences or values), and timestamps
-        calculations: List of calculation configs from analysis config
-        value_unit: Unit for values (e.g., "s" for time differences, "m" for meters)
+        results: List of tuples containing log file name, data, and timestamps
+        target: The value to locate
+        use_abs: Whether to match against absolute values
+
+    Returns:
+        One ValueLocation per file containing the value
     """
-    # aggregate all data
+    found = []
+    for log_file_name, file_data, timestamps in results:
+        haystack = ([abs(x) for x in file_data if isinstance(x, (int, float))]
+                    if use_abs else file_data)
+        if target in haystack:
+            found.append(ValueLocation(log_file_name, timestamps[haystack.index(target)]))
+    return found
+
+
+def compute_calculation(calc: Dict[str, Any],
+                        results: List[Tuple[str, List[Union[int, float, str, bool]], List[float]]],
+                        numeric_values: List[Union[int, float]],
+                        abs_numeric_values: List[Union[int, float]],
+                        value_unit: str) -> CalculationResult:
+    """Compute one configured calculation over already-filtered numeric values."""
+    calc_type = calc.get('type')
+    computed = CalculationResult(
+        calc_type=calc_type,
+        name=calc.get('name', f'{calc_type} calculation'),
+        unit=value_unit,
+    )
+
+    if calc_type == 'average':
+        computed.value = sum(numeric_values) / len(numeric_values)
+    elif calc_type == 'max':
+        computed.value = max(numeric_values)
+        computed.locations = find_value_locations(results, computed.value, use_abs=False)
+    elif calc_type == 'min':
+        computed.value = min(numeric_values)
+        computed.locations = find_value_locations(results, computed.value, use_abs=False)
+    elif calc_type == 'abs_average':
+        computed.value = sum(abs_numeric_values) / len(abs_numeric_values)
+    elif calc_type == 'abs_max':
+        computed.value = max(abs_numeric_values)
+        computed.locations = find_value_locations(results, computed.value, use_abs=True)
+    elif calc_type == 'abs_min':
+        computed.value = min(abs_numeric_values)
+        computed.locations = find_value_locations(results, computed.value, use_abs=True)
+    elif calc_type == 'count':
+        computed.value = len(numeric_values)
+    elif calc_type in ('outlier_2std', 'abs_outlier_2std'):
+        use_abs = calc_type == 'abs_outlier_2std'
+        source = abs_numeric_values if use_abs else numeric_values
+        if len(source) < 2:
+            computed.error = "Cannot calculate with less than 2 values"
+        else:
+            mean = statistics.mean(source)
+            stddev = statistics.stdev(source)
+            for outlier in [x for x in source if abs(x - mean) > 2 * stddev]:
+                computed.outliers.append(
+                    (outlier, find_value_locations(results, outlier, use_abs)))
+    else:
+        computed.unknown_type = True
+
+    return computed
+
+
+def compute_analysis(results: List[Tuple[str, List[Union[int, float, str, bool]], List[float]]],
+                     calculations: List[Dict[str, Any]],
+                     value_unit: str = "") -> AnalysisResult:
+    """Compute an analysis without rendering it.
+
+    Args:
+        results: List of tuples containing log file name, data (time differences
+            or values), and timestamps; one entry per log file
+        calculations: List of calculation configs from the analysis config
+        value_unit: Unit for values (e.g. "s" for time differences, "m" for meters)
+
+    Returns:
+        An AnalysisResult holding every computed figure and its locations
+    """
     all_data = []
     for _, file_data, _ in results:
         all_data.extend(file_data)
 
-    if all_data:
-        if len(results) == 1:
-            print(f"  Total values captured in this file: {len(all_data)}")
-            if VERBOSE:
-                print(f"  Values captured: {[f'{v:.6f} {value_unit}' for v in all_data]}")
-        else:
-            print(f"  Total values captured across all files: {len(all_data)}")
-            if VERBOSE:
-                print(f"  All values: {[f'{v:.6f} {value_unit}' for v in all_data]}")
+    computed = AnalysisResult(
+        is_aggregate=len(results) > 1,
+        total_count=len(all_data),
+        all_values=all_data,
+        unit=value_unit,
+        has_values=bool(all_data),
+        has_numeric=False,
+    )
+    if not all_data:
+        return computed
 
-        # Filter numeric values for calculations
-        numeric_values = []
-        abs_numeric_values = []
-        for val in all_data:
-            if isinstance(val, (int, float)):
-                numeric_values.append(val)
-                abs_numeric_values.append(abs(val))
+    # bool is a subclass of int, so booleans are treated as numeric here, as
+    # they always have been.
+    numeric_values = [v for v in all_data if isinstance(v, (int, float))]
+    abs_numeric_values = [abs(v) for v in numeric_values]
+    computed.has_numeric = bool(numeric_values)
+    if not numeric_values:
+        return computed
 
-        if numeric_values:
-            # Perform calculations
-            for calc in calculations:
-                calc_type = calc.get('type')
-                calc_name = calc.get('name', f'{calc_type} calculation')
-                
-                if calc_type == 'average':
-                    result = sum(numeric_values) / len(numeric_values)
-                    print(f"  {calc_name}: {result:.6f} {value_unit}")
-                elif calc_type == 'max':
-                    result = max(numeric_values)
-                    print(f"  {calc_name}: {result:.6f} {value_unit}")
-                    # Find the log file name and timestamp corresponding to the max value
-                    for log_file_name, file_data, timestamps in results:
-                        log_file_descriptor = f"in {log_file_name}" if len(results) > 1 else ""
-                        if result in file_data:
-                            max_index = file_data.index(result)
-                            print(f"    @ {timestamps[max_index]:.6f} s {log_file_descriptor}")
-                elif calc_type == 'min':
-                    result = min(numeric_values)
-                    print(f"  {calc_name}: {result:.6f} {value_unit}")
-                    # Find the log file name and timestamp corresponding to the min value
-                    for log_file_name, file_data, timestamps in results:
-                        log_file_descriptor = f"in {log_file_name}" if len(results) > 1 else ""
-                        if result in file_data:
-                            min_index = file_data.index(result)
-                            print(f"    @ {timestamps[min_index]:.6f} s {log_file_descriptor}")
-                elif calc_type == 'abs_average':
-                    result = sum(abs_numeric_values) / len(abs_numeric_values)
-                    print(f"  {calc_name}: {result:.6f} {value_unit}")
-                elif calc_type == 'abs_max':
-                    result = max(abs_numeric_values)
-                    print(f"  {calc_name}: {result:.6f} {value_unit}")
-                    # Find the log file name and timestamp corresponding to the max absolute value
-                    for log_file_name, file_data, timestamps in results:
-                        log_file_descriptor = f"in {log_file_name}" if len(results) > 1 else ""
-                        abs_file_data = [abs(x) for x in file_data if isinstance(x, (int, float))]
-                        if result in abs_file_data:
-                            max_index = abs_file_data.index(result)
-                            print(f"    @ {timestamps[max_index]:.6f} s {log_file_descriptor}")
-                elif calc_type == 'abs_min':
-                    result = min(abs_numeric_values)
-                    print(f"  {calc_name}: {result:.6f} {value_unit}")
-                    # Find the log file name and timestamp corresponding to the min absolute value
-                    for log_file_name, file_data, timestamps in results:
-                        log_file_descriptor = f"in {log_file_name}" if len(results) > 1 else ""
-                        abs_file_data = [abs(x) for x in file_data if isinstance(x, (int, float))]
-                        if result in abs_file_data:
-                            min_index = abs_file_data.index(result)
-                            print(f"    @ {timestamps[min_index]:.6f} s {log_file_descriptor}")
-                elif calc_type == 'count':
-                    result = len(numeric_values)
-                    print(f"  {calc_name}: {result}")
-                elif calc_type == 'outlier_2std':
-                    if len(numeric_values) < 2:
-                        print(f"  {calc_name}: Cannot calculate with less than 2 values")
-                    else:
-                        mean = statistics.mean(numeric_values)
-                        stddev = statistics.stdev(numeric_values)
-                        outliers = [x for x in numeric_values if abs(x - mean) > 2 * stddev]
-                        # print each outlier and its associated timestamp
-                        for outlier in outliers:
-                            print(f"  {calc_name}: {outlier:.6f} {value_unit}")
-                            # Find the log file name and timestamp corresponding to the outlier value
-                            for log_file_name, file_data, timestamps in results:
-                                log_file_descriptor = f"in {log_file_name}" if len(results) > 1 else ""
-                                if outlier in file_data:
-                                    outlier_index = file_data.index(outlier)
-                                    print(f"    @ {timestamps[outlier_index]:.6f} s {log_file_descriptor}")
-                elif calc_type == 'abs_outlier_2std':
-                    if len(abs_numeric_values) < 2:
-                        print(f"  {calc_name}: Cannot calculate with less than 2 values")
-                    else:
-                        mean = statistics.mean(abs_numeric_values)
-                        stddev = statistics.stdev(abs_numeric_values)
-                        outliers = [x for x in abs_numeric_values if abs(x - mean) > 2 * stddev]
-                        # print each outlier and its associated timestamp
-                        for outlier in outliers:
-                            print(f"  {calc_name}: {outlier:.6f} {value_unit}")
-                            # Find the log file name and timestamp corresponding to the outlier value
-                            for log_file_name, file_data, timestamps in results:
-                                log_file_descriptor = f"in {log_file_name}" if len(results) > 1 else ""
-                                abs_file_data = [abs(x) for x in file_data if isinstance(x, (int, float))]
-                                if outlier in abs_file_data:
-                                    outlier_index = abs_file_data.index(outlier)
-                                    print(f"    @ {timestamps[outlier_index]:.6f} s {log_file_descriptor}")
-                else:
-                    print(f"  Unknown calculation type: {calc_type}")
-        else:
-            print(f"  No numeric values found for calculations")
-    else:
-        print(f"No values found for this analysis")
+    computed.calculations = [
+        compute_calculation(calc, results, numeric_values, abs_numeric_values, value_unit)
+        for calc in calculations
+    ]
+    return computed
 
-def print_per_file_counts(results: List[Tuple[str, List[Union[int, float, str, bool]], List[float]]],
-                          calculations: List[Dict[str, Any]]) -> None:
-    """Print per-file match-count statistics for an aggregated analysis.
+
+def compute_per_file_counts(results: List[Tuple[str, List[Union[int, float, str, bool]], List[float]]],
+                            calculations: List[Dict[str, Any]]) -> PerFileCounts:
+    """Compute per-file match-count statistics for an aggregated analysis.
 
     Args:
         results: List of tuples containing log file name, data, and timestamps; one per file
-        calculations: List of calculation configs; per-file counts are only
+        calculations: List of calculation configs; the per-file detail is only
             reported when a "count" calculation was requested
+
+    Returns:
+        A PerFileCounts holding the counts and, when requested, the extremes
     """
     counts = [len(data) for _, data, _ in results]
+    show_detail = bool(counts) and "count" in [calc.get('type') for calc in calculations]
+    computed = PerFileCounts(
+        files_processed=len(results), counts=counts, show_detail=show_detail)
 
-    print(f"  Files processed: {len(results)}")
+    if show_detail:
+        computed.min_count = min(counts)
+        computed.max_count = max(counts)
+        computed.min_file = results[counts.index(computed.min_count)][0]
+        computed.max_file = results[counts.index(computed.max_count)][0]
+        computed.average = sum(counts) / len(counts)
 
-    if not counts or "count" not in [calc.get('type') for calc in calculations]:
-        return
+    return computed
 
-    min_count = min(counts)
-    max_count = max(counts)
 
-    print(f"  Average matched values per file: {sum(counts) / len(counts):.2f}")
-    print(f"  Minimum matched values in any file: {min_count} in {results[counts.index(min_count)][0]}")
-    print(f"  Maximum matched values in any file: {max_count} in {results[counts.index(max_count)][0]}")
+# === Text rendering ===========================================================
+
+def format_value_locations(locations: List[ValueLocation], is_aggregate: bool) -> List[str]:
+    """Render the locations under a calculation as text lines."""
+    return [
+        f"    @ {location.timestamp:.6f} s "
+        f"{f'in {location.log_file_name}' if is_aggregate else ''}"
+        for location in locations
+    ]
+
+
+def format_calculation(calc: CalculationResult, is_aggregate: bool) -> List[str]:
+    """Render one computed calculation as text lines."""
+    if calc.unknown_type:
+        return [f"  Unknown calculation type: {calc.calc_type}"]
+
+    if calc.calc_type in ('outlier_2std', 'abs_outlier_2std'):
+        if calc.error:
+            return [f"  {calc.name}: {calc.error}"]
+        lines = []
+        for value, locations in calc.outliers:
+            lines.append(f"  {calc.name}: {value:.6f} {calc.unit}")
+            lines.extend(format_value_locations(locations, is_aggregate))
+        return lines
+
+    if calc.calc_type == 'count':
+        return [f"  {calc.name}: {calc.value}"]
+
+    lines = [f"  {calc.name}: {calc.value:.6f} {calc.unit}"]
+    lines.extend(format_value_locations(calc.locations, is_aggregate))
+    return lines
+
+
+def format_analysis(computed: AnalysisResult) -> List[str]:
+    """Render a computed analysis as text lines."""
+    if not computed.has_values:
+        return ["No values found for this analysis"]
+
+    if computed.is_aggregate:
+        lines = [f"  Total values captured across all files: {computed.total_count}"]
+        if VERBOSE:
+            lines.append(f"  All values: {[f'{v:.6f} {computed.unit}' for v in computed.all_values]}")
+    else:
+        lines = [f"  Total values captured in this file: {computed.total_count}"]
+        if VERBOSE:
+            lines.append(f"  Values captured: {[f'{v:.6f} {computed.unit}' for v in computed.all_values]}")
+
+    if not computed.has_numeric:
+        lines.append("  No numeric values found for calculations")
+        return lines
+
+    for calc in computed.calculations:
+        lines.extend(format_calculation(calc, computed.is_aggregate))
+    return lines
+
+
+def format_per_file_counts(computed: PerFileCounts) -> List[str]:
+    """Render computed per-file counts as text lines."""
+    lines = [f"  Files processed: {computed.files_processed}"]
+    if not computed.show_detail:
+        return lines
+    lines.append(f"  Average matched values per file: {computed.average:.2f}")
+    lines.append(f"  Minimum matched values in any file: {computed.min_count} in {computed.min_file}")
+    lines.append(f"  Maximum matched values in any file: {computed.max_count} in {computed.max_file}")
+    return lines
+
+
+# === Text output ==============================================================
+
+def print_results_and_calculations(results: List[Tuple[str, List[Union[int, float, str, bool]], List[float]]],
+                                   calculations: List[Dict[str, Any]],
+                                   value_unit: str = "") -> None:
+    """Compute an analysis and print it as text."""
+    for line in format_analysis(compute_analysis(results, calculations, value_unit)):
+        print(line)
+
+
+def print_per_file_counts(results: List[Tuple[str, List[Union[int, float, str, bool]], List[float]]],
+                          calculations: List[Dict[str, Any]]) -> None:
+    """Compute per-file match counts and print them as text."""
+    for line in format_per_file_counts(compute_per_file_counts(results, calculations)):
+        print(line)
+
 
 def get_field_values(field, start: float, end: float):
     """Read a field's values over a time range, whatever its logged type.

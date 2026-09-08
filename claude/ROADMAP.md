@@ -20,6 +20,8 @@ logs in ~7 s; golden suite in [tests/](../tests/) is green).
    current logging conventions.
 5. **Wildcards in entry names** — `/RealOutputs/Vision/*/sending frames` rather
    than naming each of the four cameras.
+6. **Absence checks** — flag what *didn't* happen: an entry that never appeared,
+   or a signal that never reached its expected state.
 
 ## 2. How the Tool Is Used
 
@@ -112,7 +114,7 @@ Two findings worth carrying forward:
   Alerts stream first and treat status/counter fields as corroboration.
 - **`Connected` never went false while enabled in either file.** The motor-dropout
   detectors have no positive fixture yet — a green result would be
-  indistinguishable from a broken detector. See §7.
+  indistinguishable from a broken detector. See §9.
 
 ### 3.3 The blocker
 
@@ -350,7 +352,70 @@ print the entries it selects and their types — before committing to a run over
 folder. This also gives a fast answer to "what did we even log this year?", which
 is currently a manual scan.
 
-## 7. Sequence
+## 7. Absence Checks
+
+Feature 6, and the half of the checks problem that the existing analyses cannot
+express at all.
+
+Every analysis today is **event-driven**: it scans for something happening and
+reports it. But some of the most important post-match findings are things that
+*did not* happen — and you cannot find a missing thing by scanning for it.
+
+### 7.1 Absence is not self-interpreting
+
+Two real cases from the 2026 logs, structurally identical and opposite in meaning:
+
+| Entry | What the log shows | Interpretation |
+|---|---|---|
+| `/RealOutputs/Intake/RollerStalled` | Set `false` on the first periodic cycle, never changes | **Good.** It only goes `true` on a stall. Never stalling is the desired outcome. |
+| `/RealOutputs/Vision/BCL/sending frames` | Entry absent from 4 of 9 logs | **Bad.** The camera never came up. |
+
+Same shape — no transitions, or no entry — and no way to tell them apart from the
+data alone. The discriminator has to be declared.
+
+### 7.2 Declare the expected state
+
+Each rule states what normal looks like, and the check reports the deviation:
+
+| Expectation | Finding when violated |
+|---|---|
+| `present` — the entry exists in every match | entry absent → the device never reported |
+| `always: false` — boolean stays false throughout | any `true` → a stall, a fault, a dropout |
+| `at_least_once: true` — boolean reaches true at some point | never true → the subsystem never armed |
+| `initial_only` — logged once and never changes | any change → unexpected transition |
+
+`RollerStalled` is `always: false`; a `true` is the finding. `sending frames` is
+`present` plus `always: true` while enabled; both absence and a `false` are
+findings. Neither is expressible today.
+
+### 7.3 Why this needs its own pass
+
+Absence checks invert the scan. The existing analyzers iterate the entries a
+config names and report what they contain; an absence check must know the entry
+was *expected* and notice it never arrived. Two consequences:
+
+- **The expected set has to be enumerated up front** — from the rule set, and with
+  wildcards (§6) expanded against a *reference* set of entry names rather than
+  against the log at hand. Otherwise a pattern matching nothing in a log where the
+  camera never came up simply produces no rules, and the silence is invisible.
+  The index (B1) is the natural home for that reference set: "entries we normally
+  see at this event."
+- **A skipped analysis must be distinguishable from a matched one.** This is
+  already visible in the current output — until recently a skipped analysis printed
+  a blank file name, and `RollerStalled` reports as "missing fields" in all nine
+  2026 logs because its single startup record is filtered out by `enabled` /
+  `fmsAttached`. Absence checks need "not captured" and "captured, no matches" to
+  be different states, not both rendered as zero.
+
+### 7.4 Sequencing
+
+Belongs with A4 (checks), and shares its rule format. The `present` and
+`always` / `at_least_once` variants work per-file and need nothing new. The
+"entry we normally see is missing" variant is stronger with a season baseline, so
+it can start as a static expected-entry list in the rule set and get better once
+B1 exists.
+
+## 8. Sequence
 
 ### Milestone A — Pit mode
 
@@ -358,11 +423,11 @@ The post-match checklist, end to end. Nothing here needs the index.
 
 | # | Step | Why | Depends on |
 |---|---|---|---|
-| A0 | ~~**Refresh fixtures to 2026 logs**~~ (§8) — **done** | Detector rules should be written against current entry names, not 2025 ones | — |
+| A0 | ~~**Refresh fixtures to 2026 logs**~~ (§9) — **done** | Detector rules should be written against current entry names, not 2025 ones | — |
 | A1 | ~~**Fix array support**~~ (defects #1–2) — **done** | Unlocks `Alerts/*` — most of feature 2's value | — |
-| A2 | **Split computation from formatting** | Prerequisite for HTML and JSON output | — |
+| A2 | ~~**Split computation from formatting**~~ — **done** | Prerequisite for HTML and JSON output | — |
 | A3 | **Entry patterns / wildcards** (§6) | Detector rules are unwritable without it; shortens every config | A1 |
-| A4 | **Checks as a third analysis kind** | Replaces the manual post-match pass | A2, A3 |
+| A4 | **Checks as a third analysis kind**, incl. absence checks (§7) | Replaces the manual post-match pass | A2, A3 |
 | A5 | **roboRIO sync** | First link in the pit chain (§2.2) | — |
 | A6 | **HTML + JSON emitters** | The pit screen itself (§5.1) | A2, A4 |
 | A7 | **Watch mode** | Closes the pit chain: no commands typed between matches | A5, A6 |
@@ -398,6 +463,13 @@ interesting: `average` / `min` / `max` over a list is meaningless, and
 `print_results_and_calculations` will report "no numeric values". Turning an
 alert stream into findings is A4's job, not this step's.
 
+**A2 — compute/format split.** Done. `compute_analysis()` /
+`compute_per_file_counts()` return dataclasses carrying every figure and its
+locations; `format_analysis()` / `format_per_file_counts()` render those as text
+lines; the `print_*` functions are thin wrappers over the pair. A6's emitters
+attach at the dataclass, which `dataclasses.asdict()` serializes straight to JSON
+(covered by `tests/test_computation.py`).
+
 **A3 — entry patterns.** Designed in §6; it replaces the reversed-substring
 matching rather than layering on top of it.
 
@@ -426,7 +498,7 @@ identity (content hash, not name) so re-imports from A4 are idempotent. Keep the
 schema versioned so a format change can rebuild rather than migrate — extraction
 is cheap and the `.wpilog` files remain authoritative.
 
-## 8. Test Fixtures and Logging Conventions
+## 9. Test Fixtures and Logging Conventions
 
 **Done.** The suite is season-parameterized; see
 [tests/README.md](../tests/README.md) for the mechanics.
@@ -453,7 +525,7 @@ Two seasons are set up:
 The 2025 set is kept deliberately: it lets a refactor prove it changed nothing on
 old data while new work is written against current conventions.
 
-### 8.1 What the 2026 changeover cost
+### 9.1 What the 2026 changeover cost
 
 Worth recording, because the next changeover will look the same. Entry names are
 **game-specific and do not survive a season**. Of the four entries
@@ -470,7 +542,7 @@ So a season changeover is "write a new config and record new goldens", not
 "re-record". Budget for it.
 
 Three failure modes showed up while validating `config2026.json`, all of which a
-config linter (§9) would have caught before a 30-second run:
+config linter (§10) would have caught before a 30-second run:
 
 - **A type mismatch that silently matches nothing** — `"12"` as a string against a
   `double` entry. `12.0 == "12"` is `False`, so the analysis simply never fired.
@@ -488,7 +560,7 @@ fixtures, and — more importantly — would give the motor-dropout detectors th
 positive fixture they currently lack (§3.2). Without it, those detectors cannot be
 distinguished from ones that never fire.
 
-## 9. Cross-Cutting Work
+## 10. Cross-Cutting Work
 
 Fix these along the way — each will otherwise distort a feature above:
 
@@ -500,14 +572,14 @@ Fix these along the way — each will otherwise distort a feature above:
   A3, not a nicety.
 - **`.schema` handling assumes `struct:`** (defect #4) and will `IndexError` on a
   protobuf schema entry.
-- **No config validation.** Every failure mode in §8.1 produced a clean run with
+- **No config validation.** Every failure mode in §9.1 produced a clean run with
   empty results rather than an error, which is the worst possible feedback. A
   linter — check each referenced entry exists in the target logs, that the
   configured value's type matches the entry's, and that the entry is actually
   recorded under the configured `robotMode` — would catch all three before a
   multi-minute run. Cheap once B1's manifest exists; useful enough to do sooner.
 
-## 10. What Must Not Regress
+## 11. What Must Not Regress
 
 The folder-wide aggregate analysis is the feature that replaced hours of
 one-file-at-a-time work in AdvantageScope. It is the thing to protect through
