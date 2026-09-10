@@ -3,6 +3,7 @@
     "logDir": "test/2026",
     "shippedConfig": "config2026.json",
     "logs": [
+        "akit_26-04-29_19-26-56.wpilog",
         "akit_26-04-30_14-46-03_johnson_q12.wpilog",
         "akit_26-04-30_16-20-07_johnson_q22.wpilog",
         "akit_26-04-30_20-48-03_johnson_q46.wpilog",

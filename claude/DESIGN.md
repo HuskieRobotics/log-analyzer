@@ -284,9 +284,21 @@ not O(one file), though only the VERBOSE summary uses the retained list.
 
 ## 6. Cross-Cutting Characteristics
 
-- **`--latest`** narrows the folder to the most recent match, ordered by the
-  timestamp in the log's name rather than its mtime (which `scp` resets to copy
-  time). Paired with the HTML meta refresh, a page left open tracks the newest
+- **A log file is not a match.** Its name may omit the event or match number, one
+  match can span two logs after a robot reboot, and a non-match log is
+  timestamp-only. `(event, match)` is therefore not an identity; only the
+  timestamp prefix is dependable, which is what ordering uses. See
+  [ROADMAP.md §5](ROADMAP.md#5-deployment-local-only).
+- **`--matches-only`** drops logs the robot recorded outside a match, detected by
+  `/DriverStation/FMSAttached` rather than by name or by how long it was enabled
+  (a pit session can be enabled longer than a match). Reading stops at the first
+  attached record, so a match costs almost nothing.
+- **`--latest`** narrows the folder to the most recent **finished** match, ordered
+  by the timestamp in the log's name rather than its mtime (which `scp` resets to
+  copy time). A powered robot is always logging, so the newest file may still be
+  growing; `--settle-seconds` watches for that and falls back to the next-newest,
+  naming the skipped log rather than guessing whether it is a match.
+  Paired with the HTML meta refresh, a page left open tracks the newest completed
   match on its own.
 - **Three output formats from one computation.** Terminal text by default;
   `--html` writes a self-contained page for the pit screen and `--json` the whole

@@ -109,6 +109,24 @@ camera** — it is there so the golden exercises the absence path end to end, si
 all four real cameras are present in all nine logs. The resulting
 `entry not present in this log` finding is expected, not a defect.
 
+## The pit log in the 2026 set
+
+`akit_26-04-29_19-26-56.wpilog` is a **pit session, not a match** — the robot
+logs whenever it is powered, so a real synced folder contains logs like it. It is
+kept in the fixture set deliberately, because that is realistic.
+
+Two consequences to be aware of when reading the 2026 goldens:
+
+- `Files processed` is **10**, and per-file averages are divided by 10 even
+  though only nine files are matches. Those averages are therefore diluted; the
+  totals are not. That is what the goldens record, because they do not pass
+  `--matches-only`; running with that flag restores the averages (BCH 2.70 ->
+  3.00) and names the skipped log.
+- `tests/test_match_detection.py` uses this log as the only real negative example
+  of `/DriverStation/FMSAttached`, which is what tells a match from a pit session.
+  Enabled time does not: this log has 289 s of enabled time against a match's
+  161 s.
+
 ## Updating goldens
 
 When you change the output deliberately, re-record and **review the diff** before

@@ -682,6 +682,7 @@ The post-match checklist, end to end. Nothing here needs the index.
 | A8 | **Threshold / duration checks** (§8) | Motor temperature exposure; the one concern class checks cannot yet express | A4 |
 | A9 | **Sibling comparison** (§9.1) | "hotter than its peers" — 2.3x tighter than history and needs none | A3, A8 |
 | A10 | **Absolute thresholds for singletons** (§9.6) | The dependable option for motors with no peer; §8 already provides the mechanism | A8 |
+| A11 | ~~**`--matches-only`**~~ (§5) — **done** | A synced folder holds pit logs; counting them as matches skews every per-file average | — |
 
 ### Milestone B — Library / practice mode
 
@@ -851,6 +852,24 @@ the address is fixed anyway. Keep the host configurable regardless.
 writes to USB rather than internal storage, and which mount point appears depends
 on the stick.
 
+*The robot is always logging.* A powered roboRIO logs continuously, in the pit as
+well as on the field. So when it comes back and is switched on it immediately
+opens a **new** log, and the newest file on the robot is the one currently being
+appended to — not the match that needs checking. Downloading it yields a
+truncated snapshot which, worse, then matches on size and looks complete.
+
+The fix does not assume which file that is. Sync takes **two listings a couple of
+seconds apart** and skips anything whose size changed, plus anything that appeared
+between them. That stays correct in the case the naive rule ("skip the newest")
+gets wrong: if the robot is *not* powered in the pit, the match log is the newest
+file and is finished, and must be downloaded.
+
+The atomic size verification is a second, independent line of defence — a log
+that grows between the listing and the copy fails verification and never lands.
+It is not sufficient on its own, though: a log appended to just before the
+listing and not during the copy window would match on size, which is why the
+settle check exists.
+
 *What is new.* Determine it from the **destination folder, not a state file**: a
 remote file whose name and size already match a local file is skipped. Names are
 timestamped and unique, so name+size is sufficient, and combined with atomic
@@ -915,9 +934,107 @@ true.
 module constant into `--verbose`. The only visible change is that bad arguments
 now produce argparse's own message.
 
-`--latest` narrows a folder to the single most recent match, which is what makes
-the page usable as a standing pit display: left open, the meta refresh means it
-always shows the newest match as logs arrive.
+`--latest` narrows a folder to the most recent **finished** match, which is what
+makes the page usable as a standing pit display: left open, the meta refresh means
+it always shows the newest completed match as logs arrive.
+
+"Finished" matters for the same reason it does in A5: the robot opens a new log
+the moment it is powered in the pit, so the newest file may be growing. Files
+produced by `sync_logs.py` are complete by construction (it renames into place),
+so the check costs nothing there — but `--latest` may also be pointed at a USB
+stick or a mount of the robot, where it would otherwise pick the open log.
+`--settle-seconds` (default 1) watches the candidates for growth and falls back to
+the next-newest; `--settle-seconds 0` skips it. If every log is still being
+written, that is reported rather than silently analysing a partial file.
+
+When it does fall back, the skipped log is **named, not classified** — on stdout,
+in the JSON, and as a notice band on the page. The tool has no sound way to tell a
+match still being logged (robot brought back from the field powered, after a
+failure) from an idle pit session, and the two look identical as files. The name
+settles it for a human: an AdvantageKit name carries the event and match number
+when the robot was FMS-connected, so `..._johnson_q121.wpilog` reads as a match
+and `..._johnson.wpilog` as a pit session.
+
+**A log file is not a match**, and the filename cannot be trusted to say which
+is which. Four cases, all real:
+
+| Name | Meaning |
+|---|---|
+| `akit_26-04-29_21-55-44.wpilog` | not a match — timestamp only |
+| `akit_26-04-30_16-35-17_johnson.wpilog` | match whose **match number** was not applied |
+| `akit_26-05-01_20-28-19_q105.wpilog` | match whose **event name** was not applied |
+| `akit_26-04-30_19-14-09_johnson_q36.wpilog` + `..._19-18-09_johnson_q36.wpilog` | **one match, two logs** — the robot rebooted during or before it |
+
+So `(event, match number)` is neither unique nor reliably present, and must never
+be used as an identity. Content hash, as B1 already plans, is the identity. The
+log's *timestamp prefix* is always present, which is what `--latest` orders on and
+why it survives every variant above.
+
+The sound signals are inside the log, not in its name:
+
+- **`/DriverStation/FMSAttached` ever true** ⇒ the log contains match activity.
+  True for all nine 2026 logs; a pit session would be false.
+- **Total enabled time** ⇒ whether the match is *complete*. Measured, eight of the
+  nine cluster at **160.4–162.4 s** (15 s auto + 135 s teleop plus transitions),
+  a ±1 s band. A reboot splits a match into two logs that each fall well short of
+  it.
+
+The exception is instructive: `q105` — the log that also lost its event name —
+records **254 s** enabled, 93 s beyond a match. Anomalous in both name and
+duration, so "short" is the partial-match test, not "different".
+
+**A synced folder contains pit logs too**, and analysing them as matches corrupts
+per-file statistics. Registering one real pit log
+(`akit_26-04-29_19-26-56.wpilog`) alongside the nine matches moved the aggregates
+measurably:
+
+| | 9 matches | + 1 pit log |
+|---|---:|---:|
+| BCH camera losses, average per file | 3.00 | **2.70** |
+| BR camera losses, average per file | 3.44 | **3.10** |
+
+Totals are unaffected; it is the per-file averages that go wrong, dividing match
+events across a file that was never a match. So a **`--matches-only` filter** is
+needed, and `/DriverStation/FMSAttached` is what it must rest on. Measured on that
+log against a full match:
+
+| Signal | Pit log | Full match | Separates? |
+|---|---|---|---|
+| `FMSAttached` ever true | **false** | true | **yes** |
+| `Enabled` ever true | true | true | no |
+| Enable periods | 8 | 2 | indicative only |
+| Total enabled | **289.3 s** | 161 s | **no** — pit exceeds a match |
+
+The last row matters: an enabled-time threshold fails in *both* directions here,
+so "was the robot enabled" and "was it enabled long enough" are both unsound.
+`FMSAttached` is the only clean test, and it is cheap for a match (the flag turns
+true early, so the scan can stop) while a pit log needs a full read to prove the
+negative.
+
+**Built as `--matches-only`.** Measured, the asymmetry is stark: detecting a match
+costs **0.00–0.12 s** because FMS attaches about 29 s into a log, while the pit
+log takes 3.43 s to prove negative — and that is a file the run would otherwise
+have spent longer analysing, so the filter pays for itself. It restores the
+diluted averages exactly (BCH 2.70 -> 3.00, BR 3.10 -> 3.44), leaves totals
+untouched, and names what it skipped on stdout, in the JSON and as a notice band
+on the page. It is opt-in, so existing behaviour and every golden are unchanged.
+
+**This matters for §9.** A rebooted match yields two partial logs whose per-match
+statistics are not comparable to a full match: half the enabled time means far
+less temperature rise, and fewer of everything. Feeding them into a baseline
+silently drags it down and makes a genuinely hot match look normal. Comparative
+checks must either merge the pair or exclude logs whose enabled time falls short
+of a full match — and say which they did.
+
+Two discriminators were considered and rejected as the *basis* for a claim.
+Asserting "a newer match is still being logged" would be wrong in the common case,
+where the growing log is just the idle robot in the pit. Inferring it from the
+match identifier in the filename was worse than thin: the single "negative
+example" it rested on, `akit_26-04-30_16-35-17_johnson.wpilog`, is most likely a
+*match* log that lost its match number, not a pit log at all — so the evidence was
+not merely sparse but probably invalid. The only sound test is `/DriverStation/FMSAttached`
+inside the log, which would mean reading a file that is deliberately not
+downloaded — worth doing only if the classification ever has to be automatic.
 
 "Most recent" comes from the timestamp embedded in the log name
 (`akit_26-05-01_22-45-20_...`, or DataLogManager's `FRC_20260501_133809`), with

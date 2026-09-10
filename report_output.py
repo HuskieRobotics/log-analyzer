@@ -58,6 +58,8 @@ class Report:
     config_path: str
     filters: Dict[str, Any] = field(default_factory=dict)
     selection: str = ""
+    still_writing: List[str] = field(default_factory=list)
+    non_matches: List[str] = field(default_factory=list)
     files: List[FileReport] = field(default_factory=list)
     aggregate_findings: List[Any] = field(default_factory=list)
     aggregate_sections: List[ReportSection] = field(default_factory=list)
@@ -128,6 +130,12 @@ h2 { font-size: 1rem; text-transform: uppercase; letter-spacing: .08em;
 .detail { margin-top: .3rem; }
 .where { color: var(--muted); font-size: .82rem; margin-top: .2rem; }
 .none { color: var(--ok); }
+.notice { margin: 0 1.5rem 1rem; padding: .7rem .9rem; border-radius: 8px;
+          background: var(--panel); border-left: 5px solid var(--info);
+          font-size: .9rem; }
+.notice .k { color: var(--muted); text-transform: uppercase;
+             letter-spacing: .08em; font-size: .72rem; }
+.notice .f { word-break: break-all; }
 table { width: 100%; border-collapse: collapse; font-size: .9rem; }
 th, td { text-align: left; padding: .35rem .6rem; border-bottom: 1px solid var(--line); }
 th { color: var(--muted); font-weight: 500; font-size: .8rem; }
@@ -270,6 +278,26 @@ def render_html(report: Report, refresh_seconds: int = 30) -> str:
     refresh = (f'<meta http-equiv="refresh" content="{int(refresh_seconds)}">'
                if refresh_seconds else "")
 
+    # State the fact and name the file; do not guess whether it is a match. An
+    # AdvantageKit name usually carries the event and match number, so the reader
+    # can tell at a glance - and is better placed to than the tool.
+    bands = []
+    if report.still_writing:
+        bands.append((
+            "Newer log still being written" if len(report.still_writing) == 1
+            else f"{len(report.still_writing)} newer logs still being written",
+            report.still_writing))
+    if report.non_matches:
+        bands.append((
+            "Not a match, skipped" if len(report.non_matches) == 1
+            else f"{len(report.non_matches)} logs skipped, not matches",
+            report.non_matches))
+    notice = "".join(
+        f'<div class="notice"><div class="k">{_e(label)}</div>'
+        + "".join(f'<div class="f">{_e(name)}</div>' for name in names)
+        + "</div>"
+        for label, names in bands)
+
     per_file = []
     for entry in report.files:
         per_file.append(
@@ -291,6 +319,7 @@ def render_html(report: Report, refresh_seconds: int = 30) -> str:
     &#183; {_e(filters)} &#183; generated {_e(report.generated_at)}</div>
 </header>
 <div class="verdict">{"".join(tiles)}</div>
+{notice}
 <main>
   <section><h2>Concerns across all files</h2>
     {_findings_html(report.aggregate_findings, True)}</section>

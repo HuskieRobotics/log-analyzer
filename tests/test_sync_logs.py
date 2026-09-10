@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from sync_logs import (  # noqa: E402
     LISTING_SCRIPT,
+    find_growing_files,
     NULL_DEVICE,
     LocalSource,
     SshSource,
@@ -169,6 +170,173 @@ class LocalIndexTest(unittest.TestCase):
 
     def test_missing_folder_is_empty(self):
         self.assertEqual(local_index(Path("/no/such/folder")), {})
+
+
+class GrowingFileTest(unittest.TestCase):
+    """The robot logs continuously while powered, so the log it currently has
+    open is growing and must not be downloaded."""
+
+    def test_a_changed_size_marks_a_file_as_growing(self):
+        first = [RemoteFile("/U/a.wpilog", 100), RemoteFile("/U/b.wpilog", 50)]
+        second = [RemoteFile("/U/a.wpilog", 100), RemoteFile("/U/b.wpilog", 90)]
+        self.assertEqual(find_growing_files(first, second), {"/U/b.wpilog"})
+
+    def test_a_file_that_appeared_between_listings_counts_as_growing(self):
+        first = [RemoteFile("/U/a.wpilog", 100)]
+        second = [RemoteFile("/U/a.wpilog", 100), RemoteFile("/U/new.wpilog", 8)]
+        self.assertEqual(find_growing_files(first, second), {"/U/new.wpilog"})
+
+    def test_nothing_growing_when_sizes_hold(self):
+        listing = [RemoteFile("/U/a.wpilog", 100)]
+        self.assertEqual(find_growing_files(listing, listing), set())
+
+
+class ActiveLogIsNotDownloadedTest(unittest.TestCase):
+    """End to end, with a source that appends to one log between listings."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        root = Path(self._tmp.name)
+        self.robot = root / "robot"
+        self.dest = root / "dest"
+        self.robot.mkdir()
+        # The finished match from the field, and the log opened back in the pit.
+        (self.robot / "akit_26-05-01_10-00-00_e_q1.wpilog").write_bytes(b"a" * 100)
+        (self.robot / "akit_26-05-01_10-30-00_e_q2.wpilog").write_bytes(b"b" * 40)
+        self.live = self.robot / "akit_26-05-01_10-30-00_e_q2.wpilog"
+
+        class LoggingRobot(LocalSource):
+            """Appends to the open log every time it is listed."""
+            def __init__(inner, root, live):
+                super().__init__(root)
+                inner.live = live
+
+            def list_logs(inner, remote_dirs):
+                listing = super().list_logs(remote_dirs)
+                with open(inner.live, "ab") as handle:
+                    handle.write(b"b" * 10)
+                return listing
+
+        self.source = LoggingRobot(self.robot, self.live)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def run_sync(self, **kwargs):
+        with redirect_stdout(io.StringIO()):
+            return sync(self.source, self.dest, [], **kwargs)
+
+    def test_the_open_log_is_reported_as_active_and_not_copied(self):
+        result = self.run_sync(settle_seconds=0.05)
+        self.assertEqual([Path(p).name for p in result.active], [self.live.name])
+        self.assertEqual([f.name for f in result.downloaded],
+                         ["akit_26-05-01_10-00-00_e_q1.wpilog"])
+        self.assertFalse((self.dest / self.live.name).exists())
+
+    def test_the_finished_match_is_still_copied(self):
+        self.run_sync(settle_seconds=0.05)
+        finished = self.dest / "akit_26-05-01_10-00-00_e_q1.wpilog"
+        self.assertEqual(finished.read_bytes(), b"a" * 100)
+
+    def test_size_verification_is_a_second_line_of_defence(self):
+        """With the settle check off, a log that grows during the copy fails
+        verification and never lands - so nothing truncated reaches the folder.
+
+        The settle check is still needed: verification only catches growth
+        between the listing and the copy. A log appended to just before the
+        listing, and not during the copy window, would match on size and land
+        truncated.
+        """
+        result = self.run_sync(settle_seconds=0)
+        self.assertEqual(result.active, [])
+        self.assertNotIn(self.live.name, [f.name for f in result.downloaded])
+        self.assertTrue(any("size mismatch" in f for f in result.failed))
+        self.assertFalse((self.dest / self.live.name).exists())
+
+    def test_it_is_copied_once_the_robot_stops_logging(self):
+        self.run_sync(settle_seconds=0.05)
+        self.source.list_logs = lambda dirs: LocalSource.list_logs(self.source, dirs)
+        result = self.run_sync(settle_seconds=0.05)
+        self.assertEqual(result.active, [])
+        self.assertIn(self.live.name, [f.name for f in result.downloaded])
+
+
+class RobotReturnsStillPoweredTest(unittest.TestCase):
+    """After a failure the robot is sometimes brought back from the field without
+    a power cycle, to avoid losing state. Its match log is therefore still open.
+
+    The match must not be downloaded half-written, and must be picked up on its
+    own once the robot is eventually power-cycled in the pit - no manual step.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        root = Path(self._tmp.name)
+        self.robot = root / "robot"
+        self.dest = root / "dest"
+        self.robot.mkdir()
+        self.previous = self.robot / "akit_26-05-01_20-28-19_e_q105.wpilog"
+        self.match = self.robot / "akit_26-05-01_22-45-20_e_q121.wpilog"
+        self.previous.write_bytes(b"p" * 500)
+        self.match.write_bytes(b"m" * 300)
+        self.growing = {self.match}
+
+        outer = self
+
+        class PoweredRobot(LocalSource):
+            def list_logs(inner, remote_dirs):
+                listing = super().list_logs(remote_dirs)
+                for path in outer.growing:
+                    with open(path, "ab") as handle:
+                        handle.write(b"m" * 25)
+                return listing
+
+        self.source = PoweredRobot(self.robot)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def run_sync(self):
+        with redirect_stdout(io.StringIO()):
+            return sync(self.source, self.dest, [], settle_seconds=0.05)
+
+    def power_cycle(self):
+        """The match log closes; a fresh pit log opens and starts growing."""
+        self.growing.clear()
+        pit_log = self.robot / "akit_26-05-01_23-10-00_e_pit.wpilog"
+        pit_log.write_bytes(b"x" * 20)
+        self.growing.add(pit_log)
+        return pit_log
+
+    def test_the_open_match_log_is_held_back(self):
+        result = self.run_sync()
+        self.assertEqual([Path(p).name for p in result.active], [self.match.name])
+        self.assertFalse((self.dest / self.match.name).exists())
+
+    def test_earlier_finished_matches_still_arrive(self):
+        self.run_sync()
+        self.assertEqual((self.dest / self.previous.name).read_bytes(), b"p" * 500)
+
+    def test_the_match_arrives_after_the_power_cycle(self):
+        self.run_sync()
+        pit_log = self.power_cycle()
+        result = self.run_sync()
+        self.assertIn(self.match.name, [f.name for f in result.downloaded])
+        self.assertEqual([Path(p).name for p in result.active], [pit_log.name])
+
+    def test_it_arrives_complete(self):
+        self.run_sync()
+        self.power_cycle()
+        self.run_sync()
+        copied = self.dest / self.match.name
+        self.assertEqual(copied.stat().st_size, self.match.stat().st_size)
+
+    def test_no_manual_step_and_nothing_downloaded_twice(self):
+        self.run_sync()
+        self.power_cycle()
+        self.run_sync()
+        again = self.run_sync()
+        self.assertEqual(again.downloaded, [])
 
 
 class EndToEndTest(unittest.TestCase):

@@ -52,6 +52,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence
@@ -100,6 +101,7 @@ class RemoteFile:
 class SyncResult:
     downloaded: List[RemoteFile] = field(default_factory=list)
     skipped: List[RemoteFile] = field(default_factory=list)
+    active: List[str] = field(default_factory=list)
     failed: List[str] = field(default_factory=list)
     reachable: bool = True
 
@@ -119,6 +121,21 @@ def parse_listing(text: str) -> List[RemoteFile]:
             continue
         files.append(RemoteFile(path=path, size=int(size_text)))
     return files
+
+
+def find_growing_files(first: Sequence[RemoteFile],
+                       second: Sequence[RemoteFile]) -> set:
+    """Paths whose size changed between two listings, i.e. still being written.
+
+    A powered roboRIO logs continuously, so the log it currently has open grows
+    between any two listings. That file must not be downloaded: a snapshot of it
+    is truncated, and worse, it would then match on size and look complete.
+
+    A path present only in the second listing counts as growing too - a log that
+    appeared in the last couple of seconds is the one being written.
+    """
+    sizes = {entry.path: entry.size for entry in first}
+    return {entry.path for entry in second if sizes.get(entry.path) != entry.size}
 
 
 def local_index(destination: Path) -> Dict[str, int]:
@@ -252,17 +269,19 @@ class SshSource:
 # === Orchestration ===========================================================
 
 def sync(source, destination: Path, remote_dirs: Sequence[str],
-         dry_run: bool = False) -> SyncResult:
-    """Copy every log not already present in the destination folder.
+         dry_run: bool = False, settle_seconds: float = 2.0) -> SyncResult:
+    """Copy every finished log not already present in the destination folder.
 
     Args:
         source: A LocalSource or SshSource
         destination: Folder that receives the logs, and that defines what is new
         remote_dirs: Directories to search on the far side
         dry_run: List what would be copied without copying it
+        settle_seconds: Gap between two listings used to spot a log that is still
+            being written; 0 disables the check
 
     Returns:
-        A SyncResult naming what was downloaded, skipped and failed
+        A SyncResult naming what was downloaded, skipped, still active and failed
     """
     result = SyncResult()
 
@@ -270,6 +289,21 @@ def sync(source, destination: Path, remote_dirs: Sequence[str],
     if listing is None:
         result.reachable = False
         return result
+
+    if settle_seconds > 0 and listing:
+        # The robot is logging the whole time it is powered, including in the
+        # pit, so the newest log is normally open and growing. Comparing two
+        # listings identifies it without assuming which one it is.
+        time.sleep(settle_seconds)
+        second = source.list_logs(remote_dirs)
+        if second is None:
+            result.reachable = False
+            return result
+        growing = find_growing_files(listing, second)
+        result.active = sorted(growing)
+        listing = [entry for entry in second if entry.path not in growing]
+        for path in result.active:
+            print(f"  still being written, skipping: {os.path.basename(path)}")
 
     local = local_index(destination)
     wanted = select_new_files(listing, local)
@@ -322,6 +356,10 @@ def main() -> None:
                              f"default {' '.join(DEFAULT_REMOTE_DIRS)})")
     parser.add_argument("--from-local", metavar="DIR",
                         help="read from a local directory instead of a robot")
+    parser.add_argument("--settle-seconds", type=float, default=2.0,
+                        metavar="SECONDS",
+                        help="gap between two listings used to detect the log "
+                             "the robot still has open; 0 disables (default 2)")
     parser.add_argument("--dry-run", action="store_true",
                         help="list what would be copied, copy nothing")
     args = parser.parse_args()
@@ -348,7 +386,8 @@ def main() -> None:
         sys.exit(2)
 
     print(f"Syncing from {source.describe()} into {destination}", flush=True)
-    result = sync(source, destination, remote_dirs, args.dry_run)
+    result = sync(source, destination, remote_dirs, args.dry_run,
+                  settle_seconds=args.settle_seconds)
 
     if not result.reachable:
         # The robot is absent most of the time; that is the normal case, so a
@@ -362,7 +401,9 @@ def main() -> None:
 
     verb = "would copy" if args.dry_run else "copied"
     print(f"{verb} {len(result.downloaded)}, "
-          f"already present {len(result.skipped)}, failed {len(result.failed)}")
+          f"already present {len(result.skipped)}, "
+          f"still being written {len(result.active)}, "
+          f"failed {len(result.failed)}")
     sys.exit(1 if result.failed else 0)
 
 

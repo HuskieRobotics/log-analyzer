@@ -329,14 +329,14 @@ class LatestFlagTest(unittest.TestCase):
         self.assertEqual(data["files"][0]["name"], self.newest_expected())
 
     def test_stdout_says_what_it_did(self):
-        self.assertIn("most recent match", self.stdout)
+        self.assertIn("most recent finished match", self.stdout)
         self.assertIn(self.newest_expected(), self.stdout)
 
     def test_the_page_names_the_match_it_is_showing(self):
         # A screen left open must make clear which match it is displaying.
         page = self.html_path.read_text()
         self.assertIn(self.newest_expected(), page)
-        self.assertIn("most recent match", page)
+        self.assertIn("most recent finished match", page)
 
     def test_older_matches_are_absent(self):
         data = json.loads(self.json_path.read_text())
@@ -344,6 +344,74 @@ class LatestFlagTest(unittest.TestCase):
         rendered = json.dumps(data)
         for name in older:
             self.assertNotIn(name, rendered)
+
+
+class MatchesOnlyTest(unittest.TestCase):
+    """--matches-only must drop pit logs, which otherwise dilute per-file
+    averages by dividing match events across files that were never matches."""
+
+    @classmethod
+    def setUpClass(cls):
+        available = [s for s in discover_seasons() if not s.log_problems()]
+        season = next((s for s in available if s.name == "2026"), None)
+        if season is None:
+            raise unittest.SkipTest("2026 fixtures not present")
+        cls.season = season
+        cls._tmp = tempfile.TemporaryDirectory()
+        folder = Path(cls._tmp.name)
+
+        def run(*extra):
+            path = folder / f"report{len(list(folder.iterdir()))}.json"
+            done = subprocess.run(
+                [sys.executable, str(ANALYSIS), str(season.log_dir),
+                 str(season.dir / "configs" / "wildcards.json"),
+                 "--json", str(path), *extra],
+                cwd=str(REPO_ROOT), capture_output=True, text=True,
+                timeout=RUN_TIMEOUT_SECONDS)
+            if done.returncode != 0:
+                raise AssertionError(done.stderr)
+            return json.loads(path.read_text()), done.stdout
+
+        cls.all_logs, cls.all_stdout = run()
+        cls.matches, cls.matches_stdout = run("--matches-only")
+
+    @classmethod
+    def tearDownClass(cls):
+        if hasattr(cls, "_tmp"):
+            cls._tmp.cleanup()
+
+    def test_the_pit_log_is_dropped(self):
+        self.assertEqual(len(self.all_logs["files"]) - len(self.matches["files"]), 1)
+        self.assertEqual(self.matches["non_matches"],
+                         ["akit_26-04-29_19-26-56.wpilog"])
+
+    def test_it_is_named_on_stdout(self):
+        self.assertIn("Not a match, skipped: akit_26-04-29_19-26-56.wpilog",
+                      self.matches_stdout)
+
+    def test_per_file_averages_are_no_longer_diluted(self):
+        def average(report, camera):
+            section = next(s for s in report["aggregate_sections"]
+                           if f"/{camera}/" in s["title"])
+            return section["counts"]["files_processed"], section["counts"]["average"]
+        for camera in ("BCH", "BR"):
+            files_all, avg_all = average(self.all_logs, camera)
+            files_match, avg_match = average(self.matches, camera)
+            self.assertEqual((files_all, files_match), (10, 9))
+            self.assertGreater(avg_match, avg_all)
+
+    def test_totals_are_unchanged(self):
+        """Only the averages were wrong; the pit log contributed no match events."""
+        def total(report, camera):
+            section = next(s for s in report["aggregate_sections"]
+                           if f"/{camera}/" in s["title"])
+            return section["result"]["total_count"]
+        for camera in ("BCH", "BR"):
+            self.assertEqual(total(self.all_logs, camera),
+                             total(self.matches, camera))
+
+    def test_selection_says_match_logs(self):
+        self.assertEqual(self.matches["selection"], "9 match logs")
 
 
 if __name__ == "__main__":

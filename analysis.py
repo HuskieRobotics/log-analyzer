@@ -8,6 +8,7 @@ import os
 import sys
 import bisect
 import statistics
+import time
 from datetime import datetime
 from pathlib import Path
 from dataclasses import dataclass, field
@@ -638,15 +639,106 @@ def log_recorded_at(path: str) -> datetime:
         return datetime.min
 
 
-def select_latest_log(log_files: List[str]) -> List[str]:
-    """Return just the most recently recorded log.
+def log_contains_match(log_file_path: str) -> bool:
+    """Whether the robot was ever FMS-attached in this log, i.e. it is a match.
 
-    Ties break on the file name so the choice is deterministic.
+    The robot logs whenever it is powered, so a synced folder holds pit sessions
+    alongside matches. Nothing in the file name reliably distinguishes them, and
+    neither does whether the robot was enabled or for how long - a pit session
+    can be enabled far longer than a match. FMS attachment is the clean signal.
+
+    Reading stops at the first attached record, so a match costs almost nothing
+    (the flag turns true within the first minute of the log). Proving the
+    negative needs the whole file, which is the price of skipping it.
     """
-    if not log_files:
-        return []
-    return [max(log_files, key=lambda path: (log_recorded_at(path),
-                                             os.path.basename(path)))]
+    try:
+        with open(log_file_path, "rb") as handle:
+            buffer = mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ)
+            reader = DataLogReader(buffer)
+            if not reader:
+                return False
+            fms_entries = set()
+            for record in reader:
+                if record.entry == 0:
+                    if record.isStart():
+                        data = record.getStartData()
+                        if (data.name == "/DriverStation/FMSAttached"
+                                and data.type == "boolean"):
+                            fms_entries.add(data.entry)
+                    elif record.isFinish():
+                        fms_entries.discard(record.getFinishEntry())
+                    continue
+                if record.entry in fms_entries and record.getBoolean():
+                    return True
+    except (OSError, ValueError, TypeError):
+        return False
+    return False
+
+
+def partition_match_logs(log_files: List[str]) -> Tuple[List[str], List[str]]:
+    """Split paths into (match logs, everything else), preserving order."""
+    matches, others = [], []
+    for path in log_files:
+        (matches if log_contains_match(path) else others).append(path)
+    return matches, others
+
+
+@dataclass
+class LatestLog:
+    """The newest finished log, and any newer ones still being written.
+
+    The names of the skipped logs are reported rather than interpreted. An
+    AdvantageKit name usually carries the event and match number
+    ("akit_26-05-01_22-45-20_johnson_q121"), so seeing it tells the reader
+    whether the robot is still logging a match or just sitting in the pit -
+    a judgement the tool has no sound way to make on its own.
+    """
+    path: Optional[str] = None
+    still_writing: List[str] = field(default_factory=list)
+
+
+def select_latest_log(log_files: List[str],
+                      settle_seconds: float = 0.0) -> LatestLog:
+    """Return the most recently recorded log that is not still being written.
+
+    The robot logs continuously while powered, so once it is back in the pit and
+    switched on it has already opened a *new* log. The match that needs checking
+    is therefore the newest **finished** log, not the newest one.
+
+    Args:
+        log_files: Candidate paths
+        settle_seconds: Gap over which to watch for a file growing; 0 skips the
+            check, which is right when the folder is sync_logs.py's output (it
+            renames into place, so every file there is complete)
+
+    Returns:
+        A LatestLog whose path is None if every candidate is still growing. Ties
+        break on the file name so the choice is deterministic.
+    """
+    ordered = sorted(log_files,
+                     key=lambda path: (log_recorded_at(path),
+                                       os.path.basename(path)),
+                     reverse=True)
+    if not ordered:
+        return LatestLog()
+    if settle_seconds <= 0:
+        return LatestLog(path=ordered[0])
+
+    def size_of(path: str) -> int:
+        try:
+            return os.path.getsize(path)
+        except OSError:
+            return -1
+
+    # One sleep for all candidates, then take the newest that did not change.
+    before = {path: size_of(path) for path in ordered}
+    time.sleep(settle_seconds)
+    growing = []
+    for path in ordered:
+        if size_of(path) == before[path]:
+            return LatestLog(path=path, still_writing=growing)
+        growing.append(path)
+    return LatestLog(still_writing=growing)
 
 
 TIME_ANALYSIS_ROLES = ("startEntry", "endEntry")
@@ -1024,9 +1116,18 @@ def main() -> None:
     parser.add_argument("--refresh", type=int, default=30, metavar="SECONDS",
                         help="HTML auto-refresh interval, 0 to disable "
                              "(default 30)")
+    parser.add_argument("--matches-only", action="store_true",
+                        help="skip logs the robot recorded outside a match "
+                             "(pit sessions), which otherwise dilute every "
+                             "per-file average")
     parser.add_argument("--latest", action="store_true",
-                        help="analyze only the most recently recorded log, so a "
+                        help="analyze only the most recent finished log, so a "
                              "page left open always shows the newest match")
+    parser.add_argument("--settle-seconds", type=float, default=1.0,
+                        metavar="SECONDS",
+                        help="with --latest, gap over which to check that the "
+                             "chosen log is not still growing; 0 skips the check "
+                             "(default 1)")
     parser.add_argument("--verbose", action="store_true",
                         help="include captured values and a record summary")
     args = parser.parse_args()
@@ -1097,9 +1198,29 @@ def main() -> None:
         sys.exit(1)
 
     selection = f"{len(log_files)} log files"
+    still_writing = []
+    non_matches = []
+    if args.matches_only:
+        log_files, skipped = partition_match_logs(sorted(log_files))
+        non_matches = [os.path.basename(path) for path in skipped]
+        if not log_files:
+            for name in non_matches:
+                print(f"Not a match (no FMS connection): {name}", file=sys.stderr)
+            print("No match logs found; nothing to analyze.", file=sys.stderr)
+            sys.exit(0)
+        selection = f"{len(log_files)} match logs"
+
     if args.latest:
-        log_files = select_latest_log(log_files)
-        selection = f"most recent match: {os.path.basename(log_files[0])}"
+        latest = select_latest_log(log_files, settle_seconds=args.settle_seconds)
+        still_writing = [os.path.basename(path) for path in latest.still_writing]
+        if latest.path is None:
+            for name in still_writing:
+                print(f"Still being written: {name}", file=sys.stderr)
+            print("Every log is still being written; nothing finished to analyze.",
+                  file=sys.stderr)
+            sys.exit(0)
+        log_files = [latest.path]
+        selection = f"most recent finished match: {os.path.basename(latest.path)}"
     
      # Print filtering criteria and final states
     print(f"\n=== FILTERING CRITERIA ===")
@@ -1108,8 +1229,14 @@ def main() -> None:
     print(f"Filter for robot mode: {filter_on_robot_mode}")
 
     print(f"\n=== ANALYSIS ===")
+    for name in non_matches:
+        print(f"Not a match, skipped: {name}")
     if args.latest:
-        print(f"Analyzing the most recent match only:")
+        # Name the newer logs rather than guess at what they are: the reader can
+        # tell a match from an idle pit session at a glance from the name.
+        for name in still_writing:
+            print(f"Newer log still being written: {name}")
+        print(f"Analyzing the most recent finished match only:")
     else:
         print(f"Found {len(log_files)} log files to process:")
     for log_file in sorted(log_files):
@@ -1125,6 +1252,8 @@ def main() -> None:
                  "fmsAttached": filter_on_fms_attached,
                  "robotMode": filter_on_robot_mode},
         selection=selection,
+        still_writing=still_writing,
+        non_matches=non_matches,
         generated_at=now_text())
     check_reports = []  # One CheckReport per file
     aggregated_time_analysis_results = {}  # key -> {log file name: result}

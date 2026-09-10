@@ -146,6 +146,41 @@ class RenderHtmlTest(unittest.TestCase):
                                   aggregate_sections=[section]))
         self.assertIn("Cannot calculate", page)
 
+    def test_a_growing_newer_log_is_named_not_classified(self):
+        report = sample_report(
+            still_writing=["akit_26-05-01_23-10-00_johnson.wpilog"])
+        page = render_html(report)
+        self.assertIn("Newer log still being written", page)
+        self.assertIn("akit_26-05-01_23-10-00_johnson.wpilog", page)
+        # The tool must not assert what the log is; the name lets the reader tell.
+        self.assertNotIn("newer match", page)
+
+    def test_no_notice_when_nothing_is_growing(self):
+        self.assertNotIn('class="notice"', render_html(sample_report()))
+
+    def test_several_growing_logs_are_all_named(self):
+        report = sample_report(still_writing=["a_q1.wpilog", "b.wpilog"])
+        page = render_html(report)
+        self.assertIn("2 newer logs still being written", page)
+        for name in ("a_q1.wpilog", "b.wpilog"):
+            self.assertIn(name, page)
+
+    def test_the_notice_survives_json_too(self):
+        data = json.loads(render_json(sample_report(still_writing=["x.wpilog"])))
+        self.assertEqual(data["still_writing"], ["x.wpilog"])
+
+    def test_skipped_non_matches_are_named(self):
+        page = render_html(sample_report(non_matches=["akit_26-04-29_19-26-56.wpilog"]))
+        self.assertIn("Not a match, skipped", page)
+        self.assertIn("akit_26-04-29_19-26-56.wpilog", page)
+
+    def test_both_notice_bands_can_appear_together(self):
+        page = render_html(sample_report(still_writing=["live.wpilog"],
+                                         non_matches=["pit.wpilog"]))
+        self.assertEqual(page.count('class="notice"'), 2)
+        for name in ("live.wpilog", "pit.wpilog"):
+            self.assertIn(name, page)
+
     def test_empty_report_renders(self):
         page = render_html(Report(log_folder="x", config_path="y"))
         self.assertIn("No concerns found.", page)

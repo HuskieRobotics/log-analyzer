@@ -5,7 +5,8 @@ Filter for FMS attached: False
 Filter for robot mode: both
 
 === ANALYSIS ===
-Found 9 log files to process:
+Found 10 log files to process:
+  akit_26-04-29_19-26-56.wpilog
   akit_26-04-30_14-46-03_johnson_q12.wpilog
   akit_26-04-30_16-20-07_johnson_q22.wpilog
   akit_26-04-30_20-48-03_johnson_q46.wpilog
@@ -15,6 +16,18 @@ Found 9 log files to process:
   akit_26-05-01_17-57-36_johnson_q89.wpilog
   akit_26-05-01_20-28-19_q105.wpilog
   akit_26-05-01_22-45-20_johnson_q121.wpilog
+
+Processing: akit_26-04-29_19-26-56.wpilog
+
+=== CHECK RESULTS FOR akit_26-04-29_19-26-56.wpilog ===
+
+  [ERROR] CANivore not OK (/RealOutputs/CANivoreStatus/Status)
+    is 'InvalidNetwork', expected 'OK'
+      @ 650.962291 s
+  [ERROR] Camera frames (/RealOutputs/Vision/FRONT/sending frames)
+    entry not present in this log
+  [INFO] Shooter never reached a shooting mode (/RealOutputs/ShooterModes/CurrentMode)
+    never reached 'SHOOT_OTM'
 
 Processing: akit_26-04-30_14-46-03_johnson_q12.wpilog
 
@@ -230,7 +243,7 @@ Processing: akit_26-05-01_22-45-20_johnson_q121.wpilog
 
   [ERROR] CANivore not OK (/RealOutputs/CANivoreStatus/Status)
     is 'InvalidNetwork', expected 'OK'
-      x2, first @ 263.697293 s, in akit_26-04-30_16-20-07_johnson_q22.wpilog
+      x3, in 2 files, first @ 650.962291 s, in akit_26-04-29_19-26-56.wpilog
   [ERROR] Camera frames (/RealOutputs/Vision/BCH/sending frames)
     is False, expected True
       x27, in 7 files, first @ 348.787961 s, in akit_26-04-30_14-46-03_johnson_q12.wpilog
@@ -245,7 +258,7 @@ Processing: akit_26-05-01_22-45-20_johnson_q121.wpilog
       x32, in 7 files, first @ 210.571447 s, in akit_26-04-30_16-20-07_johnson_q22.wpilog
   [ERROR] Camera frames (/RealOutputs/Vision/FRONT/sending frames)
     entry not present in this log
-      x9, in 9 files
+      x10, in 10 files
   [ERROR] Device disconnected while enabled (/Vision/BCL/Connected)
     is False, expected True
       x18, first @ 372.465806 s, in akit_26-05-01_15-45-36_johnson_q80.wpilog
@@ -297,3 +310,5 @@ Processing: akit_26-05-01_22-45-20_johnson_q121.wpilog
   [WARNING] Alert reported as warning (/RealOutputs/Alerts/warnings)
     Non-competition operator controller connected.
       @ 455.742040 s, in akit_26-05-01_17-57-36_johnson_q89.wpilog
+  [INFO] Shooter never reached a shooting mode (/RealOutputs/ShooterModes/CurrentMode)
+    never reached 'SHOOT_OTM'
