@@ -678,7 +678,7 @@ The post-match checklist, end to end. Nothing here needs the index.
 | A4 | ~~**Checks as a third analysis kind**~~, incl. absence checks (§7) — **done** | Replaces the manual post-match pass | A2, A3 |
 | A5 | ~~**roboRIO sync**~~ — **done** (`sync_logs.py`) | First link in the pit chain (§2.2) | — |
 | A6 | ~~**HTML + JSON emitters**~~ — **done** (`report_output.py`) | The pit screen itself (§5.1) | A2, A4 |
-| A7 | **Watch mode** | Closes the pit chain: no commands typed between matches | A5, A6 |
+| A7 | ~~**Watch mode**~~ — **done** (`pit_monitor.py`) | Closes the pit chain: no commands typed between matches | A5, A6 |
 | A8 | **Threshold / duration checks** (§8) | Motor temperature exposure; the one concern class checks cannot yet express | A4 |
 | A9 | **Sibling comparison** (§9.1) | "hotter than its peers" — 2.3x tighter than history and needs none | A3, A8 |
 | A10 | **Absolute thresholds for singletons** (§9.6) | The dependable option for motors with no peer; §8 already provides the mechanism | A8 |
@@ -1043,12 +1043,38 @@ time, so a re-copied old log would otherwise masquerade as the newest and the pi
 screen would quietly show the wrong match. The page header names the match it is
 displaying for the same reason.
 
-**A7 — watch mode.** A long-running `--watch <folder>` that notices new `.wpilog`
-files (dropped there by A5), analyzes each once, and rewrites the report. Debounce
-on file size settling — a log still being copied must not be analyzed early. Keep
-it restartable and idempotent: track which files have been processed by content
-hash, the same identity B1 uses, so a restart mid-event does not redo the day or
-skip a match.
+**A7 — watch mode.** Built as **`pit_monitor.py`**, a separate driver rather than
+a flag on the analyser: it composes the two standalone tools instead of absorbing
+them.
+
+    ./pit_monitor.py ./logs checks2026.json --sync-from 10.30.61.2
+
+Each cycle it optionally syncs, works out which log *would* be analysed, and
+re-runs the analyser only if that changed. With the report's meta refresh, a
+browser left open tracks the newest match with nothing typed between matches.
+
+It came out smaller than planned because later work absorbed most of it. The
+debounce is the size-settling check already built for A5 and `--latest`. Pit
+sessions are excluded by `--matches-only`. And the content-hash bookkeeping this
+note originally called for was **not** needed: with `--latest` the question is not
+"which files have I processed" but "which log is currently newest", so
+remembering that one path is enough, and re-running is idempotent by
+construction. A restart re-renders the current match once, which is correct.
+
+Deciding the target is deliberately cheap. Candidates go newest-first and the
+search stops at the first settled match, so a normal cycle classifies one file in
+about 10 ms; the costly negative — proving a pit session is not a match — happens
+once per session and is cached against the file's size.
+
+*Nothing in a cycle may kill the loop.* An absent robot, an unreachable host, a
+bad config, a failed analysis: each is reported and survived. A pit display that
+dies at the wrong moment is worse than a stale one.
+
+One thing this exposed: `sync_logs.py` exits 0 when the robot is away, by design,
+so a boolean "did sync succeed" reported **"synced"** when nothing had been
+fetched. Sync now exports an `UNREACHABLE_NOTICE` sentinel and the monitor
+reports three states — synced, robot not reachable, sync FAILED — rather than
+two.
 
 **B1 — index.** Store the state tier in full plus a numeric manifest. Key on file
 identity (content hash, not name) so re-imports from A4 are idempotent. Keep the

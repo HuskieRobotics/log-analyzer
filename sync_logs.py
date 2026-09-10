@@ -66,6 +66,11 @@ DEFAULT_REMOTE_DIRS = ("/media/sda1", "/media/sda2", "/U", "/home/lvuser/logs")
 
 LOG_SUFFIX = ".wpilog"
 
+# An unreachable robot is the normal case, not a failure, so sync still exits 0.
+# A caller that needs to tell "nothing to do" from "everything copied" matches
+# on this rather than on the exit code; it is shared so the two do not drift.
+UNREACHABLE_NOTICE = "Robot not reachable; nothing to do."
+
 # Win32-OpenSSH does not understand /dev/null as a path; it wants NUL. The robot
 # is a link-local device that is reimaged regularly, so its host key changes and
 # is not worth recording either way.
@@ -392,7 +397,7 @@ def main() -> None:
     if not result.reachable:
         # The robot is absent most of the time; that is the normal case, so a
         # polling loop should not treat it as a failure.
-        print("Robot not reachable; nothing to do.")
+        print(UNREACHABLE_NOTICE)
         sys.exit(0)
 
     if args.dry_run:

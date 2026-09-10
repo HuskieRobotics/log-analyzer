@@ -29,6 +29,7 @@ driven by a JSON config; there is no CLI beyond `analysis.py <log_folder> <confi
 | [entry_patterns.py](../entry_patterns.py) | Segment-scoped glob matching for entry names | — |
 | [report_output.py](../report_output.py) | JSON and self-contained HTML renderings of a run | — |
 | [sync_logs.py](../sync_logs.py) | Standalone roboRIO log fetcher; shares only the destination folder | — |
+| [pit_monitor.py](../pit_monitor.py) | Hands-off loop: sync, decide, re-analyse, rewrite the page | — |
 | [tests/](../tests/) | Season-parameterized golden-output suite (stdlib `unittest`) | — |
 | `test/<season>/` | `.wpilog` fixtures per season; gitignored (~108 MB for 2025, ~433 MB for 2026) | — |
 | [test.log](../test.log) | Stray plain-text sample; **not** a `.wpilog` and unused by any code | — |
