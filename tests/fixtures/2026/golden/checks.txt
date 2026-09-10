@@ -44,6 +44,18 @@ Processing: akit_26-04-30_14-46-03_johnson_q12.wpilog
   [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Intake/RollerConnectedLead)
     is False, expected True
       x4, first @ 208.350400 s
+  [WARNING] Drive motor over temperature (/Drivetrain/BL/DriveTemp)
+    above 40 C for 70.9 s, peak 45 C at 327.0 s
+      @ 318.199641 s
+  [WARNING] Drive motor over temperature (/Drivetrain/BR/DriveTemp)
+    above 40 C for 115.4 s, peak 45 C at 325.7 s
+      @ 287.520075 s
+  [WARNING] Drive motor over temperature (/Drivetrain/FL/DriveTemp)
+    above 40 C for 90.6 s, peak 46 C at 324.1 s
+      @ 306.962459 s
+  [WARNING] Drive motor over temperature (/Drivetrain/FR/DriveTemp)
+    above 40 C for 98.6 s, peak 45 C at 324.4 s
+      @ 307.950451 s
 
 Processing: akit_26-04-30_16-20-07_johnson_q22.wpilog
 
@@ -102,6 +114,18 @@ Processing: akit_26-04-30_16-20-07_johnson_q22.wpilog
   [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Shooter/TurretConnected)
     is False, expected True
       x3, first @ 264.002811 s
+  [WARNING] Drive motor over temperature (/Drivetrain/BL/DriveTemp)
+    above 40 C for 50.3 s, peak 42 C at 299.6 s
+      @ 297.048486 s
+  [WARNING] Drive motor over temperature (/Drivetrain/BR/DriveTemp)
+    above 40 C for 81.1 s, across 2 intervals, longest 53.5 s, peak 44 C at 295.3 s
+      x2, first @ 268.940858 s
+  [WARNING] Drive motor over temperature (/Drivetrain/FL/DriveTemp)
+    above 40 C for 53.3 s, across 2 intervals, longest 45.5 s, peak 42 C at 293.6 s
+      x2, first @ 288.726715 s
+  [WARNING] Drive motor over temperature (/Drivetrain/FR/DriveTemp)
+    above 40 C for 72.8 s, across 2 intervals, longest 46.0 s, peak 42 C at 293.3 s
+      x2, first @ 269.760156 s
 
 Processing: akit_26-04-30_20-48-03_johnson_q46.wpilog
 
@@ -127,6 +151,18 @@ Processing: akit_26-04-30_20-48-03_johnson_q46.wpilog
   [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Vision/BR/Connected)
     is False, expected True
       @ 212.708341 s
+  [WARNING] Drive motor over temperature (/Drivetrain/BL/DriveTemp)
+    above 40 C for 118.3 s, peak 46 C at 302.4 s
+      @ 275.298044 s
+  [WARNING] Drive motor over temperature (/Drivetrain/BR/DriveTemp)
+    above 40 C for 170.8 s, peak 47 C at 302.0 s
+      @ 249.813925 s
+  [WARNING] Drive motor over temperature (/Drivetrain/FL/DriveTemp)
+    above 40 C for 118.8 s, peak 46 C at 307.8 s
+      @ 276.999228 s
+  [WARNING] Drive motor over temperature (/Drivetrain/FR/DriveTemp)
+    above 40 C for 155.9 s, peak 48 C at 313.6 s, still past the limit when the log ended
+      @ 273.084937 s
 
 Processing: akit_26-04-30_22-42-16_johnson_q59.wpilog
 
@@ -152,6 +188,18 @@ Processing: akit_26-04-30_22-42-16_johnson_q59.wpilog
   [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Vision/BR/Connected)
     is False, expected True
       x3, first @ 386.813782 s
+  [WARNING] Drive motor over temperature (/Drivetrain/BL/DriveTemp)
+    above 40 C for 130.6 s, peak 45 C at 387.9 s
+      @ 370.139929 s
+  [WARNING] Drive motor over temperature (/Drivetrain/BR/DriveTemp)
+    above 40 C for 142.7 s, peak 46 C at 387.9 s, still past the limit when the log ended
+      @ 366.209332 s
+  [WARNING] Drive motor over temperature (/Drivetrain/FL/DriveTemp)
+    above 40 C for 132.0 s, peak 45 C at 389.0 s
+      @ 369.268097 s
+  [WARNING] Drive motor over temperature (/Drivetrain/FR/DriveTemp)
+    above 40 C for 141.7 s, peak 46 C at 390.2 s, still past the limit when the log ended
+      @ 367.190349 s
 
 Processing: akit_26-05-01_13-38-09_johnson_q67.wpilog
 
@@ -177,6 +225,18 @@ Processing: akit_26-05-01_13-38-09_johnson_q67.wpilog
   [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Vision/BR/Connected)
     is False, expected True
       @ 378.349808 s
+  [WARNING] Drive motor over temperature (/Drivetrain/BL/DriveTemp)
+    above 40 C for 123.4 s, peak 47 C at 425.7 s
+      @ 384.649740 s
+  [WARNING] Drive motor over temperature (/Drivetrain/BR/DriveTemp)
+    above 40 C for 162.8 s, peak 49 C at 430.4 s
+      @ 371.630107 s
+  [WARNING] Drive motor over temperature (/Drivetrain/FL/DriveTemp)
+    above 40 C for 139.1 s, peak 48 C at 428.0 s
+      @ 376.185468 s
+  [WARNING] Drive motor over temperature (/Drivetrain/FR/DriveTemp)
+    above 40 C for 159.1 s, peak 48 C at 425.6 s
+      @ 374.165447 s
 
 Processing: akit_26-05-01_15-45-36_johnson_q80.wpilog
 
@@ -202,6 +262,18 @@ Processing: akit_26-05-01_15-45-36_johnson_q80.wpilog
   [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Vision/BCL/Connected)
     is False, expected True
       x18, first @ 372.465806 s
+  [WARNING] Drive motor over temperature (/Drivetrain/BL/DriveTemp)
+    above 40 C for 79.9 s, peak 42 C at 399.4 s
+      @ 396.015866 s
+  [WARNING] Drive motor over temperature (/Drivetrain/BR/DriveTemp)
+    above 40 C for 84.8 s, peak 42 C at 396.8 s
+      @ 393.638275 s
+  [WARNING] Drive motor over temperature (/Drivetrain/FL/DriveTemp)
+    above 40 C for 85.2 s, peak 44 C at 397.0 s
+      @ 390.149985 s
+  [WARNING] Drive motor over temperature (/Drivetrain/FR/DriveTemp)
+    above 40 C for 101.7 s, peak 45 C at 396.6 s
+      @ 388.286582 s
 
 Processing: akit_26-05-01_17-57-36_johnson_q89.wpilog
 
@@ -218,6 +290,18 @@ Processing: akit_26-05-01_17-57-36_johnson_q89.wpilog
   [WARNING] Alert reported as warning (/RealOutputs/Alerts/warnings)
     Non-competition operator controller connected.
       @ 455.742040 s
+  [WARNING] Drive motor over temperature (/Drivetrain/BL/DriveTemp)
+    above 40 C for 133.2 s, peak 47 C at 440.0 s
+      @ 392.259989 s
+  [WARNING] Drive motor over temperature (/Drivetrain/BR/DriveTemp)
+    above 40 C for 181.5 s, peak 48 C at 431.5 s
+      @ 365.502690 s
+  [WARNING] Drive motor over temperature (/Drivetrain/FL/DriveTemp)
+    above 40 C for 172.6 s, peak 47 C at 431.4 s
+      @ 366.132054 s
+  [WARNING] Drive motor over temperature (/Drivetrain/FR/DriveTemp)
+    above 40 C for 186.0 s, peak 49 C at 439.2 s, still past the limit when the log ended
+      @ 364.669665 s
 
 Processing: akit_26-05-01_20-28-19_q105.wpilog
 
@@ -225,6 +309,18 @@ Processing: akit_26-05-01_20-28-19_q105.wpilog
 
   [ERROR] Camera frames (/RealOutputs/Vision/FRONT/sending frames)
     entry not present in this log
+  [WARNING] Drive motor over temperature (/Drivetrain/BL/DriveTemp)
+    above 40 C for 101.4 s, peak 44 C at 254.8 s
+      @ 203.485323 s
+  [WARNING] Drive motor over temperature (/Drivetrain/BR/DriveTemp)
+    above 40 C for 123.0 s, peak 45 C at 211.3 s
+      @ 192.515521 s
+  [WARNING] Drive motor over temperature (/Drivetrain/FL/DriveTemp)
+    above 40 C for 121.5 s, peak 44 C at 212.6 s
+      @ 194.632521 s
+  [WARNING] Drive motor over temperature (/Drivetrain/FR/DriveTemp)
+    above 40 C for 154.2 s, peak 45 C at 212.7 s
+      @ 192.002038 s
 
 Processing: akit_26-05-01_22-45-20_johnson_q121.wpilog
 
@@ -238,6 +334,18 @@ Processing: akit_26-05-01_22-45-20_johnson_q121.wpilog
       @ 308.094851 s
   [ERROR] Camera frames (/RealOutputs/Vision/FRONT/sending frames)
     entry not present in this log
+  [WARNING] Drive motor over temperature (/Drivetrain/BL/DriveTemp)
+    above 40 C for 108.8 s, peak 44 C at 326.5 s
+      @ 288.451477 s
+  [WARNING] Drive motor over temperature (/Drivetrain/BR/DriveTemp)
+    above 40 C for 123.4 s, peak 45 C at 351.3 s
+      @ 288.291576 s
+  [WARNING] Drive motor over temperature (/Drivetrain/FL/DriveTemp)
+    above 40 C for 112.5 s, peak 44 C at 321.9 s
+      @ 288.336096 s
+  [WARNING] Drive motor over temperature (/Drivetrain/FR/DriveTemp)
+    above 40 C for 147.4 s, peak 47 C at 355.4 s
+      @ 287.138916 s
 
 === AGGREGATED CHECK RESULTS ACROSS ALL FILES ===
 
@@ -310,5 +418,81 @@ Processing: akit_26-05-01_22-45-20_johnson_q121.wpilog
   [WARNING] Alert reported as warning (/RealOutputs/Alerts/warnings)
     Non-competition operator controller connected.
       @ 455.742040 s, in akit_26-05-01_17-57-36_johnson_q89.wpilog
+  [WARNING] Drive motor over temperature (/Drivetrain/BL/DriveTemp)
+    above 40 C for 101.4 s, peak 44 C at 254.8 s
+      @ 203.485323 s, in akit_26-05-01_20-28-19_q105.wpilog
+    above 40 C for 108.8 s, peak 44 C at 326.5 s
+      @ 288.451477 s, in akit_26-05-01_22-45-20_johnson_q121.wpilog
+    above 40 C for 118.3 s, peak 46 C at 302.4 s
+      @ 275.298044 s, in akit_26-04-30_20-48-03_johnson_q46.wpilog
+    above 40 C for 123.4 s, peak 47 C at 425.7 s
+      @ 384.649740 s, in akit_26-05-01_13-38-09_johnson_q67.wpilog
+    above 40 C for 130.6 s, peak 45 C at 387.9 s
+      @ 370.139929 s, in akit_26-04-30_22-42-16_johnson_q59.wpilog
+    above 40 C for 133.2 s, peak 47 C at 440.0 s
+      @ 392.259989 s, in akit_26-05-01_17-57-36_johnson_q89.wpilog
+    above 40 C for 50.3 s, peak 42 C at 299.6 s
+      @ 297.048486 s, in akit_26-04-30_16-20-07_johnson_q22.wpilog
+    above 40 C for 70.9 s, peak 45 C at 327.0 s
+      @ 318.199641 s, in akit_26-04-30_14-46-03_johnson_q12.wpilog
+    above 40 C for 79.9 s, peak 42 C at 399.4 s
+      @ 396.015866 s, in akit_26-05-01_15-45-36_johnson_q80.wpilog
+  [WARNING] Drive motor over temperature (/Drivetrain/BR/DriveTemp)
+    above 40 C for 115.4 s, peak 45 C at 325.7 s
+      @ 287.520075 s, in akit_26-04-30_14-46-03_johnson_q12.wpilog
+    above 40 C for 123.0 s, peak 45 C at 211.3 s
+      @ 192.515521 s, in akit_26-05-01_20-28-19_q105.wpilog
+    above 40 C for 123.4 s, peak 45 C at 351.3 s
+      @ 288.291576 s, in akit_26-05-01_22-45-20_johnson_q121.wpilog
+    above 40 C for 142.7 s, peak 46 C at 387.9 s, still past the limit when the log ended
+      @ 366.209332 s, in akit_26-04-30_22-42-16_johnson_q59.wpilog
+    above 40 C for 162.8 s, peak 49 C at 430.4 s
+      @ 371.630107 s, in akit_26-05-01_13-38-09_johnson_q67.wpilog
+    above 40 C for 170.8 s, peak 47 C at 302.0 s
+      @ 249.813925 s, in akit_26-04-30_20-48-03_johnson_q46.wpilog
+    above 40 C for 181.5 s, peak 48 C at 431.5 s
+      @ 365.502690 s, in akit_26-05-01_17-57-36_johnson_q89.wpilog
+    above 40 C for 81.1 s, across 2 intervals, longest 53.5 s, peak 44 C at 295.3 s
+      x2, first @ 268.940858 s, in akit_26-04-30_16-20-07_johnson_q22.wpilog
+    above 40 C for 84.8 s, peak 42 C at 396.8 s
+      @ 393.638275 s, in akit_26-05-01_15-45-36_johnson_q80.wpilog
+  [WARNING] Drive motor over temperature (/Drivetrain/FL/DriveTemp)
+    above 40 C for 112.5 s, peak 44 C at 321.9 s
+      @ 288.336096 s, in akit_26-05-01_22-45-20_johnson_q121.wpilog
+    above 40 C for 118.8 s, peak 46 C at 307.8 s
+      @ 276.999228 s, in akit_26-04-30_20-48-03_johnson_q46.wpilog
+    above 40 C for 121.5 s, peak 44 C at 212.6 s
+      @ 194.632521 s, in akit_26-05-01_20-28-19_q105.wpilog
+    above 40 C for 132.0 s, peak 45 C at 389.0 s
+      @ 369.268097 s, in akit_26-04-30_22-42-16_johnson_q59.wpilog
+    above 40 C for 139.1 s, peak 48 C at 428.0 s
+      @ 376.185468 s, in akit_26-05-01_13-38-09_johnson_q67.wpilog
+    above 40 C for 172.6 s, peak 47 C at 431.4 s
+      @ 366.132054 s, in akit_26-05-01_17-57-36_johnson_q89.wpilog
+    above 40 C for 53.3 s, across 2 intervals, longest 45.5 s, peak 42 C at 293.6 s
+      x2, first @ 288.726715 s, in akit_26-04-30_16-20-07_johnson_q22.wpilog
+    above 40 C for 85.2 s, peak 44 C at 397.0 s
+      @ 390.149985 s, in akit_26-05-01_15-45-36_johnson_q80.wpilog
+    above 40 C for 90.6 s, peak 46 C at 324.1 s
+      @ 306.962459 s, in akit_26-04-30_14-46-03_johnson_q12.wpilog
+  [WARNING] Drive motor over temperature (/Drivetrain/FR/DriveTemp)
+    above 40 C for 101.7 s, peak 45 C at 396.6 s
+      @ 388.286582 s, in akit_26-05-01_15-45-36_johnson_q80.wpilog
+    above 40 C for 141.7 s, peak 46 C at 390.2 s, still past the limit when the log ended
+      @ 367.190349 s, in akit_26-04-30_22-42-16_johnson_q59.wpilog
+    above 40 C for 147.4 s, peak 47 C at 355.4 s
+      @ 287.138916 s, in akit_26-05-01_22-45-20_johnson_q121.wpilog
+    above 40 C for 154.2 s, peak 45 C at 212.7 s
+      @ 192.002038 s, in akit_26-05-01_20-28-19_q105.wpilog
+    above 40 C for 155.9 s, peak 48 C at 313.6 s, still past the limit when the log ended
+      @ 273.084937 s, in akit_26-04-30_20-48-03_johnson_q46.wpilog
+    above 40 C for 159.1 s, peak 48 C at 425.6 s
+      @ 374.165447 s, in akit_26-05-01_13-38-09_johnson_q67.wpilog
+    above 40 C for 186.0 s, peak 49 C at 439.2 s, still past the limit when the log ended
+      @ 364.669665 s, in akit_26-05-01_17-57-36_johnson_q89.wpilog
+    above 40 C for 72.8 s, across 2 intervals, longest 46.0 s, peak 42 C at 293.3 s
+      x2, first @ 269.760156 s, in akit_26-04-30_16-20-07_johnson_q22.wpilog
+    above 40 C for 98.6 s, peak 45 C at 324.4 s
+      @ 307.950451 s, in akit_26-04-30_14-46-03_johnson_q12.wpilog
   [INFO] Shooter never reached a shooting mode (/RealOutputs/ShooterModes/CurrentMode)
     never reached 'SHOOT_OTM'

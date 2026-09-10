@@ -272,6 +272,34 @@ class EnabledGate:
         index = bisect.bisect_right(self.timestamps, timestamp) - 1
         return bool(self.values[index]) if index >= 0 else False
 
+    def windows(self, gate: str, last_timestamp: float) -> List[Tuple[float, float]]:
+        """The time spans a gate admits, for measuring durations rather than
+        filtering samples.
+
+        Filtering samples and *then* building intervals would split one
+        excursion that spans a brief disable into two. Building intervals over
+        every sample and clipping their duration to these windows keeps the
+        count right while excluding time the gate does not admit.
+        """
+        if gate not in ("enabled", "disabled", "afterFirstEnable"):
+            return [(0.0, last_timestamp)]
+        if gate == "afterFirstEnable":
+            if self.first_enabled_at is None:
+                return []
+            return [(self.first_enabled_at, last_timestamp)]
+
+        want = gate == "enabled"
+        spans, start = [], None
+        for timestamp, value in zip(self.timestamps, self.values):
+            if bool(value) == want and start is None:
+                start = timestamp
+            elif bool(value) != want and start is not None:
+                spans.append((start, timestamp))
+                start = None
+        if start is not None:
+            spans.append((start, last_timestamp))
+        return spans
+
     def applies(self, gate: str, timestamp: float) -> bool:
         """Whether a sample passes the rule's "while" gate.
 
@@ -288,6 +316,92 @@ class EnabledGate:
             return (self.first_enabled_at is not None
                     and timestamp >= self.first_enabled_at)
         return True
+
+
+@dataclass
+class Excursion:
+    """One unbroken spell past a threshold."""
+    start: float
+    end: float
+    peak: float
+    peak_at: float
+    unresolved: bool = False       # still past the limit when the log ended
+    counted: float = 0.0           # duration the gate admits
+
+    @property
+    def span(self) -> float:
+        return self.end - self.start
+
+
+def overlap_seconds(start: float, end: float,
+                    windows: List[Tuple[float, float]]) -> float:
+    """How much of [start, end) falls inside any window."""
+    return sum(max(0.0, min(end, high) - max(start, low)) for low, high in windows)
+
+
+def find_excursions(timestamps: List[float], values: List[Any],
+                    enter: float, clear: float, above: bool,
+                    last_timestamp: float) -> List[Excursion]:
+    """Group samples into spells past a threshold.
+
+    A sample's value is taken to hold until the next sample, which is what these
+    entries actually mean: temperatures are logged on change, so a long gap is a
+    long hold rather than missing data. It also means a crossing is only located
+    to within one sample interval.
+
+    `clear` provides hysteresis: a spell opens at `enter` but does not close
+    until the value comes back past `clear`. Without it a reading resting on the
+    limit produces a burst of one-sample spells, exactly when it is most
+    marginal.
+    """
+    def past(value: float) -> bool:
+        return value > enter if above else value < enter
+
+    def cleared(value: float) -> bool:
+        return value < clear if above else value > clear
+
+    excursions: List[Excursion] = []
+    open_at: Optional[float] = None
+    peak = peak_at = 0.0
+
+    for index, timestamp in enumerate(timestamps):
+        value = values[index]
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            continue
+        if open_at is None:
+            if past(value):
+                open_at, peak, peak_at = timestamp, value, timestamp
+        else:
+            if (value > peak) if above else (value < peak):
+                peak, peak_at = value, timestamp
+            if cleared(value):
+                excursions.append(Excursion(open_at, timestamp, peak, peak_at))
+                open_at = None
+
+    if open_at is not None:
+        # Still past the limit when logging stopped. In the pit that is the more
+        # alarming case: the next match starts from there.
+        excursions.append(
+            Excursion(open_at, last_timestamp, peak, peak_at, unresolved=True))
+    return excursions
+
+
+def describe_excursions(excursions: List[Excursion], enter: float, above: bool,
+                        unit: str = "") -> str:
+    """One line summarising every spell past the limit for one entry."""
+    total = sum(e.counted for e in excursions)
+    longest = max(excursions, key=lambda e: e.counted)
+    peak_holder = max(excursions, key=lambda e: e.peak if above else -e.peak)
+    suffix = f" {unit}" if unit else ""
+    parts = [f"{'above' if above else 'below'} {enter:g}{suffix} for {total:.1f} s"]
+    if len(excursions) > 1:
+        # With a single spell the total is the longest, so saying both is noise.
+        parts.append(f"across {len(excursions)} intervals")
+        parts.append(f"longest {longest.counted:.1f} s")
+    parts.append(f"peak {peak_holder.peak:g}{suffix} at {peak_holder.peak_at:.1f} s")
+    if any(e.unresolved for e in excursions):
+        parts.append("still past the limit when the log ended")
+    return ", ".join(parts)
 
 
 def check_sample_findings(expectation: Any, value: Any) -> List[str]:
@@ -391,6 +505,41 @@ def compute_checks(log: Log, log_file_name: str,
 
             if expectation == "present":
                 continue  # presence already established by the match
+
+            if isinstance(expectation, dict) and (
+                    "above" in expectation or "below" in expectation):
+                above = "above" in expectation
+                enter = expectation["above"] if above else expectation["below"]
+                clear = rule.get("clearBelow" if above else "clearAbove", enter)
+                minimum = float(rule.get("minDuration", 0.0))
+
+                excursions = find_excursions(
+                    samples.timestamps, samples.values, float(enter), float(clear),
+                    above, last_timestamp)
+                # Clip durations to the gate rather than filtering samples, so a
+                # spell that straddles a brief disable stays one spell.
+                admitted = gate.windows(gate_name, last_timestamp)
+                for excursion in excursions:
+                    excursion.counted = overlap_seconds(
+                        excursion.start, excursion.end, admitted)
+                # Drop a spell the gate admits none of, but keep one whose
+                # span is genuinely zero - a value that crosses on the final
+                # sample means the robot finished past the limit, which matters
+                # more in the pit than a long spell that recovered. minDuration
+                # filters only when it was actually asked for.
+                excursions = [e for e in excursions
+                              if not (e.counted == 0 and e.span > 0)
+                              and (minimum <= 0 or e.counted > minimum)]
+
+                if excursions:
+                    report.findings.append(CheckFinding(
+                        name, severity, entry,
+                        describe_excursions(excursions, float(enter), above,
+                                            rule.get("unit", "")),
+                        log_file_name,
+                        timestamp=min(e.start for e in excursions),
+                        occurrences=len(excursions)))
+                continue
 
             # Collapse repeats: the same alert logged every cycle is one concern.
             seen: Dict[str, CheckFinding] = {}

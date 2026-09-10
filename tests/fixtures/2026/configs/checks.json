@@ -70,6 +70,18 @@
             },
             "while": "enabled",
             "severity": "error"
+        },
+        {
+            "name": "Drive motor over temperature",
+            "entry": "/Drivetrain/*/DriveTemp",
+            "expect": {
+                "above": 40
+            },
+            "clearBelow": 38,
+            "minDuration": 5.0,
+            "unit": "C",
+            "while": "afterFirstEnable",
+            "severity": "warning"
         }
     ]
 }

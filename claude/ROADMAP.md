@@ -487,7 +487,35 @@ the next match starts from there.
 samples. For durations it must clip intervals to the enabled windows instead, or
 one excursion spanning a brief disable reads as two.
 
-### 8.3 Why it belongs with checks
+### 8.3 Built
+
+`{"above": V}` / `{"below": V}` with `clearBelow` / `clearAbove` for hysteresis,
+`minDuration`, and `unit` for the detail line. One finding per matched entry:
+
+```
+[WARNING] Drive motor over temperature (/Drivetrain/BR/DriveTemp)
+  above 40 C for 162.8 s, peak 49 C at 430.4 s
+```
+
+All four cautions above are implemented, and two of them changed the code rather
+than just the wording:
+
+- **The gate clips, not filters.** `EnabledGate.windows()` returns the spans a
+  gate admits; spells are found over every sample and their duration intersected
+  with those spans. Filtering samples first would split one spell that straddles
+  a brief disable into two. A test asserts the count stays 1 while the duration
+  drops from 90 s to 70 s.
+- **A spell that opens on the final sample has zero duration** and was being
+  filtered out — silently losing the "robot finished past the limit" case, which
+  in the pit is the one that matters, since the next match starts from there.
+  Zero-duration spells are now kept; only a spell the gate admits *none* of is
+  dropped, and `minDuration` filters solely when it was asked for.
+
+Still to do: `minDuration` is compared against the gated duration, which is
+right, but there is no way yet to require a *peak* margin as well as a duration —
+"above 60 for 30 s" and "above 75 at all" need two rules.
+
+### 8.4 Why it belongs with checks
 
 Mechanically this is the time analysis's windowing — find a start condition, find
 its end, measure the gap — and that interval-finding logic in
@@ -679,7 +707,7 @@ The post-match checklist, end to end. Nothing here needs the index.
 | A5 | ~~**roboRIO sync**~~ — **done** (`sync_logs.py`) | First link in the pit chain (§2.2) | — |
 | A6 | ~~**HTML + JSON emitters**~~ — **done** (`report_output.py`) | The pit screen itself (§5.1) | A2, A4 |
 | A7 | ~~**Watch mode**~~ — **done** (`pit_monitor.py`) | Closes the pit chain: no commands typed between matches | A5, A6 |
-| A8 | **Threshold / duration checks** (§8) | Motor temperature exposure; the one concern class checks cannot yet express | A4 |
+| A8 | ~~**Threshold / duration checks**~~ (§8) — **done** | Motor temperature exposure; the one concern class checks cannot yet express | A4 |
 | A9 | **Sibling comparison** (§9.1) | "hotter than its peers" — 2.3x tighter than history and needs none | A3, A8 |
 | A10 | **Absolute thresholds for singletons** (§9.6) | The dependable option for motors with no peer; §8 already provides the mechanism | A8 |
 | A11 | ~~**`--matches-only`**~~ (§5) — **done** | A synced folder holds pit logs; counting them as matches skews every per-file average | — |
