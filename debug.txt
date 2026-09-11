@@ -370,3 +370,19 @@ Syncing from admin@10.30.61.2 into test\2026
   would copy akit_f398d960572634e9.wpilog (6,651,904 bytes)
 would copy 198, already present 0, still being written 1, failed 0
 PS C:\Users\gschmit\Documents\GitHub\log-analyzer> 
+
+
+
+PS C:\Users\gschmit\Documents\GitHub\log-analyzer> python pit_monitor.py ./test/2026 checks2026.json --sync-from 10.30.61.2
+Watching test\2026 -> report.html, syncing --newest 10 from 10.30.61.2, every 20s
+[13:20:38] synced | report updated from akit_26-06-13_21-39-06_ilnap_e13.wpilog
+          copied 5, already present 5, still being written 1, failed 0
+          Wrote HTML report to report.html
+[13:21:03] synced | unchanged (akit_26-06-13_21-39-06_ilnap_e13.wpilog)
+          copied 0, already present 10, still being written 1, failed 0
+[13:21:29] synced | unchanged (akit_26-06-13_21-39-06_ilnap_e13.wpilog)
+          copied 0, already present 10, still being written 1, failed 0
+[13:21:55] synced | unchanged (akit_26-06-13_21-39-06_ilnap_e13.wpilog)
+          copied 0, already present 10, still being written 1, failed 0
+[13:22:20] synced | unchanged (akit_26-06-13_21-39-06_ilnap_e13.wpilog)
+          copied 0, already present 10, still being written 1, failed 0
