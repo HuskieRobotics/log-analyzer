@@ -197,13 +197,19 @@ class SshSource:
 
     def __init__(self, host: str, user: str, identity: Optional[str] = None,
                  timeout: int = 8, use_sshpass: bool = False,
-                 password: str = ""):
+                 password: str = "", allow_prompt: bool = False,
+                 debug: bool = False):
         self.host = host
         self.user = user
         self.identity = identity
         self.timeout = timeout
         self.use_sshpass = use_sshpass
         self.password = password
+        # BatchMode makes ssh fail fast instead of blocking on a tty prompt, but
+        # it also disables password authentication - including an empty one. Set
+        # allow_prompt to let an interactive password through.
+        self.allow_prompt = allow_prompt
+        self.debug = debug
 
     def describe(self) -> str:
         return f"{self.user}@{self.host}"
@@ -225,11 +231,15 @@ class SshSource:
         ]
         if self.identity:
             options += ["-i", self.identity, "-o", "IdentitiesOnly=yes"]
-        if not self.use_sshpass:
+        if not self.use_sshpass and not self.allow_prompt:
             # Without sshpass there is no way to answer a prompt, so fail fast
             # rather than block forever waiting on a tty.
             options += ["-o", "BatchMode=yes"]
         return options
+
+    def _announce(self, command: List[str]) -> None:
+        if self.debug:
+            print("  $ " + " ".join(command), file=sys.stderr)
 
     def _wrap(self, command: List[str]) -> List[str]:
         if self.use_sshpass:
@@ -241,6 +251,7 @@ class SshSource:
             dirs=" ".join(f"'{d}'" for d in remote_dirs), suffix=LOG_SUFFIX)
         command = self._wrap(
             ["ssh"] + self._options() + [f"{self.user}@{self.host}", script])
+        self._announce(command)
         try:
             done = subprocess.run(command, capture_output=True, text=True,
                                   timeout=self.timeout + 30)
@@ -251,13 +262,25 @@ class SshSource:
             detail = done.stderr.strip().splitlines()
             message = detail[-1] if detail else f"ssh exited {done.returncode}"
             print(f"  cannot reach {self.describe()}: {message}", file=sys.stderr)
-            if "denied" in message.lower() or "publickey" in message.lower():
+            for line in detail[:-1]:
+                print(f"    ssh: {line}", file=sys.stderr)
+            combined = done.stderr.lower()
+            if ("denied" in combined or "publickey" in combined
+                    or "authentication" in combined):
                 # ssh reads a password from the tty, not stdin, so an empty
                 # password cannot be supplied non-interactively. Either give the
                 # robot a key once, or let sshpass answer for us.
-                print(f"  authentication failed. Either install a key once:\n"
-                      f"      ssh-copy-id {self.user}@{self.host}\n"
-                      f"  or re-run with --sshpass (requires the sshpass tool).",
+                print(f"  authentication failed. This tool passes BatchMode=yes,"
+                      f" which blocks password\n"
+                      f"  authentication even when the password is empty, so a"
+                      f" plain `ssh {self.user}@{self.host}`\n"
+                      f"  can succeed where this fails. Options:\n"
+                      f"    --allow-prompt   drop BatchMode and answer the"
+                      f" prompt interactively\n"
+                      f"    install a key    the hands-off fix; see this file's"
+                      f" docstring\n"
+                      f"    --sshpass        if the sshpass tool is available"
+                      f" (not on Windows)",
                       file=sys.stderr)
             return None
         return parse_listing(done.stdout)
@@ -266,6 +289,7 @@ class SshSource:
         command = self._wrap(
             ["scp"] + self._options()
             + [f"{self.user}@{self.host}:{remote.path}", str(target)])
+        self._announce(command)
         done = subprocess.run(command, capture_output=True, text=True)
         if done.returncode != 0:
             raise RuntimeError(done.stderr.strip() or f"scp exited {done.returncode}")
@@ -361,6 +385,12 @@ def main() -> None:
                              f"default {' '.join(DEFAULT_REMOTE_DIRS)})")
     parser.add_argument("--from-local", metavar="DIR",
                         help="read from a local directory instead of a robot")
+    parser.add_argument("--allow-prompt", action="store_true",
+                        help="drop BatchMode so ssh may ask for a password "
+                             "interactively; use for first-time setup, not for "
+                             "an unattended loop")
+    parser.add_argument("--debug", action="store_true",
+                        help="print the exact ssh/scp commands being run")
     parser.add_argument("--settle-seconds", type=float, default=2.0,
                         metavar="SECONDS",
                         help="gap between two listings used to detect the log "
@@ -376,7 +406,8 @@ def main() -> None:
         source = LocalSource(Path(args.from_local))
     else:
         source = SshSource(args.host, args.user, args.identity,
-                           use_sshpass=args.sshpass, password=args.password)
+                           use_sshpass=args.sshpass, password=args.password,
+                           allow_prompt=args.allow_prompt, debug=args.debug)
 
     missing = getattr(source, "missing_tools", lambda: [])()
     if missing:
