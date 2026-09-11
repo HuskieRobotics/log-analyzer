@@ -793,7 +793,7 @@ The post-match checklist, end to end. Nothing here needs the index.
 | A2 | ~~**Split computation from formatting**~~ — **done** | Prerequisite for HTML and JSON output | — |
 | A3 | ~~**Entry patterns / wildcards**~~ (§6) — **done** | Detector rules are unwritable without it; shortens every config | A1 |
 | A4 | ~~**Checks as a third analysis kind**~~, incl. absence checks (§7) — **done** | Replaces the manual post-match pass | A2, A3 |
-| A5 | ~~**roboRIO sync**~~ — **done** (`sync_logs.py`) | First link in the pit chain (§2.2) | — |
+| A5 | ~~**roboRIO sync**~~ — **done, verified on the robot** (`sync_logs.py`) | First link in the pit chain (§2.2) | — |
 | A6 | ~~**HTML + JSON emitters**~~ — **done** (`report_output.py`) | The pit screen itself (§5.1) | A2, A4 |
 | A7 | ~~**Watch mode**~~ — **done** (`pit_monitor.py`) | Closes the pit chain: no commands typed between matches | A5, A6 |
 | A8 | ~~**Threshold / duration checks**~~ (§8) — **done** | Motor temperature exposure; the one concern class checks cannot yet express | A4 |
@@ -1001,6 +1001,44 @@ has one dependency and this does not need to be the second. The roboRIO image is
 minimal, so do not assume `rsync` is present remotely. If `scp` proves unreliable
 against the robot's SSH server, `ssh <host> 'cat <path>'` needs only `cat` and is
 the bulletproof fallback.
+
+*What a real robot taught us.* Verified against the actual roboRIO from the
+Windows pit laptop. Three things surfaced only there:
+
+- **The remote listing hung.** The original used a `for` loop, `find`, a pipe, a
+  `while read` loop and a command substitution; `ssh <host> true` returned in
+  0.8 s while the script timed out at 38 s. Replaced with one command,
+  `find <dirs> -type f -name '*.wpilog' -exec ls -l {} + 2>/dev/null || true`,
+  which works. Which of the four constructs the roboRIO's shell choked on was
+  never established and is not worth establishing. The `|| true` is required:
+  `find` exits non-zero when any starting point is missing, and the robot never
+  has all four candidates.
+- **`scp` needs `-p`.** Without it every copied file takes the copy time as its
+  mtime, so a log whose name carries no timestamp - AdvantageKit falls back to a
+  hex id when it has no clock at boot, and 26 of 198 files on the stick were like
+  that - sorts as the newest and gets picked by `--latest` over a genuine recent
+  match. Verified both ways.
+- **A season accumulates.** The first dry run listed **198 files, 6.55 GB**, of
+  which only 30 (1.07 GB) looked like match logs. Pulling that over a pit network
+  is not reasonable, so `--since`, `--until`, `--newest` and `--min-size` narrow
+  the listing before anything is fetched; `--newest 3` reduced it to 0.42 GB.
+
+  The date filters run *before* `--newest`, which is easy to get wrong:
+  `--since 2026-06-13 --newest 3` yields the three newest logs *overall*, not the
+  three newest from that date, so once recent logs are already local it selects
+  nothing new. Reaching a past event needs both ends bounded, and `--until` is
+  inclusive of the named day, so `--since X --until X` is "that day".
+
+Authentication turned out to be a non-issue: the roboRIO accepts the `none`
+method, so `BatchMode` was never the obstacle. Two guesses at the cause -
+`BatchMode`, then `stdin` inheritance - were both wrong, and an `ssh -v` trace
+settled it in one run where reasoning had not. `--probe` now makes that a
+one-command diagnosis.
+
+**Verified end to end:** `--newest 5` copied the five newest logs and a second
+run copied nothing, confirming that deriving "what is new" from the destination
+folder works with no state file to drift. The live log was correctly held back as
+still being written.
 
 *Testability.* There is no roboRIO in this repo and there will not be one in CI,
 so **the decision logic must be separable from the transport**: a pure function
