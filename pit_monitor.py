@@ -39,6 +39,18 @@ ANALYSIS = HERE / "analysis.py"
 SYNC = HERE / "sync_logs.py"
 LOG_SUFFIX = ".wpilog"
 
+# The monitor only ever analyses one log - the newest finished match - so
+# fetching the robot's whole history is pure waste. A season accumulates: the
+# first real run against a robot listed 198 files and 6.55 GB, which would also
+# have exceeded the sync subprocess timeout and left the loop retrying forever
+# without progressing.
+#
+# Erring large: too small a window and the match log can fall outside it, which
+# leaves the display quietly showing an older match. Too large only makes the
+# first sync slow. Match logs measured 30-48 MB, so ten is a few hundred MB at
+# worst and leaves nine logs of slack for pit sessions in between.
+DEFAULT_SYNC_NEWEST = 10
+
 
 @dataclass
 class CycleResult:
@@ -236,6 +248,17 @@ def main() -> None:
                         help="report to rewrite in place (default report.html)")
     parser.add_argument("--sync-from", metavar="HOST",
                         help="also fetch new logs from the roboRIO each cycle")
+    parser.add_argument("--sync-newest", type=int, default=DEFAULT_SYNC_NEWEST,
+                        metavar="N",
+                        help=f"fetch only the N most recent logs "
+                             f"(default {DEFAULT_SYNC_NEWEST}); 0 fetches every "
+                             f"log the robot has, which is rarely wanted")
+    parser.add_argument("--sync-arg", action="append", dest="sync_args",
+                        metavar="ARG",
+                        help="extra argument passed through to sync_logs.py. "
+                             "Repeatable, and needs the = form so argparse does "
+                             "not read the value as an option of its own: "
+                             "--sync-arg=--min-size --sync-arg=1000000")
     parser.add_argument("--interval", type=float, default=20.0, metavar="SECONDS",
                         help="seconds between cycles (default 20)")
     parser.add_argument("--settle-seconds", type=float, default=1.0,
@@ -246,12 +269,17 @@ def main() -> None:
     args = parser.parse_args()
 
     folder = Path(args.log_folder)
+    sync_extra = list(args.sync_args or [])
+    if args.sync_newest > 0:
+        sync_extra = ["--newest", str(args.sync_newest)] + sync_extra
+
     monitor = Monitor(folder, Path(args.config_json_file), Path(args.html),
                       settle_seconds=args.settle_seconds,
-                      sync_host=args.sync_from)
+                      sync_host=args.sync_from, sync_extra=sync_extra)
 
     print(f"Watching {folder} -> {args.html}"
-          + (f", syncing from {args.sync_from}" if args.sync_from else "")
+          + (f", syncing {' '.join(sync_extra)} from {args.sync_from}"
+             if args.sync_from else "")
           + (f", every {args.interval:g}s" if not args.once else ""))
     try:
         while True:

@@ -1199,6 +1199,16 @@ search stops at the first settled match, so a normal cycle classifies one file i
 about 10 ms; the costly negative — proving a pit session is not a match — happens
 once per session and is cached against the file's size.
 
+*It must not fetch the robot's history.* The monitor analyses exactly one log —
+the newest finished match — so `--sync-newest` (default 10) bounds what sync
+pulls. Without a bound the first cycle against a real robot would have pulled
+198 files and 6.55 GB, exceeding sync's subprocess timeout and leaving the loop
+retrying forever without ever progressing. The default errs large deliberately:
+too small a window lets the match log fall outside it and the display quietly
+shows an older match, whereas too large only makes the first sync slow.
+`--sync-arg=` passes anything else through, and needs the `=` form so argparse
+does not read a value beginning with `--` as an option of its own.
+
 *Nothing in a cycle may kill the loop.* An absent robot, an unreachable host, a
 bad config, a failed analysis: each is reported and survived. A pit display that
 dies at the wrong moment is worse than a stale one.

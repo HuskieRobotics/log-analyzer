@@ -12,7 +12,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from pit_monitor import Monitor, describe, find_target, list_logs  # noqa: E402
+from pit_monitor import (  # noqa: E402
+    DEFAULT_SYNC_NEWEST,
+    Monitor,
+    describe,
+    find_target,
+    list_logs,
+)
 
 REAL_LOGS = Path(__file__).resolve().parent.parent / "test" / "2026"
 PIT_LOG = "akit_26-04-29_19-26-56.wpilog"
@@ -198,6 +204,46 @@ class ResilienceTest(MonitorBase):
         result = self.monitor().cycle()
         self.assertIsNone(result.sync_status)
         self.assertEqual(self.syncer.calls, 0)
+
+
+class SyncArgumentTest(MonitorBase):
+    """The monitor analyses one log, so it must not fetch the robot's history."""
+
+    def test_the_selection_reaches_the_syncer(self):
+        recorded = {}
+
+        def syncer(folder, host, extra):
+            recorded["extra"] = list(extra)
+            return "ok", ""
+
+        monitor = Monitor(self.folder, Path("c.json"), self.folder / "r.html",
+                          settle_seconds=0, sync_host="10.30.61.2",
+                          sync_extra=["--newest", "10"], syncer=syncer,
+                          analyser=self.analyser)
+        with redirect_stdout(io.StringIO()):
+            monitor.cycle()
+        self.assertEqual(recorded["extra"], ["--newest", "10"])
+
+    def test_no_selection_by_default_on_the_object(self):
+        """Monitor itself stays neutral; the CLI supplies the default."""
+        recorded = {}
+
+        def syncer(folder, host, extra):
+            recorded["extra"] = list(extra)
+            return "ok", ""
+
+        monitor = Monitor(self.folder, Path("c.json"), self.folder / "r.html",
+                          settle_seconds=0, sync_host="h", syncer=syncer,
+                          analyser=self.analyser)
+        with redirect_stdout(io.StringIO()):
+            monitor.cycle()
+        self.assertEqual(recorded["extra"], [])
+
+    def test_the_cli_default_bounds_the_fetch(self):
+        """Without a bound the first cycle would pull the whole season - 6.55 GB
+        when this was first run against a robot - and exceed sync's timeout."""
+        self.assertGreater(DEFAULT_SYNC_NEWEST, 0)
+        self.assertLessEqual(DEFAULT_SYNC_NEWEST, 25)
 
 
 class DescribeTest(MonitorBase):
