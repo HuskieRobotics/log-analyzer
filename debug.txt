@@ -166,9 +166,10 @@ Probing admin@10.30.61.2
 PS C:\Users\gschmit\Documents\GitHub\log-analyzer> 
 
 
-PS C:\Users\gschmit\Documents\GitHub\log-analyzer> python sync_logs.py ./test/2026 --dry-run                          
-Syncing from admin@10.30.61.2 into test\2026                                                                          
-  still being written, skipping: akit_bf83d54536e9ba66.wpilog                                                         
+C:\Users\gschmit\Documents\GitHub\log-analyzer> python sync_logs.py ./test/2026 --dry-run
+
+Syncing from admin@10.30.61.2 into test\2026
+  still being written, skipping: akit_bf83d54536e9ba66.wpilog
   would copy akit_0c48d8882029df67.wpilog (145,162,240 bytes)
   would copy akit_1a8e4d2e5b3d68d0.wpilog (11,960,320 bytes)
   would copy akit_22a5c9677ade76f7.wpilog (62,521,344 bytes)
