@@ -14,12 +14,15 @@ import sys
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from sync_logs import (  # noqa: E402
     LISTING_SCRIPT,
+    apply_selection,
+    recorded_at,
     find_growing_files,
     NULL_DEVICE,
     LocalSource,
@@ -110,25 +113,115 @@ class MissingToolsTest(unittest.TestCase):
 
 
 class ParseListingTest(unittest.TestCase):
+    """The listing is `find ... -exec ls -l {} +` output."""
 
-    def test_parses_size_and_path(self):
-        text = "12345 /media/sda1/akit_26-05-01_a.wpilog\n67 /U/b.wpilog\n"
-        self.assertEqual(parse_listing(text), [
-            RemoteFile("/media/sda1/akit_26-05-01_a.wpilog", 12345),
-            RemoteFile("/U/b.wpilog", 67),
-        ])
+    LS = ("-rwxrwxrwx    1 admin    administ  34799616 Apr 26 17:26 "
+          "/media/sda1/akit_26-04-26_17-19-51.wpilog")
+
+    def test_parses_size_and_path_from_a_long_listing(self):
+        self.assertEqual(parse_listing(self.LS), [RemoteFile(
+            "/media/sda1/akit_26-04-26_17-19-51.wpilog", 34799616)])
+
+    def test_a_year_instead_of_a_time_still_parses(self):
+        line = ("-rwxrwxrwx    1 admin    administ 145162240 Dec 18  2024 "
+                "/media/sda1/akit_0c48d8882029df67.wpilog")
+        self.assertEqual(parse_listing(line)[0].size, 145162240)
 
     def test_paths_with_spaces_survive(self):
-        self.assertEqual(parse_listing("99 /U/my log.wpilog"),
-                         [RemoteFile("/U/my log.wpilog", 99)])
+        line = ("-rw-r--r--  1 geoff  wheel  99 Sep  8 12:06 "
+                "/U/my log file.wpilog")
+        self.assertEqual(parse_listing(line)[0].path, "/U/my log file.wpilog")
 
-    def test_malformed_lines_are_ignored(self):
-        # wc -c prints nothing if the file vanished between find and wc.
-        text = "\n 12 /U/ok.wpilog\nnotanumber /U/bad.wpilog\n456\n"
-        self.assertEqual(parse_listing(text), [RemoteFile("/U/ok.wpilog", 12)])
+    def test_non_log_files_are_ignored(self):
+        line = ("-rw-r--r--  1 admin admin 10 Sep  8 12:06 /U/notes.txt")
+        self.assertEqual(parse_listing(line), [])
+
+    def test_short_and_malformed_lines_are_ignored(self):
+        text = ("total 12\n"
+                "-rw-r--r-- 1 a b notanumber Sep 8 12:06 /U/x.wpilog\n"
+                + self.LS + "\n")
+        self.assertEqual(len(parse_listing(text)), 1)
+
+    def test_zero_byte_logs_parse(self):
+        line = ("-rwxrwxrwx 1 admin administ 0 Dec 18  2024 "
+                "/media/sda1/akit_4341fa6dabfd3395.wpilog")
+        self.assertEqual(parse_listing(line)[0].size, 0)
 
     def test_name_is_the_basename(self):
         self.assertEqual(RemoteFile("/media/sda1/x/y.wpilog", 1).name, "y.wpilog")
+
+
+class RecordedAtTest(unittest.TestCase):
+
+    def test_advantagekit_name(self):
+        self.assertEqual(recorded_at("akit_26-04-26_17-19-51.wpilog"),
+                         datetime(2026, 4, 26, 17, 19, 51))
+
+    def test_name_with_event_and_match(self):
+        self.assertEqual(recorded_at("akit_26-06-13_14-08-53_ilnap_q2.wpilog"),
+                         datetime(2026, 6, 13, 14, 8, 53))
+
+    def test_datalogmanager_name(self):
+        self.assertEqual(recorded_at("FRC_20260501_133809.wpilog"),
+                         datetime(2026, 5, 1, 13, 38, 9))
+
+    def test_a_hex_fallback_name_has_no_date(self):
+        """AdvantageKit uses a hex id when it has no clock at boot."""
+        self.assertIsNone(recorded_at("akit_62982be0c260ac03.wpilog"))
+
+    def test_digits_that_are_not_a_date_have_no_date(self):
+        self.assertIsNone(recorded_at("akit_99-99-99_99-99-99.wpilog"))
+
+
+class ApplySelectionTest(unittest.TestCase):
+    """A season accumulates on the USB stick - 198 files and 6.5 GB when this
+    was first run against a real robot - so a listing has to be narrowed before
+    anything is fetched."""
+
+    def files(self):
+        return [
+            RemoteFile("/U/akit_26-04-26_17-19-51.wpilog", 30_000_000),
+            RemoteFile("/U/akit_26-06-13_14-08-53_ilnap_q2.wpilog", 38_000_000),
+            RemoteFile("/U/akit_26-09-10_01-24-33.wpilog", 118_000_000),
+            RemoteFile("/U/akit_62982be0c260ac03.wpilog", 229_376),
+            RemoteFile("/U/akit_4341fa6dabfd3395.wpilog", 0),
+        ]
+
+    def names(self, **kwargs):
+        kept, _ = apply_selection(self.files(), **kwargs)
+        return [f.name for f in kept]
+
+    def test_no_options_keeps_everything(self):
+        self.assertEqual(len(self.names()), 5)
+
+    def test_min_size_drops_empty_logs(self):
+        self.assertNotIn("akit_4341fa6dabfd3395.wpilog", self.names(min_size=1))
+
+    def test_newest_keeps_the_most_recent(self):
+        self.assertEqual(self.names(newest=1), ["akit_26-09-10_01-24-33.wpilog"])
+
+    def test_undated_logs_sort_oldest_under_newest(self):
+        kept = self.names(newest=3)
+        self.assertNotIn("akit_62982be0c260ac03.wpilog", kept)
+
+    def test_since_drops_older_and_undated(self):
+        kept = self.names(since=datetime(2026, 9, 1))
+        self.assertEqual(kept, ["akit_26-09-10_01-24-33.wpilog"])
+
+    def test_reasons_explain_what_was_dropped(self):
+        _, why = apply_selection(self.files(), since=datetime(2026, 9, 1))
+        joined = " ".join(why)
+        self.assertIn("no date in the name", joined)
+        self.assertIn("before 2026-09-01", joined)
+
+    def test_the_result_is_ordered_by_name(self):
+        kept = self.names(min_size=1)
+        self.assertEqual(kept, sorted(kept))
+
+    def test_options_compose(self):
+        kept = self.names(min_size=1, since=datetime(2026, 1, 1), newest=2)
+        self.assertEqual(len(kept), 2)
+        self.assertNotIn("akit_4341fa6dabfd3395.wpilog", kept)
 
 
 class SelectNewFilesTest(unittest.TestCase):

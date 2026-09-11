@@ -49,11 +49,13 @@ After that every sync is non-interactive on any platform.
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -141,6 +143,82 @@ def parse_listing(text: str) -> List[RemoteFile]:
         if path.endswith(LOG_SUFFIX):
             files.append(RemoteFile(path=path, size=int(fields[4])))
     return files
+
+
+# Log names normally carry their start time. Parsed from the name only - this
+# tool never has the remote mtime, and stays independent of analysis.py.
+NAME_TIMESTAMPS = (
+    re.compile(r"(?P<year>\d{2})-(?P<month>\d{2})-(?P<day>\d{2})_"
+               r"(?P<hour>\d{2})-(?P<minute>\d{2})-(?P<second>\d{2})"),
+    re.compile(r"(?P<year>\d{4})(?P<month>\d{2})(?P<day>\d{2})_"
+               r"(?P<hour>\d{2})(?P<minute>\d{2})(?P<second>\d{2})"),
+)
+
+
+def recorded_at(name: str) -> Optional[datetime]:
+    """When a log was recorded, from its name, or None if the name has no date.
+
+    AdvantageKit falls back to a hex id when it has no clock at boot, so a name
+    without a timestamp is normal and means "unknown", not "invalid".
+    """
+    for pattern in NAME_TIMESTAMPS:
+        found = pattern.search(name)
+        if not found:
+            continue
+        parts = {k: int(v) for k, v in found.groupdict().items()}
+        if parts["year"] < 100:
+            parts["year"] += 2000
+        try:
+            return datetime(parts["year"], parts["month"], parts["day"],
+                            parts["hour"], parts["minute"], parts["second"])
+        except ValueError:
+            continue
+    return None
+
+
+def apply_selection(files: List[RemoteFile], since: Optional[datetime] = None,
+                    newest: Optional[int] = None,
+                    min_size: int = 0) -> Tuple[List[RemoteFile], List[str]]:
+    """Narrow a listing before anything is fetched.
+
+    Args:
+        files: Candidate remote files
+        since: Keep only logs recorded at or after this; a log whose name
+            carries no date is dropped, because it cannot be placed
+        newest: Keep only the N most recently recorded; undated logs sort oldest
+        min_size: Drop anything smaller, which clears out empty logs
+
+    Returns:
+        (kept, reasons) where reasons describes what was excluded and why
+    """
+    reasons = []
+    kept = list(files)
+
+    if min_size > 0:
+        small = [f for f in kept if f.size < min_size]
+        if small:
+            reasons.append(f"{len(small)} smaller than {min_size} bytes")
+        kept = [f for f in kept if f.size >= min_size]
+
+    if since is not None:
+        undated = [f for f in kept if recorded_at(f.name) is None]
+        older = [f for f in kept
+                 if recorded_at(f.name) is not None and recorded_at(f.name) < since]
+        if undated:
+            reasons.append(f"{len(undated)} with no date in the name")
+        if older:
+            reasons.append(f"{len(older)} recorded before {since:%Y-%m-%d}")
+        kept = [f for f in kept
+                if recorded_at(f.name) is not None and recorded_at(f.name) >= since]
+
+    if newest is not None and newest > 0 and len(kept) > newest:
+        kept.sort(key=lambda f: (recorded_at(f.name) or datetime.min, f.name),
+                  reverse=True)
+        reasons.append(f"{len(kept) - newest} beyond the newest {newest}")
+        kept = kept[:newest]
+
+    kept.sort(key=lambda f: f.name)
+    return kept, reasons
 
 
 def find_growing_files(first: Sequence[RemoteFile],
@@ -369,7 +447,9 @@ def probe(source, remote_dirs: Sequence[str], timeout: int = 12) -> bool:
 
 
 def sync(source, destination: Path, remote_dirs: Sequence[str],
-         dry_run: bool = False, settle_seconds: float = 2.0) -> SyncResult:
+         dry_run: bool = False, settle_seconds: float = 2.0,
+         since: Optional[datetime] = None, newest: Optional[int] = None,
+         min_size: int = 0) -> SyncResult:
     """Copy every finished log not already present in the destination folder.
 
     Args:
@@ -404,6 +484,10 @@ def sync(source, destination: Path, remote_dirs: Sequence[str],
         listing = [entry for entry in second if entry.path not in growing]
         for path in result.active:
             print(f"  still being written, skipping: {os.path.basename(path)}")
+
+    listing, excluded = apply_selection(listing, since, newest, min_size)
+    for reason in excluded:
+        print(f"  skipping {reason}")
 
     local = local_index(destination)
     wanted = select_new_files(listing, local)
@@ -460,6 +544,13 @@ def main() -> None:
                         help="drop BatchMode so ssh may ask for a password "
                              "interactively; use for first-time setup, not for "
                              "an unattended loop")
+    parser.add_argument("--since", metavar="YYYY-MM-DD",
+                        help="only logs recorded on or after this date; a log "
+                             "whose name carries no date is skipped")
+    parser.add_argument("--newest", type=int, metavar="N",
+                        help="only the N most recently recorded logs")
+    parser.add_argument("--min-size", type=int, default=0, metavar="BYTES",
+                        help="skip logs smaller than this (0 disables)")
     parser.add_argument("--probe", action="store_true",
                         help="run increasingly demanding remote commands and "
                              "report the first that fails; changes nothing")
@@ -500,8 +591,18 @@ def main() -> None:
         sys.exit(0 if probe(source, remote_dirs) else 1)
 
     print(f"Syncing from {source.describe()} into {destination}", flush=True)
+    since = None
+    if args.since:
+        try:
+            since = datetime.strptime(args.since, "%Y-%m-%d")
+        except ValueError:
+            print(f"--since expects YYYY-MM-DD, got {args.since!r}",
+                  file=sys.stderr)
+            sys.exit(2)
+
     result = sync(source, destination, remote_dirs, args.dry_run,
-                  settle_seconds=args.settle_seconds)
+                  settle_seconds=args.settle_seconds, since=since,
+                  newest=args.newest, min_size=args.min_size)
 
     if not result.reachable:
         # The robot is absent most of the time; that is the normal case, so a
