@@ -118,7 +118,7 @@ Two findings worth carrying forward:
   Alerts stream first and treat status/counter fields as corroboration.
 - **`Connected` never went false while enabled in either file.** The motor-dropout
   detectors have no positive fixture yet — a green result would be
-  indistinguishable from a broken detector. See §11.
+  indistinguishable from a broken detector. See §12.
 
 ### 3.3 The blocker
 
@@ -625,7 +625,7 @@ threshold flags a real anomaly with margin. With time-above the threshold would
 have to sit near 40 s, catching only a gross failure.
 
 Consider normalising by enabled time regardless, so a match cut short does not
-read as an improvement — and note §11's warning that a reboot-split match is
+read as an improvement — and note §12's warning that a reboot-split match is
 short by construction.
 
 ### 9.5 Shape
@@ -780,7 +780,36 @@ That must report "no baseline yet" rather than nothing — a silent pass is
 indistinguishable from a clean result, the same trap as §7.1. `minimumBaseline`
 guards it.
 
-## 10. Sequence
+## 10. Open Verification
+
+One test remains: **`pit_monitor` across a robot network that drops and
+reconnects repeatedly.** Radio power-cycles, the robot being carried between pit
+and field, and a DHCP server that comes and goes all make this the normal state
+rather than an edge case.
+
+What the code should do, and what was confirmed in isolation:
+
+| Event | Expected |
+|---|---|
+| Robot unreachable at listing | `robot not reachable`, loop continues, page untouched |
+| Link drops between the two settle listings | reported unreachable; no partial state |
+| Link drops mid-transfer | that file fails, `.part` removed, nothing truncated lands; a later cycle succeeds without intervention |
+| Session stalls after connecting | `ServerAliveInterval=5` / `CountMax=2` abort in ~10 s; `scp` gets the same options |
+| Repeated flapping | no state accumulates — the destination folder is the state |
+
+Simulated with a source failing its first two fetches: `downloaded=0 failed=1`
+twice with an empty destination, then `downloaded=1` on the third cycle. That is
+the intended behaviour, but simulated rather than observed on real hardware.
+
+**The known limitation to watch for: `scp` cannot resume.** A transfer that drops
+part-way restarts from zero next cycle. Most logs are 30–50 MB and fine, but the
+stick also held files of 180–320 MB; one of those on a link dropping every 30 s
+may never complete, retrying forever without progress. `rsync` would resume but
+is not on the roboRIO image. If this bites, the fix is to bound it — skip files
+above a size, or keep a per-file failure count and stop retrying — rather than to
+add a resume protocol.
+
+## 11. Sequence
 
 ### Milestone A — Pit mode
 
@@ -788,17 +817,17 @@ The post-match checklist, end to end. Nothing here needs the index.
 
 | # | Step | Why | Depends on |
 |---|---|---|---|
-| A0 | ~~**Refresh fixtures to 2026 logs**~~ (§11) — **done** | Detector rules should be written against current entry names, not 2025 ones | — |
+| A0 | ~~**Refresh fixtures to 2026 logs**~~ (§12) — **done** | Detector rules should be written against current entry names, not 2025 ones | — |
 | A1 | ~~**Fix array support**~~ (defects #1–2) — **done** | Unlocks `Alerts/*` — most of feature 2's value | — |
 | A2 | ~~**Split computation from formatting**~~ — **done** | Prerequisite for HTML and JSON output | — |
 | A3 | ~~**Entry patterns / wildcards**~~ (§6) — **done** | Detector rules are unwritable without it; shortens every config | A1 |
 | A4 | ~~**Checks as a third analysis kind**~~, incl. absence checks (§7) — **done** | Replaces the manual post-match pass | A2, A3 |
 | A5 | ~~**roboRIO sync**~~ — **done, verified on the robot** (`sync_logs.py`) | First link in the pit chain (§2.2) | — |
 | A6 | ~~**HTML + JSON emitters**~~ — **done** (`report_output.py`) | The pit screen itself (§5.1) | A2, A4 |
-| A7 | ~~**Watch mode**~~ — **done** (`pit_monitor.py`) | Closes the pit chain: no commands typed between matches | A5, A6 |
+| A7 | ~~**Watch mode**~~ — **done, verified on the robot** (`pit_monitor.py`) | Closes the pit chain: no commands typed between matches | A5, A6 |
 | A8 | ~~**Threshold / duration checks**~~ (§8) — **done** | Motor temperature exposure; the one concern class checks cannot yet express | A4 |
 | A9 | ~~**Sibling comparison**~~ (§9.1) — **done** | "hotter than its peers" — 2.3x tighter than history and needs none | A3, A8 |
-| A10 | **Absolute thresholds for singletons** (§9.6) | The dependable option for motors with no peer (§9.7); §8 already provides the mechanism | A8 |
+| A10 | ~~**Absolute thresholds for singletons**~~ (§9.8) — **done** | The dependable option for motors with no peer (§9.7); §8 provided the mechanism, so this was choosing the limits | A8 |
 | A11 | ~~**`--matches-only`**~~ (§5) — **done** | A synced folder holds pit logs; counting them as matches skews every per-file average | — |
 
 ### Milestone B — Library / practice mode
@@ -847,7 +876,7 @@ stanzas byte for byte.
 Two things learned in the build, both worth keeping in mind:
 
 - **Interior empty segments are significant.** Normalising `//` away broke the
-  `/RealOutputs//ShooterModes/DistanceToHub` match (§11.1); only the leading
+  `/RealOutputs//ShooterModes/DistanceToHub` match (§12.1); only the leading
   slash's empty segment is dropped.
 - **Expansion order must be sorted, not first-seen.** Expanding per file means the
   first log decides the order, and the first 2026 log lacks BCL — which put the
@@ -1237,6 +1266,23 @@ search stops at the first settled match, so a normal cycle classifies one file i
 about 10 ms; the costly negative — proving a pit session is not a match — happens
 once per session and is cached against the file's size.
 
+*Verified end to end against the real robot*, from the Windows pit laptop:
+
+```
+[13:20:38] synced | report updated from akit_26-06-13_21-39-06_ilnap_e13.wpilog
+          copied 5, already present 5, still being written 1, failed 0
+[13:21:03] synced | unchanged (akit_26-06-13_21-39-06_ilnap_e13.wpilog)
+```
+
+Four behaviours confirmed at once: the `--newest` window overlapped what was
+already local so only the five new logs transferred; the robot's open log was held
+back every cycle; the report was written once and then left alone rather than
+rewritten under a refreshing browser; and `--matches-only` reached past a run of
+September test sessions to the newest *match*, a June elimination log. That last
+one reads as wrong until you notice the page names the match it is showing - at an
+event the newest match is minutes old, and here the only FMS-attached logs
+present were from June.
+
 *It must not fetch the robot's history.* The monitor analyses exactly one log —
 the newest finished match — so `--sync-newest` (default 10) bounds what sync
 pulls. Without a bound the first cycle against a real robot would have pulled
@@ -1262,7 +1308,7 @@ identity (content hash, not name) so re-imports from A4 are idempotent. Keep the
 schema versioned so a format change can rebuild rather than migrate — extraction
 is cheap and the `.wpilog` files remain authoritative.
 
-## 11. Test Fixtures and Logging Conventions
+## 12. Test Fixtures and Logging Conventions
 
 **Done.** The suite is season-parameterized; see
 [tests/README.md](../tests/README.md) for the mechanics.
@@ -1289,7 +1335,7 @@ Two seasons are set up:
 The 2025 set is kept deliberately: it lets a refactor prove it changed nothing on
 old data while new work is written against current conventions.
 
-### 11.1 What the 2026 changeover cost
+### 12.1 What the 2026 changeover cost
 
 Worth recording, because the next changeover will look the same. Entry names are
 **game-specific and do not survive a season**. Of the four entries
@@ -1306,7 +1352,7 @@ So a season changeover is "write a new config and record new goldens", not
 "re-record". Budget for it.
 
 Three failure modes showed up while validating `config2026.json`, all of which a
-config linter (§12) would have caught before a 30-second run:
+config linter (§13) would have caught before a 30-second run:
 
 - **A type mismatch that silently matches nothing** — `"12"` as a string against a
   `double` entry. `12.0 == "12"` is `False`, so the analysis simply never fired.
@@ -1324,7 +1370,7 @@ fixtures, and — more importantly — would give the motor-dropout detectors th
 positive fixture they currently lack (§3.2). Without it, those detectors cannot be
 distinguished from ones that never fire.
 
-## 12. Cross-Cutting Work
+## 13. Cross-Cutting Work
 
 Fix these along the way — each will otherwise distort a feature above:
 
@@ -1336,14 +1382,14 @@ Fix these along the way — each will otherwise distort a feature above:
   A3, not a nicety.
 - **`.schema` handling assumes `struct:`** (defect #4) and will `IndexError` on a
   protobuf schema entry.
-- **No config validation.** Every failure mode in §11.1 produced a clean run with
+- **No config validation.** Every failure mode in §12.1 produced a clean run with
   empty results rather than an error, which is the worst possible feedback. A
   linter — check each referenced entry exists in the target logs, that the
   configured value's type matches the entry's, and that the entry is actually
   recorded under the configured `robotMode` — would catch all three before a
   multi-minute run. Cheap once B1's manifest exists; useful enough to do sooner.
 
-## 13. What Must Not Regress
+## 14. What Must Not Regress
 
 The folder-wide aggregate analysis is the feature that replaced hours of
 one-file-at-a-time work in AdvantageScope. It is the thing to protect through
