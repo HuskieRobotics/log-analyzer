@@ -1,5 +1,5 @@
 #! /usr/bin/env python3
-"""Copy new .wpilog files off the roboRIO.
+r"""Copy new .wpilog files off the roboRIO.
 
 A standalone tool. It shares nothing with analysis.py but the destination folder,
 which is deliberate: the two have different failure modes, different lifetimes,
