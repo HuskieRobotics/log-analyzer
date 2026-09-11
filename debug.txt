@@ -37,3 +37,97 @@ The '<' operator is reserved for future use.
     + FullyQualifiedErrorId : MissingLoopStatement
  
 PS C:\Users\gschmit\Documents\GitHub\log-analyzer> 
+
+
+PS C:\Users\gschmit\Documents\GitHub\log-analyzer> ping 10.30.61.2
+
+Pinging 10.30.61.2 with 32 bytes of data:
+Reply from 10.30.61.2: bytes=32 time=1ms TTL=64
+Reply from 10.30.61.2: bytes=32 time=1ms TTL=64
+Reply from 10.30.61.2: bytes=32 time=1ms TTL=64
+
+Ping statistics for 10.30.61.2:
+    Packets: Sent = 3, Received = 3, Lost = 0 (0% loss),
+Approximate round trip times in milli-seconds:
+    Minimum = 1ms, Maximum = 1ms, Average = 1ms
+Control-C
+PS C:\Users\gschmit\Documents\GitHub\log-analyzer> ssh -v -o ConnectTimeout=8 -o BatchMode=yes admin@10.30.61.2 true
+OpenSSH_for_Windows_9.5p2, LibreSSL 3.8.2
+debug1: Connecting to 10.30.61.2 [10.30.61.2] port 22.
+debug1: fd 3 clearing O_NONBLOCK
+debug1: Connection established.
+debug1: identity file C:\\Users\\gschmit/.ssh/id_rsa type -1
+debug1: identity file C:\\Users\\gschmit/.ssh/id_rsa-cert type -1
+debug1: identity file C:\\Users\\gschmit/.ssh/id_ecdsa type -1
+debug1: identity file C:\\Users\\gschmit/.ssh/id_ecdsa-cert type -1
+debug1: identity file C:\\Users\\gschmit/.ssh/id_ecdsa_sk type -1
+debug1: identity file C:\\Users\\gschmit/.ssh/id_ecdsa_sk-cert type -1
+debug1: identity file C:\\Users\\gschmit/.ssh/id_ed25519 type -1
+debug1: identity file C:\\Users\\gschmit/.ssh/id_ed25519-cert type -1
+debug1: identity file C:\\Users\\gschmit/.ssh/id_ed25519_sk type -1
+debug1: identity file C:\\Users\\gschmit/.ssh/id_ed25519_sk-cert type -1
+debug1: identity file C:\\Users\\gschmit/.ssh/id_xmss type -1
+debug1: identity file C:\\Users\\gschmit/.ssh/id_xmss-cert type -1
+debug1: identity file C:\\Users\\gschmit/.ssh/id_dsa type -1
+debug1: identity file C:\\Users\\gschmit/.ssh/id_dsa-cert type -1
+debug1: Local version string SSH-2.0-OpenSSH_for_Windows_9.5
+debug1: Remote protocol version 2.0, remote software version OpenSSH_8.3
+debug1: compat_banner: match: OpenSSH_8.3 pat OpenSSH* compat 0x04000000
+debug1: Authenticating to 10.30.61.2:22 as 'admin'
+debug1: load_hostkeys: fopen C:\\Users\\gschmit/.ssh/known_hosts2: No such file or directory
+debug1: load_hostkeys: fopen __PROGRAMDATA__\\ssh/ssh_known_hosts: No such file or directory
+debug1: load_hostkeys: fopen __PROGRAMDATA__\\ssh/ssh_known_hosts2: No such file or directory
+debug1: SSH2_MSG_KEXINIT sent
+debug1: SSH2_MSG_KEXINIT received
+debug1: kex: algorithm: curve25519-sha256
+debug1: kex: host key algorithm: ssh-ed25519
+debug1: kex: server->client cipher: chacha20-poly1305@openssh.com MAC: <implicit> compression: none
+debug1: kex: client->server cipher: chacha20-poly1305@openssh.com MAC: <implicit> compression: none
+debug1: expecting SSH2_MSG_KEX_ECDH_REPLY
+debug1: SSH2_MSG_KEX_ECDH_REPLY received
+debug1: Server host key: ssh-ed25519 SHA256:cFUxR4lfoG99i7cl6Ysl2IGJZbp3web9oapd414JyLE
+debug1: load_hostkeys: fopen C:\\Users\\gschmit/.ssh/known_hosts2: No such file or directory
+debug1: load_hostkeys: fopen __PROGRAMDATA__\\ssh/ssh_known_hosts: No such file or directory
+debug1: load_hostkeys: fopen __PROGRAMDATA__\\ssh/ssh_known_hosts2: No such file or directory
+debug1: Host '10.30.61.2' is known and matches the ED25519 host key.
+debug1: Found key in C:\\Users\\gschmit/.ssh/known_hosts:5
+debug1: rekey out after 134217728 blocks
+debug1: SSH2_MSG_NEWKEYS sent
+debug1: expecting SSH2_MSG_NEWKEYS
+debug1: SSH2_MSG_NEWKEYS received
+debug1: rekey in after 134217728 blocks
+debug1: get_agent_identities: ssh_get_authentication_socket: No such file or directory
+debug1: Will attempt key: C:\\Users\\gschmit/.ssh/id_rsa 
+debug1: Will attempt key: C:\\Users\\gschmit/.ssh/id_ecdsa 
+debug1: Will attempt key: C:\\Users\\gschmit/.ssh/id_ecdsa_sk 
+debug1: Will attempt key: C:\\Users\\gschmit/.ssh/id_ed25519 
+debug1: Will attempt key: C:\\Users\\gschmit/.ssh/id_ed25519_sk 
+debug1: Will attempt key: C:\\Users\\gschmit/.ssh/id_xmss 
+debug1: Will attempt key: C:\\Users\\gschmit/.ssh/id_dsa 
+debug1: SSH2_MSG_EXT_INFO received
+debug1: kex_input_ext_info: server-sig-algs=<ssh-ed25519,sk-ssh-ed25519@openssh.com,ssh-rsa,rsa-sha2-256,rsa-sha2-512,ssh-dss,ecdsa-sha2-nistp256,ecdsa-sha2-nistp384,ecdsa-sha2-nistp521,sk-ecdsa-sha2-nistp256@openssh.com>
+debug1: SSH2_MSG_SERVICE_ACCEPT received
+NI Linux Real-Time (run mode)
+
+Log in with your NI-Auth credentials.
+
+Authenticated to 10.30.61.2 ([10.30.61.2]:22) using "none".
+debug1: channel 0: new session [client-session] (inactive timeout: 0)
+debug1: Requesting no-more-sessions@openssh.com
+debug1: Entering interactive session.
+debug1: pledge: filesystem
+debug1: client_input_global_request: rtype hostkeys-00@openssh.com want_reply 0
+debug1: client_input_hostkeys: searching C:\\Users\\gschmit/.ssh/known_hosts for 10.30.61.2 / (none)
+debug1: client_input_hostkeys: searching C:\\Users\\gschmit/.ssh/known_hosts2 for 10.30.61.2 / (none)
+debug1: client_input_hostkeys: hostkeys file C:\\Users\\gschmit/.ssh/known_hosts2 does not exist
+debug1: Sending command: true
+debug1: client_global_hostkeys_prove_confirm: server used untrusted RSA signature algorithm ssh-rsa for key 0, disregarding
+debug1: update_known_hosts: known hosts file C:\\Users\\gschmit/.ssh/known_hosts2 does not exist
+debug1: pledge: fork
+debug1: client_input_channel_req: channel 0 rtype exit-status reply 0
+debug1: client_input_channel_req: channel 0 rtype eow@openssh.com reply 0
+debug1: channel 0: free: client-session, nchannels 1
+Transferred: sent 2216, received 2780 bytes, in 0.8 seconds
+Bytes per second: sent 2889.2, received 3624.5
+debug1: Exit status 0
+PS C:\Users\gschmit\Documents\GitHub\log-analyzer> 
