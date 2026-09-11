@@ -5,9 +5,11 @@ Sync and analysis are injected, so the loop's decisions are tested without
 running either - and without needing a robot.
 """
 
+import io
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))

@@ -177,15 +177,23 @@ def recorded_at(name: str) -> Optional[datetime]:
 
 
 def apply_selection(files: List[RemoteFile], since: Optional[datetime] = None,
-                    newest: Optional[int] = None,
-                    min_size: int = 0) -> Tuple[List[RemoteFile], List[str]]:
+                    newest: Optional[int] = None, min_size: int = 0,
+                    until: Optional[datetime] = None
+                    ) -> Tuple[List[RemoteFile], List[str]]:
     """Narrow a listing before anything is fetched.
+
+    The date filters run first and `newest` applies to what survives, so
+    `--since` alone with `--newest` yields the newest overall, not the newest of
+    an older era. Bounding both ends is what selects a particular event.
 
     Args:
         files: Candidate remote files
         since: Keep only logs recorded at or after this; a log whose name
             carries no date is dropped, because it cannot be placed
-        newest: Keep only the N most recently recorded; undated logs sort oldest
+        until: Keep only logs recorded before the end of this day, so
+            since == until selects a single day
+        newest: Keep only the N most recently recorded of whatever remains;
+            undated logs sort oldest
         min_size: Drop anything smaller, which clears out empty logs
 
     Returns:
@@ -210,6 +218,20 @@ def apply_selection(files: List[RemoteFile], since: Optional[datetime] = None,
             reasons.append(f"{len(older)} recorded before {since:%Y-%m-%d}")
         kept = [f for f in kept
                 if recorded_at(f.name) is not None and recorded_at(f.name) >= since]
+
+    if until is not None:
+        # Inclusive of the named day, which is how a reader expects a date range
+        # to behave: --since X --until X is "that day".
+        end = until.replace(hour=23, minute=59, second=59)
+        undated = [f for f in kept if recorded_at(f.name) is None]
+        newer = [f for f in kept
+                 if recorded_at(f.name) is not None and recorded_at(f.name) > end]
+        if undated:
+            reasons.append(f"{len(undated)} with no date in the name")
+        if newer:
+            reasons.append(f"{len(newer)} recorded after {until:%Y-%m-%d}")
+        kept = [f for f in kept
+                if recorded_at(f.name) is not None and recorded_at(f.name) <= end]
 
     if newest is not None and newest > 0 and len(kept) > newest:
         kept.sort(key=lambda f: (recorded_at(f.name) or datetime.min, f.name),
@@ -449,7 +471,7 @@ def probe(source, remote_dirs: Sequence[str], timeout: int = 12) -> bool:
 def sync(source, destination: Path, remote_dirs: Sequence[str],
          dry_run: bool = False, settle_seconds: float = 2.0,
          since: Optional[datetime] = None, newest: Optional[int] = None,
-         min_size: int = 0) -> SyncResult:
+         min_size: int = 0, until: Optional[datetime] = None) -> SyncResult:
     """Copy every finished log not already present in the destination folder.
 
     Args:
@@ -485,7 +507,7 @@ def sync(source, destination: Path, remote_dirs: Sequence[str],
         for path in result.active:
             print(f"  still being written, skipping: {os.path.basename(path)}")
 
-    listing, excluded = apply_selection(listing, since, newest, min_size)
+    listing, excluded = apply_selection(listing, since, newest, min_size, until)
     for reason in excluded:
         print(f"  skipping {reason}")
 
@@ -547,6 +569,10 @@ def main() -> None:
     parser.add_argument("--since", metavar="YYYY-MM-DD",
                         help="only logs recorded on or after this date; a log "
                              "whose name carries no date is skipped")
+    parser.add_argument("--until", metavar="YYYY-MM-DD",
+                        help="only logs recorded on or before this date; use "
+                             "with --since to select one event, since --newest "
+                             "otherwise picks the newest overall")
     parser.add_argument("--newest", type=int, metavar="N",
                         help="only the N most recently recorded logs")
     parser.add_argument("--min-size", type=int, default=0, metavar="BYTES",
@@ -591,18 +617,21 @@ def main() -> None:
         sys.exit(0 if probe(source, remote_dirs) else 1)
 
     print(f"Syncing from {source.describe()} into {destination}", flush=True)
-    since = None
-    if args.since:
+    def parse_date(text: str, flag: str) -> Optional[datetime]:
+        if not text:
+            return None
         try:
-            since = datetime.strptime(args.since, "%Y-%m-%d")
+            return datetime.strptime(text, "%Y-%m-%d")
         except ValueError:
-            print(f"--since expects YYYY-MM-DD, got {args.since!r}",
-                  file=sys.stderr)
+            print(f"{flag} expects YYYY-MM-DD, got {text!r}", file=sys.stderr)
             sys.exit(2)
+
+    since = parse_date(args.since, "--since")
+    until = parse_date(args.until, "--until")
 
     result = sync(source, destination, remote_dirs, args.dry_run,
                   settle_seconds=args.settle_seconds, since=since,
-                  newest=args.newest, min_size=args.min_size)
+                  newest=args.newest, min_size=args.min_size, until=until)
 
     if not result.reachable:
         # The robot is absent most of the time; that is the normal case, so a

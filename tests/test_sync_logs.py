@@ -218,6 +218,31 @@ class ApplySelectionTest(unittest.TestCase):
         kept = self.names(min_size=1)
         self.assertEqual(kept, sorted(kept))
 
+    def test_until_bounds_the_other_end(self):
+        kept = self.names(until=datetime(2026, 4, 26))
+        self.assertEqual(kept, ["akit_26-04-26_17-19-51.wpilog"])
+
+    def test_a_single_day_is_since_equals_until(self):
+        """--until is inclusive of the named day, so X..X selects that day."""
+        self.assertEqual(
+            self.names(since=datetime(2026, 6, 13), until=datetime(2026, 6, 13)),
+            ["akit_26-06-13_14-08-53_ilnap_q2.wpilog"])
+
+    def test_newest_applies_after_the_date_filters(self):
+        """The interaction that misleads: --since with --newest yields the newest
+        overall, not the newest of the older era, so an already-copied recent log
+        can crowd out everything the window was meant to reach. Bounding both
+        ends is what selects a past event."""
+        one_sided = self.names(since=datetime(2026, 4, 1), newest=1)
+        self.assertEqual(one_sided, ["akit_26-09-10_01-24-33.wpilog"])
+        bounded = self.names(since=datetime(2026, 4, 1),
+                             until=datetime(2026, 6, 30), newest=1)
+        self.assertEqual(bounded, ["akit_26-06-13_14-08-53_ilnap_q2.wpilog"])
+
+    def test_until_also_drops_undated_logs(self):
+        self.assertNotIn("akit_62982be0c260ac03.wpilog",
+                         self.names(until=datetime(2026, 12, 31)))
+
     def test_options_compose(self):
         kept = self.names(min_size=1, since=datetime(2026, 1, 1), newest=2)
         self.assertEqual(len(kept), 2)
