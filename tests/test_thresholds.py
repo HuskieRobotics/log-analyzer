@@ -143,7 +143,7 @@ class ThresholdRuleTest(unittest.TestCase):
         self.assertNotIn("longest", detail)
 
     def test_still_hot_at_end_of_log_is_called_out(self):
-        """In the pit that is the more alarming case: the next match starts there."""
+        """The spell never closed, so the duration reported is a lower bound."""
         log = log_with([(0.0, 50.0), (10.0, 70.0)],
                        enabled=((0.0, True), (60.0, False)))
         detail = only_finding(log, rule()).detail

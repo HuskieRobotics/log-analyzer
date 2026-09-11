@@ -479,9 +479,13 @@ report is noise exactly when the reading is most marginal.
 
 **3. Unresolved intervals at end of log.** If the log ends while the value is
 still past the limit, the interval runs to the last timestamp and must be marked
-as such. "Still elevated when the log ended" is a different and more alarming
-finding than a closed excursion, and in pit mode it is the one that matters —
-the next match starts from there.
+as such — because it never closed, its duration is a **lower bound** and its
+peak may not be the real peak. Both figures understate the excursion.
+
+It is *not* significant because heat carries into the next match. Measured across
+the nine 2026 matches, motors start at 20–23 °C whether the previous match was
+94 minutes earlier or overnight: the gap is always long enough to cool
+completely. An earlier draft of this section claimed otherwise.
 
 **4. The gate has to clip, not filter.** `"while": "enabled"` currently drops
 samples. For durations it must clip intervals to the enabled windows instead, or
@@ -506,8 +510,8 @@ than just the wording:
   a brief disable into two. A test asserts the count stays 1 while the duration
   drops from 90 s to 70 s.
 - **A spell that opens on the final sample has zero duration** and was being
-  filtered out — silently losing the "robot finished past the limit" case, which
-  in the pit is the one that matters, since the next match starts from there.
+  filtered out — silently losing the "robot finished past the limit" case, where
+  the duration reported is a lower bound because the spell never closed.
   Zero-duration spells are now kept; only a spell the gate admits *none* of is
   dropped, and `minDuration` filters solely when it was asked for.
 
@@ -743,7 +747,33 @@ So for singletons, in order of dependability:
    bearing or a shorted winding looks like. A rising raw temperature may only mean
    the mechanism is being used more.
 
-### 9.8 Cold start must be visible
+### 9.8 Absolute limits for the singleton motors
+
+`checks2026.json` carries a warning/error pair for each motor with no sibling:
+warnings at the observed maximum plus 8 °C rounded, errors at a single round
+70 °C.
+
+| Motor | Model | Observed max | Warning | Error |
+|---|---|---:|---:|---:|
+| Spindexer | Kraken X60 | 42 °C | 50 | 70 |
+| Kicker | Kraken X44 | 46 °C | 55 | 70 |
+| Turret | Kraken X44 | 31 °C | 40 | 70 |
+| Hood | Kraken X44 | 26 °C | 35 | 70 |
+| Deployer | Kraken X44 | 32 °C | 40 | 70 |
+
+The motors cut out on thermal limit somewhere around **90–100 °C**; neither
+CTRE's Phoenix documentation nor WestCoast's product page publishes the figure,
+confirming only that a cutoff exists. The imprecision does not matter here: 70 °C
+sits below either candidate with 20–30 °C of margin, which is the point of an
+error tier that fires *before* the motor disables itself. A third "about to cut
+out" tier would sit near 85 °C.
+
+The warning tier encodes Johnson's ambient and nine matches at one event. A hotter
+venue lifts every reading and makes it chattier — precisely the confounder §9.2
+attributes to historical comparison and §9.1 shows sibling comparison avoids. It
+is a stopgap for motors with no peers, not a substitute for having them.
+
+### 9.9 Cold start must be visible
 
 The first match of an event has no baseline, and neither does a newly added entry.
 That must report "no baseline yet" rather than nothing — a silent pass is
@@ -983,7 +1013,23 @@ exercised without a robot.
 rename. Degrade quietly when the robot is unreachable (that is the normal case,
 not an error), so a polling loop does not fill the terminal with failures.
 
-*Windows.* The pit laptop runs Windows, which changes three things and breaks one
+*Windows.* Confirmed running on the pit laptop (Python freshly installed, robot
+not yet present): it reaches the "Syncing from admin@10.30.61.2" stage, so
+argument handling, path rendering and the ssh invocation all work. Only the
+authentication step remains unverified, which needs the robot.
+
+That first run did surface a real defect. The module docstring documents a
+Windows key-install command containing `$env:USERPROFILE\.ssh\...`, and in a
+non-raw string `\.` is an invalid escape sequence. Python emits that as a
+DeprecationWarning before 3.12 and a **SyntaxWarning from 3.12**, so it was
+silent on the 3.9 used here and printed a warning on the newer interpreter
+installed there. Fixed by making the docstring raw — doubling the backslashes
+would have made the documented command wrong.
+`tests/test_source_hygiene.py` now compiles every module with warnings captured
+and fails on any invalid escape, so this cannot recur on an interpreter nobody
+here is running.
+
+The pit laptop runs Windows, which changes three things and breaks one
 outright. `UserKnownHostsFile=/dev/null` is rejected by Win32-OpenSSH — it wants
 `NUL` — so the null device is selected per platform. The remote listing script is
 kept to a **single line**, because Windows flattens the argument list into one

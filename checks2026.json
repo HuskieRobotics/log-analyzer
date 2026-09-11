@@ -130,6 +130,121 @@
             "unit": "C",
             "while": "afterFirstEnable",
             "severity": "warning"
+        },
+        {
+            "name": "Spindexer hotter than usual (Kraken X60)",
+            "entry": "/Hopper/SpindexerTemperatureCelsius",
+            "expect": {
+                "above": 50
+            },
+            "clearBelow": 45,
+            "minDuration": 5.0,
+            "unit": "C",
+            "while": "afterFirstEnable",
+            "severity": "warning"
+        },
+        {
+            "name": "Spindexer temperature critical (Kraken X60)",
+            "entry": "/Hopper/SpindexerTemperatureCelsius",
+            "expect": {
+                "above": 70
+            },
+            "clearBelow": 60,
+            "unit": "C",
+            "while": "afterFirstEnable",
+            "severity": "error"
+        },
+        {
+            "name": "Kicker hotter than usual (Kraken X44)",
+            "entry": "/Hopper/KickerTemperatureCelsius",
+            "expect": {
+                "above": 55
+            },
+            "clearBelow": 50,
+            "minDuration": 5.0,
+            "unit": "C",
+            "while": "afterFirstEnable",
+            "severity": "warning"
+        },
+        {
+            "name": "Kicker temperature critical (Kraken X44)",
+            "entry": "/Hopper/KickerTemperatureCelsius",
+            "expect": {
+                "above": 70
+            },
+            "clearBelow": 60,
+            "unit": "C",
+            "while": "afterFirstEnable",
+            "severity": "error"
+        },
+        {
+            "name": "Turret hotter than usual (Kraken X44)",
+            "entry": "/Shooter/TurretTemperature",
+            "expect": {
+                "above": 40
+            },
+            "clearBelow": 35,
+            "minDuration": 5.0,
+            "unit": "C",
+            "while": "afterFirstEnable",
+            "severity": "warning"
+        },
+        {
+            "name": "Turret temperature critical (Kraken X44)",
+            "entry": "/Shooter/TurretTemperature",
+            "expect": {
+                "above": 70
+            },
+            "clearBelow": 60,
+            "unit": "C",
+            "while": "afterFirstEnable",
+            "severity": "error"
+        },
+        {
+            "name": "Hood hotter than usual (Kraken X44)",
+            "entry": "/Shooter/HoodTemperature",
+            "expect": {
+                "above": 35
+            },
+            "clearBelow": 30,
+            "minDuration": 5.0,
+            "unit": "C",
+            "while": "afterFirstEnable",
+            "severity": "warning"
+        },
+        {
+            "name": "Hood temperature critical (Kraken X44)",
+            "entry": "/Shooter/HoodTemperature",
+            "expect": {
+                "above": 70
+            },
+            "clearBelow": 60,
+            "unit": "C",
+            "while": "afterFirstEnable",
+            "severity": "error"
+        },
+        {
+            "name": "Deployer hotter than usual (Kraken X44)",
+            "entry": "/Intake/DeployerTempCelsius",
+            "expect": {
+                "above": 40
+            },
+            "clearBelow": 35,
+            "minDuration": 5.0,
+            "unit": "C",
+            "while": "afterFirstEnable",
+            "severity": "warning"
+        },
+        {
+            "name": "Deployer temperature critical (Kraken X44)",
+            "entry": "/Intake/DeployerTempCelsius",
+            "expect": {
+                "above": 70
+            },
+            "clearBelow": 60,
+            "unit": "C",
+            "while": "afterFirstEnable",
+            "severity": "error"
         }
     ]
 }

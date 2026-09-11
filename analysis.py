@@ -379,8 +379,10 @@ def find_excursions(timestamps: List[float], values: List[Any],
                 open_at = None
 
     if open_at is not None:
-        # Still past the limit when logging stopped. In the pit that is the more
-        # alarming case: the next match starts from there.
+        # Still past the limit when logging stopped, so this spell never closed:
+        # its duration is a lower bound and its peak may not be the real peak.
+        # (Heat does not carry to the next match - measured, motors start at
+        # 20-23 C regardless of whether the gap was 94 minutes or overnight.)
         excursions.append(
             Excursion(open_at, last_timestamp, peak, peak_at, unresolved=True))
     return excursions
