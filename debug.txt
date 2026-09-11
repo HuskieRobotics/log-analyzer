@@ -131,3 +131,36 @@ Transferred: sent 2216, received 2780 bytes, in 0.8 seconds
 Bytes per second: sent 2889.2, received 3624.5
 debug1: Exit status 0
 PS C:\Users\gschmit\Documents\GitHub\log-analyzer> 
+
+
+
+PS C:\Users\gschmit\Documents\GitHub\log-analyzer> python sync_logs.py ./test/2026 --probe
+Probing admin@10.30.61.2
+  [    ok] connect and run a command
+  [    ok] echo
+           probe-ok
+  [    ok] list root
+           C
+           README_File_Paths.txt
+           README_File_Transfer.txt
+           U
+           VISION
+           bin
+  [    ok] see the candidate log directories
+           /U
+           /media/sda1
+  [    ok] find log files
+           /media/sda1/akit_62982be0c260ac03.wpilog
+           /media/sda1/akit_26-04-26_17-19-51.wpilog
+           /media/sda1/akit_26-04-26_17-28-49.wpilog
+           /media/sda1/akit_26-04-26_17-47-38.wpilog
+           /media/sda1/akit_26-04-26_17-52-14.wpilog
+           /media/sda1/akit_26-04-26_18-11-00.wpilog
+  [    ok] find with ls -l (the listing actually used)
+           -rwxrwxrwx    1 admin    administ 145162240 Dec 18  2024 /media/sda1/akit_0c48d8882029df67.wpilog
+           -rwxrwxrwx    1 admin    administ  11960320 Dec 18  2024 /media/sda1/akit_1a8e4d2e5b3d68d0.wpilog
+           -rwxrwxrwx    1 admin    administ  62521344 Dec 18  2024 /media/sda1/akit_22a5c9677ade76f7.wpilog
+           -rwxrwxrwx    1 admin    administ  40370176 Dec 18  2024 /media/sda1/akit_2333edbe1f62a8c1.wpilog
+           -rwxrwxrwx    1 admin    administ  34799616 Apr 26 17:26 /media/sda1/akit_26-04-26_17-19-51.wpilog
+           -rwxrwxrwx    1 admin    administ  59375616 Apr 26 17:45 /media/sda1/akit_26-04-26_17-28-49.wpilog
+PS C:\Users\gschmit\Documents\GitHub\log-analyzer> 
