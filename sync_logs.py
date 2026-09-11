@@ -55,7 +55,7 @@ import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, List, Optional, Sequence, Tuple
 
 DEFAULT_HOST = "10.30.61.2"
 DEFAULT_USER = "admin"
@@ -77,17 +77,29 @@ UNREACHABLE_NOTICE = "Robot not reachable; nothing to do."
 NULL_DEVICE = "NUL" if os.name == "nt" else "/dev/null"
 PARTIAL_SUFFIX = ".part"
 
-# Portable enough for the roboRIO's minimal image: `find` for the paths and
-# `wc -c` for the sizes, avoiding GNU-only `find -printf` and `stat -c`.
+# One `find` over several starting points, formatted by `ls -l`. Deliberately
+# free of pipes, `while read` loops and command substitution: a version using all
+# three hung on the roboRIO, while `ssh <host> true` returned in under a second,
+# so the fault was the script rather than the connection. `find` and `ls` exist
+# on any image; GNU-only `find -printf` and `stat -c` are still avoided.
 #
-# Deliberately a single line. On Windows the argument list is flattened into one
-# command string before CreateProcess sees it, and embedded newlines are a good
-# way to have a remote script arrive mangled. The redirections here run on the
-# roboRIO, so /dev/null is correct in this string regardless of our platform.
+# Single line, because Windows flattens the argument list into one command string
+# before CreateProcess sees it and embedded newlines arrive mangled.
 LISTING_SCRIPT = (
-    r"""for d in {dirs}; do [ -d "$d" ] || continue; """
-    r"""find "$d" -type f -name '*{suffix}' 2>/dev/null; done | """
-    r"""while IFS= read -r f; do printf '%s %s\n' "$(wc -c < "$f" 2>/dev/null)" "$f"; done"""
+    "find {dirs} -type f -name '*{suffix}' -exec ls -l {{}} + 2>/dev/null || true"
+)
+
+# Increasingly demanding remote commands for --probe; the first that fails or
+# hangs says what the robot's shell will not do.
+PROBE_STEPS = (
+    ("connect and run a command", "true"),
+    ("echo", "echo probe-ok"),
+    ("list root", "ls /"),
+    ("see the candidate log directories", "ls -d {dirs} 2>/dev/null || true"),
+    ("find log files",
+     "find {dirs} -type f -name '*{suffix}' 2>/dev/null || true"),
+    ("find with ls -l (the listing actually used)",
+     "find {dirs} -type f -name '*{suffix}' -exec ls -l {{}} + 2>/dev/null || true"),
 )
 
 
@@ -114,17 +126,20 @@ class SyncResult:
 # === Decision logic (pure; this is the part that is unit tested) ==============
 
 def parse_listing(text: str) -> List[RemoteFile]:
-    """Parse '<size> <path>' lines into RemoteFiles, ignoring anything malformed."""
+    """Parse `ls -l` output into RemoteFiles, ignoring anything unparseable.
+
+    A long listing is `perms links owner group size date time name`, so the size
+    is the fifth field and the name is everything from the eighth onward - names
+    containing spaces therefore survive. Totals lines and short lines are skipped.
+    """
     files = []
     for line in text.splitlines():
-        line = line.strip()
-        if not line:
+        fields = line.split(None, 8)
+        if len(fields) < 9 or not fields[4].isdigit():
             continue
-        size_text, _, path = line.partition(" ")
-        path = path.strip()
-        if not path or not size_text.isdigit():
-            continue
-        files.append(RemoteFile(path=path, size=int(size_text)))
+        path = fields[8].strip()
+        if path.endswith(LOG_SUFFIX):
+            files.append(RemoteFile(path=path, size=int(fields[4])))
     return files
 
 
@@ -222,6 +237,12 @@ class SshSource:
     def _options(self) -> List[str]:
         options = [
             "-o", f"ConnectTimeout={self.timeout}",
+            # ConnectTimeout only bounds the TCP connect. A session that stalls
+            # after connecting - a host that accepts TCP but does not finish the
+            # SSH exchange, or a dropped link - would otherwise hang until the
+            # subprocess timeout. These abort it after about 10 s.
+            "-o", "ServerAliveInterval=5",
+            "-o", "ServerAliveCountMax=2",
             # The robot's key changes with every reimage and it is a link-local
             # device on a closed network; prompting about it would hang a
             # non-interactive sync.
@@ -246,6 +267,20 @@ class SshSource:
             return ["sshpass", "-p", self.password] + command
         return command
 
+    def run_remote(self, command: str, timeout: int) -> Tuple[bool, str]:
+        """Run one remote command. Returns (ok, combined output)."""
+        argv = self._wrap(
+            ["ssh"] + self._options() + [f"{self.user}@{self.host}", command])
+        self._announce(argv)
+        try:
+            done = subprocess.run(argv, capture_output=True, text=True,
+                                  stdin=subprocess.DEVNULL, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            return False, f"timed out after {timeout}s"
+        except OSError as error:
+            return False, str(error)
+        return done.returncode == 0, done.stdout + done.stderr
+
     def list_logs(self, remote_dirs: Sequence[str]) -> Optional[List[RemoteFile]]:
         script = LISTING_SCRIPT.format(
             dirs=" ".join(f"'{d}'" for d in remote_dirs), suffix=LOG_SUFFIX)
@@ -254,9 +289,18 @@ class SshSource:
         self._announce(command)
         try:
             done = subprocess.run(command, capture_output=True, text=True,
-                                  timeout=self.timeout + 30)
-        except (subprocess.TimeoutExpired, FileNotFoundError) as error:
-            print(f"  cannot reach {self.describe()}: {error}", file=sys.stderr)
+                                  stdin=subprocess.DEVNULL,
+                                  timeout=self.timeout + 22)
+        except subprocess.TimeoutExpired:
+            print(f"  {self.describe()}: ssh connected but did not finish within "
+                  f"{self.timeout + 22}s.", file=sys.stderr)
+            print(f"    That is a stalled session, not a refused one. Check the "
+                  f"robot is powered and\n"
+                  f"    on this subnet, then try:  ssh -v {self.user}@{self.host} "
+                  f"true", file=sys.stderr)
+            return None
+        except FileNotFoundError as error:
+            print(f"  cannot run ssh: {error}", file=sys.stderr)
             return None
         if done.returncode != 0:
             detail = done.stderr.strip().splitlines()
@@ -290,12 +334,35 @@ class SshSource:
             ["scp"] + self._options()
             + [f"{self.user}@{self.host}:{remote.path}", str(target)])
         self._announce(command)
-        done = subprocess.run(command, capture_output=True, text=True)
+        done = subprocess.run(command, capture_output=True, text=True,
+                               stdin=subprocess.DEVNULL)
         if done.returncode != 0:
             raise RuntimeError(done.stderr.strip() or f"scp exited {done.returncode}")
 
 
 # === Orchestration ===========================================================
+
+def probe(source, remote_dirs: Sequence[str], timeout: int = 12) -> bool:
+    """Run increasingly demanding remote commands, reporting the first failure.
+
+    Diagnostic only: it writes nothing and fetches nothing.
+    """
+    if not hasattr(source, "run_remote"):
+        print("  --probe needs an ssh source", file=sys.stderr)
+        return False
+    dirs = " ".join(f"'{d}'" for d in remote_dirs)
+    for label, template in PROBE_STEPS:
+        command = template.format(dirs=dirs, suffix=LOG_SUFFIX)
+        ok, detail = source.run_remote(command, timeout)
+        print(f"  [{'ok' if ok else 'FAILED':>6}] {label}")
+        for line in (detail or "").strip().splitlines()[:6]:
+            print(f"           {line}")
+        if not ok:
+            print(f"\n  It stops at the step above. Command sent:\n    {command}",
+                  file=sys.stderr)
+            return False
+    return True
+
 
 def sync(source, destination: Path, remote_dirs: Sequence[str],
          dry_run: bool = False, settle_seconds: float = 2.0) -> SyncResult:
@@ -389,6 +456,9 @@ def main() -> None:
                         help="drop BatchMode so ssh may ask for a password "
                              "interactively; use for first-time setup, not for "
                              "an unattended loop")
+    parser.add_argument("--probe", action="store_true",
+                        help="run increasingly demanding remote commands and "
+                             "report the first that fails; changes nothing")
     parser.add_argument("--debug", action="store_true",
                         help="print the exact ssh/scp commands being run")
     parser.add_argument("--settle-seconds", type=float, default=2.0,
@@ -420,6 +490,10 @@ def main() -> None:
                   "  sshpass has no Windows build; use key-based auth instead "
                   "(see --help).", file=sys.stderr)
         sys.exit(2)
+
+    if args.probe:
+        print(f"Probing {source.describe()}", flush=True)
+        sys.exit(0 if probe(source, remote_dirs) else 1)
 
     print(f"Syncing from {source.describe()} into {destination}", flush=True)
     result = sync(source, destination, remote_dirs, args.dry_run,
