@@ -1,0 +1,39 @@
+PS C:\Users\gschmit\Documents\GitHub\log-analyzer> python sync_logs.py ./test/2026 --dry-run --debug
+Syncing from admin@10.30.61.2 into test\2026
+  $ ssh -o ConnectTimeout=8 -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL -o LogLevel=ERROR -o BatchMode=yes admin@10.30.61.2 for d in '/media/sda1' '/media/sda2' '/U' '/home/lvuser/logs'; do [ -d "$d" ] || continue; find "$d" -type f -name '*.wpilog' 2>/dev/null; done | while IFS= read -r f; do printf '%s %s\n' "$(wc -c < "$f" 2>/dev/null)" "$f"; done
+  cannot reach admin@10.30.61.2: Command '['ssh', '-o', 'ConnectTimeout=8', '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=NUL', '-o', 'LogLevel=ERROR', '-o', 'BatchMode=yes', 'admin@10.30.61.2', 'for d in \'/media/sda1\' \'/media/sda2\' \'/U\' \'/home/lvuser/logs\'; do [ -d "$d" ] || continue; find "$d" -type f -name \'*.wpilog\' 2>/dev/null; done | while IFS= read -r f; do printf \'%s %s\\n\' "$(wc -c < "$f" 2>/dev/null)" "$f"; done']' timed out after 38 seconds
+Robot not reachable; nothing to do.
+
+PS C:\Users\gschmit\Documents\GitHub\log-analyzer> python sync_logs.py ./test/2026 --dry-run --debug --allow-prompt
+Syncing from admin@10.30.61.2 into test\2026
+  $ ssh -o ConnectTimeout=8 -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL -o LogLevel=ERROR admin@10.30.61.2 for d in '/media/sda1' '/media/sda2' '/U' '/home/lvuser/logs'; do [ -d "$d" ] || continue; find "$d" -type f -name '*.wpilog' 2>/dev/null; done | while IFS= read -r f; do printf '%s %s\n' "$(wc -c < "$f" 2>/dev/null)" "$f"; done
+  cannot reach admin@10.30.61.2: Command '['ssh', '-o', 'ConnectTimeout=8', '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=NUL', '-o', 'LogLevel=ERROR', 'admin@10.30.61.2', 'for d in \'/media/sda1\' \'/media/sda2\' \'/U\' \'/home/lvuser/logs\'; do [ -d "$d" ] || continue; find "$d" -type f -name \'*.wpilog\' 2>/dev/null; done | while IFS= read -r f; do printf \'%s %s\\n\' "$(wc -c < "$f" 2>/dev/null)" "$f"; done']' timed out after 38 seconds
+Robot not reachable; nothing to do.
+PS C:\Users\gschmit\Documents\GitHub\log-analyzer> 
+
+
+PS C:\Users\gschmit\Documents\GitHub\log-analyzer> ssh -o ConnectTimeout=8 -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL -o LogLevel=ERROR -o BatchMode=yes admin@10.30.61.2 for d in '/media/sda1' '/media/sda2' '/U' '/home/lvuser/logs'; do [ -d "$d" ] || continue; find "$d" -type f -name '*.wpilog' 2>/dev/null; done | while IFS= read -r f; do printf '%s %s\n' "$(wc -c < "$f" 2>/dev/null)" "$f"; done
+At line:1 char:196
++ ... d in '/media/sda1' '/media/sda2' '/U' '/home/lvuser/logs'; do [ -d "$ ...
++                                                                  ~
+Missing statement body in do loop.
+At line:1 char:198
++ ... in '/media/sda1' '/media/sda2' '/U' '/home/lvuser/logs'; do [ -d "$d" ...
++                                                                  ~
+Missing type name after '['.
+At line:1 char:209
++ ... a1' '/media/sda2' '/U' '/home/lvuser/logs'; do [ -d "$d" ] || continu ...
++                                                                ~~
+The token '||' is not a valid statement separator in this version.
+At line:1 char:301
++ ... -name '*.wpilog' 2>/dev/null; done | while IFS= read -r f; do printf  ...
++                                                                  ~
+Missing statement body in do loop.
+At line:1 char:328
++ ... ; done | while IFS= read -r f; do printf '%s %s\n' "$(wc -c < "$f" 2> ...
++                                                                 ~
+The '<' operator is reserved for future use.
+    + CategoryInfo          : ParserError: (:) [], ParentContainsErrorRecordException
+    + FullyQualifiedErrorId : MissingLoopStatement
+ 
+PS C:\Users\gschmit\Documents\GitHub\log-analyzer> 
