@@ -330,8 +330,12 @@ class SshSource:
         return parse_listing(done.stdout)
 
     def fetch(self, remote: RemoteFile, target: Path) -> None:
+        # -p preserves the modification time. Without it every copied file gets
+        # "now", and a log whose name carries no timestamp (AdvantageKit falls
+        # back to a hex id when it has no date at boot) would then sort as the
+        # newest and be picked by --latest over a genuine recent match.
         command = self._wrap(
-            ["scp"] + self._options()
+            ["scp", "-p"] + self._options()
             + [f"{self.user}@{self.host}:{remote.path}", str(target)])
         self._announce(command)
         done = subprocess.run(command, capture_output=True, text=True,
