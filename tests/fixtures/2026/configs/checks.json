@@ -82,6 +82,42 @@
             "unit": "C",
             "while": "afterFirstEnable",
             "severity": "warning"
+        },
+        {
+            "name": "Drive motor hotter than its peers",
+            "entry": "/Drivetrain/*/DriveTemp",
+            "compare": "siblings",
+            "statistic": "peak",
+            "deviation": {
+                "aboveSiblingsBy": 5
+            },
+            "unit": "C",
+            "while": "afterFirstEnable",
+            "severity": "warning"
+        },
+        {
+            "name": "Steer motor hotter than its peers",
+            "entry": "/Drivetrain/*/SteerTemp",
+            "compare": "siblings",
+            "statistic": "peak",
+            "deviation": {
+                "aboveSiblingsBy": 5
+            },
+            "unit": "C",
+            "while": "afterFirstEnable",
+            "severity": "warning"
+        },
+        {
+            "name": "Peer deviation (deliberately sensitive, for test coverage)",
+            "entry": "/Drivetrain/*/DriveTemp",
+            "compare": "siblings",
+            "statistic": "peak",
+            "deviation": {
+                "aboveSiblingsBy": 0.5
+            },
+            "unit": "C",
+            "while": "afterFirstEnable",
+            "severity": "info"
         }
     ]
 }

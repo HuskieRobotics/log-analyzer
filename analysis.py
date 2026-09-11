@@ -404,6 +404,104 @@ def describe_excursions(excursions: List[Excursion], enter: float, above: bool,
     return ", ".join(parts)
 
 
+def match_statistic(samples: Any, statistic: str, gate: "EnabledGate",
+                    gate_name: str) -> Optional[float]:
+    """Reduce one entry's samples for a match to a single comparable number.
+
+    Args:
+        samples: The LogValueSet for the entry
+        statistic: "peak", "min", "mean" or "rise". "rise" is measured from the
+            first sample the gate admits, not from the log's first sample - with
+            "while": "enabled" it is therefore the rise during the match, and
+            note that a range read is half-open, so a sample at exactly the range
+            start is not included
+        gate: Supplies the robot-state gate
+        gate_name: The rule's "while" clause
+
+    Returns:
+        The statistic, or None if the entry held no numeric samples the gate admits
+    """
+    values = [value for timestamp, value in zip(samples.timestamps, samples.values)
+              if isinstance(value, (int, float)) and not isinstance(value, bool)
+              and gate.applies(gate_name, timestamp)]
+    if not values:
+        return None
+    if statistic == "peak":
+        return max(values)
+    if statistic == "min":
+        return min(values)
+    if statistic == "mean":
+        return sum(values) / len(values)
+    if statistic == "rise":
+        return max(values) - values[0]
+    return None
+
+
+def compare_siblings(rule: Dict[str, Any], matched: List[str], log: Log,
+                     gate: "EnabledGate", gate_name: str, last_timestamp: float,
+                     log_file_name: str) -> List[CheckFinding]:
+    """Flag an entry that stands apart from its peers within the same match.
+
+    Peers share the match, so they share ambient temperature, how hard the robot
+    was driven and how long it was enabled. Comparing among them cancels those
+    confounders, which is why this resolves a smaller deviation than comparing an
+    entry against its own history - and needs no history at all.
+
+    The reference is the median of the *other* peers, so an outlier cannot pull
+    its own baseline towards itself.
+    """
+    statistic = rule.get("statistic", "peak")
+    deviation = rule.get("deviation") or {}
+    above_by = deviation.get("aboveSiblingsBy")
+    below_by = deviation.get("belowSiblingsBy")
+    minimum_siblings = int(rule.get("minimumSiblings", 3))
+    unit = rule.get("unit", "")
+    suffix = f" {unit}" if unit else ""
+    name = rule.get("name", rule.get("entry", ""))
+    severity = rule.get("severity", "warning")
+    pattern = EntryPattern(rule["entry"])
+
+    def label(entry: str) -> str:
+        captured = pattern.captures(entry)
+        return "/".join(captured) if captured else entry.rsplit("/", 1)[-1]
+
+    values: Dict[str, float] = {}
+    for entry in matched:
+        field_data = log.get_field(entry)
+        samples = get_field_values(field_data, 0.0, last_timestamp) if field_data else None
+        if samples is None:
+            continue
+        value = match_statistic(samples, statistic, gate, gate_name)
+        if value is not None:
+            values[entry] = value
+
+    if len(values) < minimum_siblings:
+        # Silence here would be indistinguishable from "all peers agree", which
+        # is the trap absence checks exist to avoid.
+        return [CheckFinding(
+            name, severity, rule["entry"],
+            f"only {len(values)} peer(s) with data; {minimum_siblings} needed to "
+            f"compare", log_file_name)]
+
+    findings = []
+    for entry, value in sorted(values.items()):
+        others = [other for key, other in values.items() if key != entry]
+        reference = statistics.median(others)
+        delta = value - reference
+        peers = ", ".join(sorted(label(key) for key in values if key != entry))
+        if above_by is not None and delta > float(above_by):
+            findings.append(CheckFinding(
+                name, severity, entry,
+                f"{statistic} {value:g}{suffix} is {delta:.1f}{suffix} above its "
+                f"peers (median {reference:g}{suffix} of {peers})", log_file_name))
+        elif below_by is not None and -delta > float(below_by):
+            findings.append(CheckFinding(
+                name, severity, entry,
+                f"{statistic} {value:g}{suffix} is {-delta:.1f}{suffix} below its "
+                f"peers (median {reference:g}{suffix} of {peers})", log_file_name))
+    return findings
+
+
 def check_sample_findings(expectation: Any, value: Any) -> List[str]:
     """Return a detail string for each way this sample violates the expectation.
 
@@ -487,6 +585,14 @@ def compute_checks(log: Log, log_file_name: str,
                     report.findings.append(CheckFinding(
                         name, severity, pattern.substitute(wanted),
                         "entry not present in this log", log_file_name))
+
+        if rule.get("compare") == "siblings":
+            if matched:
+                report.entries_checked += len(matched)
+                report.findings.extend(compare_siblings(
+                    rule, matched, log, gate, gate_name, last_timestamp,
+                    log_file_name))
+            continue
 
         # Absence for a rule that only asks for presence.
         if not matched:

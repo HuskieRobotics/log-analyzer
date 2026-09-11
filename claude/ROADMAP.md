@@ -587,13 +587,42 @@ entirely, because each match is only slightly worse than the last and never
 deviates enough on its own. That needs a separate rule kind: is the slope over the
 last *k* matches positive and beyond a threshold?
 
-### 9.4 Normalise before comparing
+### 9.4 Which statistic to compare
 
-Measured, the same motors by *rise* above their starting temperature: 19–30 °C,
-against peaks of 42–49 °C. Similar relative spread, but rise removes the
-starting-temperature component — which matters directly for back-to-back matches,
-where the robot starts warm. Prefer rise over absolute peak, and consider
-normalising by enabled time so a match cut short does not read as an improvement.
+A match has to be reduced to one number per entry before anything can be
+compared. Three candidates, measured on the drive motors across all nine matches:
+
+| Statistic | Worst sibling spread | Worst across-match spread |
+|---|---:|---:|
+| **peak** | **3.0 °C** | 7.0 °C |
+| rise (peak − start) | 4.0 °C | 9.0 °C |
+| time above 40 °C | 35.2 s | 83.0 s |
+
+**Use peak for sibling comparison.** An earlier draft of this section recommended
+rise; the measurement says otherwise. Rise exists to remove a starting-temperature
+difference, but siblings start within 0–1 °C of each other (21/20/20/20,
+23/22/22/22 …), so there is no confounder to remove — and subtracting a second
+1 °C-resolution reading adds quantisation noise. Rise is therefore slightly
+*worse* between peers, not better.
+
+Rise earns its keep only where start temperatures genuinely differ, which means
+historical comparison, and especially back-to-back matches where the robot starts
+warm. Even there this data does not favour it (9.0 vs 7.0), because start
+temperatures span only 19–23 °C across the event.
+
+**Time-above is a poor comparator despite being the right measure for a limit.**
+It is a threshold-crossing quantity, so it amplifies small differences: motors
+1–3 °C apart differ by up to 35 s above 40 °C. That sensitivity is what makes it
+useful for "how much exposure did this motor take" (§8) and useless for "is this
+motor unlike its peers".
+
+Practical consequence: with peak, normal sibling spread is ≤3 °C, so a **5 °C**
+threshold flags a real anomaly with margin. With time-above the threshold would
+have to sit near 40 s, catching only a gross failure.
+
+Consider normalising by enabled time regardless, so a match cut short does not
+read as an improvement — and note §11's warning that a reboot-split match is
+short by construction.
 
 ### 9.5 Shape
 
@@ -602,8 +631,8 @@ normalising by enabled time so a match cut short does not read as an improvement
     "name": "Drive motor hotter than its peers",
     "entry": "/Drivetrain/*/DriveTemp",
     "compare": "siblings",
-    "statistic": "rise",
-    "deviation": {"aboveSiblingsBy": 8},
+    "statistic": "peak",
+    "deviation": {"aboveSiblingsBy": 5},
     "severity": "warning"
 }
 ```
@@ -621,12 +650,42 @@ normalising by enabled time so a match cut short does not read as an improvement
 }
 ```
 
-`statistic` reduces a match to one number per entry — `peak`, `rise`, `mean`,
-`timeAbove` (§8), or a finding count. That per-match summary is exactly what B1's
+`statistic` reduces a match to one number per entry — `peak` (the default, and
+the right choice for siblings per §9.4), `rise`, `mean`, `timeAbove` (§8), or a
+finding count. That per-match summary is exactly what B1's
 numeric manifest already proposes to store, so the two features share a data
 structure.
 
-### 9.6 Motors with no sibling
+### 9.6 Built
+
+`"compare": "siblings"` with `statistic` (`peak` by default, per §9.4),
+`deviation.aboveSiblingsBy` / `belowSiblingsBy`, and `minimumSiblings`
+(default 3). One finding per deviating peer:
+
+```
+[WARNING] Drive motor hotter than its peers (/Drivetrain/BR/DriveTemp)
+  peak 49 C is 1.0 C above its peers (median 48 C of BL, FL, FR)
+```
+
+Two decisions worth keeping:
+
+- **The reference is the median of the *other* peers**, not of all of them. An
+  outlier would otherwise pull its own baseline towards itself, shrinking the
+  deviation it is being judged by — badly so with only four peers.
+- **Too few peers is reported, not passed over.** Silence there is
+  indistinguishable from "all peers agree", which is the trap §7.1 exists to
+  avoid. A rule whose pattern resolves to one entry says so.
+
+Verified on real logs: at the recommended 5 °C threshold nothing fires (peers
+agree within 3 °C), and at 0.5 °C the machinery correctly picks out BR at +1.0 °C
+in q67 — so a quiet report is a real result rather than a broken detector.
+
+One sharp edge found while testing: `rise` is measured from the first sample the
+gate admits, and a range read is half-open, so a sample at exactly the range
+start is excluded. Irrelevant to `peak`, and to real logs (which start well after
+zero), but it makes `rise` quietly wrong on synthetic data that begins at t=0.
+
+### 9.7 Motors with no sibling
 
 Sibling comparison covers the drive, steer and flywheel motors. The spindexer,
 kicker, turret, hood, deployer and climber are singletons, and **no cheap
@@ -684,7 +743,7 @@ So for singletons, in order of dependability:
    bearing or a shorted winding looks like. A rising raw temperature may only mean
    the mechanism is being used more.
 
-### 9.7 Cold start must be visible
+### 9.8 Cold start must be visible
 
 The first match of an event has no baseline, and neither does a newly added entry.
 That must report "no baseline yet" rather than nothing — a silent pass is
@@ -708,8 +767,8 @@ The post-match checklist, end to end. Nothing here needs the index.
 | A6 | ~~**HTML + JSON emitters**~~ — **done** (`report_output.py`) | The pit screen itself (§5.1) | A2, A4 |
 | A7 | ~~**Watch mode**~~ — **done** (`pit_monitor.py`) | Closes the pit chain: no commands typed between matches | A5, A6 |
 | A8 | ~~**Threshold / duration checks**~~ (§8) — **done** | Motor temperature exposure; the one concern class checks cannot yet express | A4 |
-| A9 | **Sibling comparison** (§9.1) | "hotter than its peers" — 2.3x tighter than history and needs none | A3, A8 |
-| A10 | **Absolute thresholds for singletons** (§9.6) | The dependable option for motors with no peer; §8 already provides the mechanism | A8 |
+| A9 | ~~**Sibling comparison**~~ (§9.1) — **done** | "hotter than its peers" — 2.3x tighter than history and needs none | A3, A8 |
+| A10 | **Absolute thresholds for singletons** (§9.6) | The dependable option for motors with no peer (§9.7); §8 already provides the mechanism | A8 |
 | A11 | ~~**`--matches-only`**~~ (§5) — **done** | A synced folder holds pit logs; counting them as matches skews every per-file average | — |
 
 ### Milestone B — Library / practice mode

@@ -127,6 +127,20 @@ Two consequences to be aware of when reading the 2026 goldens:
   Enabled time does not: this log has 289 s of enabled time against a match's
   161 s.
 
+## Deliberately sensitive rules in the 2026 fixture
+
+Two rules there exist to exercise code paths that healthy data cannot:
+
+- **`FRONT` in the camera rule's `expectEntries`** — the robot has no FRONT
+  camera, so the absence path fires. All four real cameras are present in all ten
+  logs, so without it the golden would never cover absence.
+- **"Peer deviation (deliberately sensitive, for test coverage)"** at 0.5 °C —
+  the real sibling rule uses 5 °C and correctly finds nothing, since peers agree
+  within 3 °C. The sensitive copy proves the comparison works rather than being
+  silently broken.
+
+Neither is in `checks2026.json`, the actual pit config.
+
 ## Updating goldens
 
 When you change the output deliberately, re-record and **review the diff** before

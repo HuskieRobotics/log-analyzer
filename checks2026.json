@@ -81,6 +81,55 @@
             "unit": "C",
             "while": "afterFirstEnable",
             "severity": "warning"
+        },
+        {
+            "name": "Drive motor hotter than its peers",
+            "entry": "/Drivetrain/*/DriveTemp",
+            "compare": "siblings",
+            "statistic": "peak",
+            "deviation": {
+                "aboveSiblingsBy": 5
+            },
+            "unit": "C",
+            "while": "afterFirstEnable",
+            "severity": "warning"
+        },
+        {
+            "name": "Steer motor hotter than its peers",
+            "entry": "/Drivetrain/*/SteerTemp",
+            "compare": "siblings",
+            "statistic": "peak",
+            "deviation": {
+                "aboveSiblingsBy": 5
+            },
+            "unit": "C",
+            "while": "afterFirstEnable",
+            "severity": "warning"
+        },
+        {
+            "name": "Flywheel motor hotter than its peers",
+            "entry": "/Shooter/Flywheel*Temperature",
+            "compare": "siblings",
+            "statistic": "peak",
+            "deviation": {
+                "aboveSiblingsBy": 5
+            },
+            "unit": "C",
+            "while": "afterFirstEnable",
+            "severity": "warning"
+        },
+        {
+            "name": "Intake roller lead and follower disagree",
+            "entry": "/Intake/RollerTempCelsius*",
+            "compare": "siblings",
+            "statistic": "peak",
+            "deviation": {
+                "aboveSiblingsBy": 5
+            },
+            "minimumSiblings": 2,
+            "unit": "C",
+            "while": "afterFirstEnable",
+            "severity": "warning"
         }
     ]
 }
