@@ -1,0 +1,9 @@
+{
+    "season": "2025",
+    "logDir": "test/2025",
+    "shippedConfig": "config2025.json",
+    "logs": [
+        "akit_25-04-17_14-51-30_curie_q40.wpilog",
+        "akit_25-04-19_09-36-19_curie_e6.wpilog"
+    ]
+}

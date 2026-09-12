@@ -2,6 +2,13 @@
 # Copyright (c) FIRST and other WPILib contributors.
 # Open Source Software; you can modify and/or share it under the terms of
 # the WPILib BSD license file in the root directory of this project.
+#
+# Local changes to the upstream WPILib datalog example, to re-apply if this file
+# is ever re-synced from upstream:
+#   - DataLogRecord.getBytes(), used to hand struct schemas to StructDecoder.
+#   - DataLogIterator decodes record headers inline with int.from_bytes and
+#     caches the buffer length, rather than looping a byte at a time. Same
+#     values, roughly twice the throughput; this loop dominates run time.
 
 import array
 import struct
@@ -187,36 +194,50 @@ class DataLogIterator:
     def __init__(self, buf: SupportsBytes, pos: int):
         self.buf = buf
         self.pos = pos
+        # The buffer is a read-only mmap of a fixed-size file, so its length is
+        # constant; caching it keeps __next__ off three len() calls per record.
+        self.bufLen = len(buf)
 
     def __iter__(self):
         return self
 
     def _readVarInt(self, pos: int, len: int) -> int:
-        val = 0
-        for i in range(len):
-            val |= self.buf[pos + i] << (i * 8)
-        return val
+        return int.from_bytes(
+            self.buf[pos : pos + len], byteorder="little", signed=False
+        )
 
     def __next__(self) -> DataLogRecord:
-        if len(self.buf) < (self.pos + 4):
+        # This runs once per record — millions of times for a full match log — so
+        # the header fields are decoded inline against locals rather than through
+        # repeated self lookups and _readVarInt calls.
+        buf = self.buf
+        pos = self.pos
+        bufLen = self.bufLen
+
+        if bufLen < (pos + 4):
             raise StopIteration
-        entryLen = (self.buf[self.pos] & 0x3) + 1
-        sizeLen = ((self.buf[self.pos] >> 2) & 0x3) + 1
-        timestampLen = ((self.buf[self.pos] >> 4) & 0x7) + 1
-        headerLen = 1 + entryLen + sizeLen + timestampLen
-        if len(self.buf) < (self.pos + headerLen):
+        header = buf[pos]
+        entryLen = (header & 0x3) + 1
+        sizeLen = ((header >> 2) & 0x3) + 1
+        timestampLen = ((header >> 4) & 0x7) + 1
+        if bufLen < (pos + 1 + entryLen + sizeLen + timestampLen):
             raise StopIteration
-        entry = self._readVarInt(self.pos + 1, entryLen)
-        size = self._readVarInt(self.pos + 1 + entryLen, sizeLen)
-        timestamp = self._readVarInt(self.pos + 1 + entryLen + sizeLen, timestampLen)
-        if len(self.buf) < (self.pos + headerLen + size):
-            raise StopIteration
-        record = DataLogRecord(
-            entry,
-            timestamp,
-            self.buf[self.pos + headerLen : self.pos + headerLen + size],
+
+        entryEnd = pos + 1 + entryLen
+        sizeEnd = entryEnd + sizeLen
+        dataStart = sizeEnd + timestampLen
+
+        entry = int.from_bytes(buf[pos + 1 : entryEnd], byteorder="little", signed=False)
+        size = int.from_bytes(buf[entryEnd:sizeEnd], byteorder="little", signed=False)
+        timestamp = int.from_bytes(
+            buf[sizeEnd:dataStart], byteorder="little", signed=False
         )
-        self.pos += headerLen + size
+
+        dataEnd = dataStart + size
+        if bufLen < dataEnd:
+            raise StopIteration
+        record = DataLogRecord(entry, timestamp, buf[dataStart:dataEnd])
+        self.pos = dataEnd
         return record
 
 

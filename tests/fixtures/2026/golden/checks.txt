@@ -1,0 +1,590 @@
+
+=== FILTERING CRITERIA ===
+Filter for enabled: False
+Filter for FMS attached: False
+Filter for robot mode: both
+
+=== ANALYSIS ===
+Found 10 log files to process:
+  akit_26-04-29_19-26-56.wpilog
+  akit_26-04-30_14-46-03_johnson_q12.wpilog
+  akit_26-04-30_16-20-07_johnson_q22.wpilog
+  akit_26-04-30_20-48-03_johnson_q46.wpilog
+  akit_26-04-30_22-42-16_johnson_q59.wpilog
+  akit_26-05-01_13-38-09_johnson_q67.wpilog
+  akit_26-05-01_15-45-36_johnson_q80.wpilog
+  akit_26-05-01_17-57-36_johnson_q89.wpilog
+  akit_26-05-01_20-28-19_q105.wpilog
+  akit_26-05-01_22-45-20_johnson_q121.wpilog
+
+Processing: akit_26-04-29_19-26-56.wpilog
+
+=== CHECK RESULTS FOR akit_26-04-29_19-26-56.wpilog ===
+
+  [ERROR] CANivore not OK (/RealOutputs/CANivoreStatus/Status)
+    is 'InvalidNetwork', expected 'OK'
+      @ 650.962291 s
+  [ERROR] Camera frames (/RealOutputs/Vision/FRONT/sending frames)
+    entry not present in this log
+  [ERROR] Camera saw no AprilTag during the match (/RealOutputs/Vision/BCH/UpdatePoseCount)
+    only 0 reading(s) while the gate was open, so it cannot be shown to advance - the counter may have stopped publishing
+  [ERROR] Camera saw no AprilTag during the match (/RealOutputs/Vision/BCL/UpdatePoseCount)
+    only 0 reading(s) while the gate was open, so it cannot be shown to advance - the counter may have stopped publishing
+  [ERROR] Camera saw no AprilTag during the match (/RealOutputs/Vision/BL/UpdatePoseCount)
+    only 0 reading(s) while the gate was open, so it cannot be shown to advance - the counter may have stopped publishing
+  [ERROR] Camera saw no AprilTag during the match (/RealOutputs/Vision/BR/UpdatePoseCount)
+    only 0 reading(s) while the gate was open, so it cannot be shown to advance - the counter may have stopped publishing
+  [WARNING] No accepted vision pose for too long (/RealOutputs/Vision/RobotPosesAccepted/length)
+    below 1 poses for 805.1 s, peak 0 poses at 138.1 s, still past the limit when the log ended
+      @ 138.141697 s
+  [INFO] Peer deviation (deliberately sensitive, for test coverage) (/Drivetrain/BL/DriveTemp)
+    peak 29 C is 1.0 C above its peers (median 28 C of BR, FL, FR)
+  [INFO] Shooter never reached a shooting mode (/RealOutputs/ShooterModes/CurrentMode)
+    never reached 'SHOOT_OTM'
+
+Processing: akit_26-04-30_14-46-03_johnson_q12.wpilog
+
+=== CHECK RESULTS FOR akit_26-04-30_14-46-03_johnson_q12.wpilog ===
+
+  [ERROR] Camera frames (/RealOutputs/Vision/BCH/sending frames)
+    is False, expected True
+      @ 348.787961 s
+  [ERROR] Camera frames (/RealOutputs/Vision/BL/sending frames)
+    is False, expected True
+      @ 210.701594 s
+  [ERROR] Camera frames (/RealOutputs/Vision/FRONT/sending frames)
+    entry not present in this log
+  [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Intake/RollerConnectedLead)
+    is False, expected True
+      x4, first @ 208.350400 s
+  [WARNING] Drive motor over temperature (/Drivetrain/BL/DriveTemp)
+    above 40 C for 70.9 s, peak 45 C at 327.0 s
+      @ 318.199641 s
+  [WARNING] Drive motor over temperature (/Drivetrain/BR/DriveTemp)
+    above 40 C for 115.4 s, peak 45 C at 325.7 s
+      @ 287.520075 s
+  [WARNING] Drive motor over temperature (/Drivetrain/FL/DriveTemp)
+    above 40 C for 90.6 s, peak 46 C at 324.1 s
+      @ 306.962459 s
+  [WARNING] Drive motor over temperature (/Drivetrain/FR/DriveTemp)
+    above 40 C for 98.6 s, peak 45 C at 324.4 s
+      @ 307.950451 s
+  [INFO] Peer deviation (deliberately sensitive, for test coverage) (/Drivetrain/FL/DriveTemp)
+    peak 46 C is 1.0 C above its peers (median 45 C of BL, BR, FR)
+
+Processing: akit_26-04-30_16-20-07_johnson_q22.wpilog
+
+=== CHECK RESULTS FOR akit_26-04-30_16-20-07_johnson_q22.wpilog ===
+
+  [ERROR] CANivore not OK (/RealOutputs/CANivoreStatus/Status)
+    is 'InvalidNetwork', expected 'OK'
+      x2, first @ 263.697293 s
+  [ERROR] Camera frames (/RealOutputs/Vision/BCH/sending frames)
+    is False, expected True
+      @ 210.545588 s
+  [ERROR] Camera frames (/RealOutputs/Vision/BCL/sending frames)
+    is False, expected True
+      @ 299.022967 s
+  [ERROR] Camera frames (/RealOutputs/Vision/BL/sending frames)
+    is False, expected True
+      x3, first @ 202.724314 s
+  [ERROR] Camera frames (/RealOutputs/Vision/BR/sending frames)
+    is False, expected True
+      x2, first @ 210.571447 s
+  [ERROR] Camera frames (/RealOutputs/Vision/FRONT/sending frames)
+    entry not present in this log
+  [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Drivetrain/GyroConnected)
+    is False, expected True
+      x3, first @ 264.002811 s
+  [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Hopper/KickerMotorConnected)
+    is False, expected True
+      x3, first @ 264.002811 s
+  [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Hopper/SpindexerMotorConnected)
+    is False, expected True
+      x3, first @ 264.002811 s
+  [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Intake/DeployerConnected)
+    is False, expected True
+      x3, first @ 264.002811 s
+  [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Intake/RollerConnectedFollower)
+    is False, expected True
+      x3, first @ 264.002811 s
+  [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Intake/RollerConnectedLead)
+    is False, expected True
+      x3, first @ 264.002811 s
+  [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Shooter/FlywheelFollow1Connected)
+    is False, expected True
+      x3, first @ 264.002811 s
+  [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Shooter/FlywheelFollow2Connected)
+    is False, expected True
+      x3, first @ 264.002811 s
+  [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Shooter/FlywheelLeadConnected)
+    is False, expected True
+      x3, first @ 264.002811 s
+  [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Shooter/FuelDetectorConnected)
+    is False, expected True
+      x3, first @ 264.002811 s
+  [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Shooter/HoodConnected)
+    is False, expected True
+      x3, first @ 264.002811 s
+  [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Shooter/TurretConnected)
+    is False, expected True
+      x3, first @ 264.002811 s
+  [WARNING] Drive motor over temperature (/Drivetrain/BL/DriveTemp)
+    above 40 C for 50.3 s, peak 42 C at 299.6 s
+      @ 297.048486 s
+  [WARNING] Drive motor over temperature (/Drivetrain/BR/DriveTemp)
+    above 40 C for 81.1 s, across 2 intervals, longest 53.5 s, peak 44 C at 295.3 s
+      x2, first @ 268.940858 s
+  [WARNING] Drive motor over temperature (/Drivetrain/FL/DriveTemp)
+    above 40 C for 53.3 s, across 2 intervals, longest 45.5 s, peak 42 C at 293.6 s
+      x2, first @ 288.726715 s
+  [WARNING] Drive motor over temperature (/Drivetrain/FR/DriveTemp)
+    above 40 C for 72.8 s, across 2 intervals, longest 46.0 s, peak 42 C at 293.3 s
+      x2, first @ 269.760156 s
+  [WARNING] No accepted vision pose for too long (/RealOutputs/Vision/RobotPosesAccepted/length)
+    below 1 poses for 25.1 s, peak 0 poses at 422.8 s
+      @ 422.823608 s
+  [INFO] Peer deviation (deliberately sensitive, for test coverage) (/Drivetrain/BR/DriveTemp)
+    peak 44 C is 2.0 C above its peers (median 42 C of BL, FL, FR)
+
+Processing: akit_26-04-30_20-48-03_johnson_q46.wpilog
+
+=== CHECK RESULTS FOR akit_26-04-30_20-48-03_johnson_q46.wpilog ===
+
+  [ERROR] Camera frames (/RealOutputs/Vision/BCH/sending frames)
+    is False, expected True
+      x2, first @ 207.848519 s
+  [ERROR] Camera frames (/RealOutputs/Vision/BCL/sending frames)
+    is False, expected True
+      x2, first @ 207.827205 s
+  [ERROR] Camera frames (/RealOutputs/Vision/BL/sending frames)
+    is False, expected True
+      x2, first @ 207.848519 s
+  [ERROR] Camera frames (/RealOutputs/Vision/BR/sending frames)
+    is False, expected True
+      x2, first @ 206.735111 s
+  [ERROR] Camera frames (/RealOutputs/Vision/FRONT/sending frames)
+    entry not present in this log
+  [ERROR] Device disconnected while enabled (/Vision/BR/Connected)
+    is False, expected True
+      @ 212.708341 s
+  [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Vision/BR/Connected)
+    is False, expected True
+      @ 212.708341 s
+  [WARNING] Drive motor over temperature (/Drivetrain/BL/DriveTemp)
+    above 40 C for 118.3 s, peak 46 C at 302.4 s
+      @ 275.298044 s
+  [WARNING] Drive motor over temperature (/Drivetrain/BR/DriveTemp)
+    above 40 C for 170.8 s, peak 47 C at 302.0 s
+      @ 249.813925 s
+  [WARNING] Drive motor over temperature (/Drivetrain/FL/DriveTemp)
+    above 40 C for 118.8 s, peak 46 C at 307.8 s
+      @ 276.999228 s
+  [WARNING] Drive motor over temperature (/Drivetrain/FR/DriveTemp)
+    above 40 C for 155.9 s, peak 48 C at 313.6 s, still past the limit when the log ended
+      @ 273.084937 s
+  [INFO] Peer deviation (deliberately sensitive, for test coverage) (/Drivetrain/BR/DriveTemp)
+    peak 47 C is 1.0 C above its peers (median 46 C of BL, FL, FR)
+  [INFO] Peer deviation (deliberately sensitive, for test coverage) (/Drivetrain/FR/DriveTemp)
+    peak 48 C is 2.0 C above its peers (median 46 C of BL, BR, FL)
+
+Processing: akit_26-04-30_22-42-16_johnson_q59.wpilog
+
+=== CHECK RESULTS FOR akit_26-04-30_22-42-16_johnson_q59.wpilog ===
+
+  [ERROR] Camera frames (/RealOutputs/Vision/BCH/sending frames)
+    is False, expected True
+      x2, first @ 326.604823 s
+  [ERROR] Camera frames (/RealOutputs/Vision/BCL/sending frames)
+    is False, expected True
+      @ 313.216341 s
+  [ERROR] Camera frames (/RealOutputs/Vision/BL/sending frames)
+    is False, expected True
+      x4, first @ 282.963536 s
+  [ERROR] Camera frames (/RealOutputs/Vision/BR/sending frames)
+    is False, expected True
+      @ 282.963536 s
+  [ERROR] Camera frames (/RealOutputs/Vision/FRONT/sending frames)
+    entry not present in this log
+  [ERROR] Device disconnected while enabled (/Vision/BR/Connected)
+    is False, expected True
+      x3, first @ 386.813782 s
+  [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Vision/BR/Connected)
+    is False, expected True
+      x3, first @ 386.813782 s
+  [WARNING] Drive motor over temperature (/Drivetrain/BL/DriveTemp)
+    above 40 C for 130.6 s, peak 45 C at 387.9 s
+      @ 370.139929 s
+  [WARNING] Drive motor over temperature (/Drivetrain/BR/DriveTemp)
+    above 40 C for 142.7 s, peak 46 C at 387.9 s, still past the limit when the log ended
+      @ 366.209332 s
+  [WARNING] Drive motor over temperature (/Drivetrain/FL/DriveTemp)
+    above 40 C for 132.0 s, peak 45 C at 389.0 s
+      @ 369.268097 s
+  [WARNING] Drive motor over temperature (/Drivetrain/FR/DriveTemp)
+    above 40 C for 141.7 s, peak 46 C at 390.2 s, still past the limit when the log ended
+      @ 367.190349 s
+  [INFO] Peer deviation (deliberately sensitive, for test coverage) (/Drivetrain/BR/DriveTemp)
+    peak 46 C is 1.0 C above its peers (median 45 C of BL, FL, FR)
+  [INFO] Peer deviation (deliberately sensitive, for test coverage) (/Drivetrain/FR/DriveTemp)
+    peak 46 C is 1.0 C above its peers (median 45 C of BL, BR, FL)
+
+Processing: akit_26-05-01_13-38-09_johnson_q67.wpilog
+
+=== CHECK RESULTS FOR akit_26-05-01_13-38-09_johnson_q67.wpilog ===
+
+  [ERROR] Camera frames (/RealOutputs/Vision/BCH/sending frames)
+    is False, expected True
+      x2, first @ 374.450802 s
+  [ERROR] Camera frames (/RealOutputs/Vision/BCL/sending frames)
+    is False, expected True
+      x2, first @ 374.450802 s
+  [ERROR] Camera frames (/RealOutputs/Vision/BL/sending frames)
+    is False, expected True
+      x4, first @ 285.636574 s
+  [ERROR] Camera frames (/RealOutputs/Vision/BR/sending frames)
+    is False, expected True
+      x4, first @ 290.906462 s
+  [ERROR] Camera frames (/RealOutputs/Vision/FRONT/sending frames)
+    entry not present in this log
+  [ERROR] Device disconnected while enabled (/Vision/BR/Connected)
+    is False, expected True
+      @ 378.349808 s
+  [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Vision/BR/Connected)
+    is False, expected True
+      @ 378.349808 s
+  [WARNING] Drive motor over temperature (/Drivetrain/BL/DriveTemp)
+    above 40 C for 123.4 s, peak 47 C at 425.7 s
+      @ 384.649740 s
+  [WARNING] Drive motor over temperature (/Drivetrain/BR/DriveTemp)
+    above 40 C for 162.8 s, peak 49 C at 430.4 s
+      @ 371.630107 s
+  [WARNING] Drive motor over temperature (/Drivetrain/FL/DriveTemp)
+    above 40 C for 139.1 s, peak 48 C at 428.0 s
+      @ 376.185468 s
+  [WARNING] Drive motor over temperature (/Drivetrain/FR/DriveTemp)
+    above 40 C for 159.1 s, peak 48 C at 425.6 s
+      @ 374.165447 s
+  [INFO] Peer deviation (deliberately sensitive, for test coverage) (/Drivetrain/BR/DriveTemp)
+    peak 49 C is 1.0 C above its peers (median 48 C of BL, FL, FR)
+
+Processing: akit_26-05-01_15-45-36_johnson_q80.wpilog
+
+=== CHECK RESULTS FOR akit_26-05-01_15-45-36_johnson_q80.wpilog ===
+
+  [ERROR] Camera frames (/RealOutputs/Vision/BCH/sending frames)
+    is False, expected True
+      x18, first @ 321.660955 s
+  [ERROR] Camera frames (/RealOutputs/Vision/BCL/sending frames)
+    is False, expected True
+      @ 355.788002 s
+  [ERROR] Camera frames (/RealOutputs/Vision/BL/sending frames)
+    is False, expected True
+      x18, first @ 374.718462 s
+  [ERROR] Camera frames (/RealOutputs/Vision/BR/sending frames)
+    is False, expected True
+      x19, first @ 321.660955 s
+  [ERROR] Camera frames (/RealOutputs/Vision/FRONT/sending frames)
+    entry not present in this log
+  [ERROR] Device disconnected while enabled (/Vision/BCL/Connected)
+    is False, expected True
+      x18, first @ 372.465806 s
+  [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Vision/BCL/Connected)
+    is False, expected True
+      x18, first @ 372.465806 s
+  [WARNING] Drive motor over temperature (/Drivetrain/BL/DriveTemp)
+    above 40 C for 79.9 s, peak 42 C at 399.4 s
+      @ 396.015866 s
+  [WARNING] Drive motor over temperature (/Drivetrain/BR/DriveTemp)
+    above 40 C for 84.8 s, peak 42 C at 396.8 s
+      @ 393.638275 s
+  [WARNING] Drive motor over temperature (/Drivetrain/FL/DriveTemp)
+    above 40 C for 85.2 s, peak 44 C at 397.0 s
+      @ 390.149985 s
+  [WARNING] Drive motor over temperature (/Drivetrain/FR/DriveTemp)
+    above 40 C for 101.7 s, peak 45 C at 396.6 s
+      @ 388.286582 s
+  [INFO] Peer deviation (deliberately sensitive, for test coverage) (/Drivetrain/FL/DriveTemp)
+    peak 44 C is 2.0 C above its peers (median 42 C of BL, BR, FR)
+  [INFO] Peer deviation (deliberately sensitive, for test coverage) (/Drivetrain/FR/DriveTemp)
+    peak 45 C is 3.0 C above its peers (median 42 C of BL, BR, FL)
+
+Processing: akit_26-05-01_17-57-36_johnson_q89.wpilog
+
+=== CHECK RESULTS FOR akit_26-05-01_17-57-36_johnson_q89.wpilog ===
+
+  [ERROR] Camera frames (/RealOutputs/Vision/BCH/sending frames)
+    is False, expected True
+      @ 339.733456 s
+  [ERROR] Camera frames (/RealOutputs/Vision/BR/sending frames)
+    is False, expected True
+      x3, first @ 394.339945 s
+  [ERROR] Camera frames (/RealOutputs/Vision/FRONT/sending frames)
+    entry not present in this log
+  [ERROR] Camera saw no AprilTag during the match (/RealOutputs/Vision/BL/UpdatePoseCount)
+    only 1 reading(s) while the gate was open, so it cannot be shown to advance - the counter may have stopped publishing
+  [WARNING] Alert reported as warning (/RealOutputs/Alerts/warnings)
+    Non-competition operator controller connected.
+      @ 455.742040 s
+  [WARNING] Drive motor over temperature (/Drivetrain/BL/DriveTemp)
+    above 40 C for 133.2 s, peak 47 C at 440.0 s
+      @ 392.259989 s
+  [WARNING] Drive motor over temperature (/Drivetrain/BR/DriveTemp)
+    above 40 C for 181.5 s, peak 48 C at 431.5 s
+      @ 365.502690 s
+  [WARNING] Drive motor over temperature (/Drivetrain/FL/DriveTemp)
+    above 40 C for 172.6 s, peak 47 C at 431.4 s
+      @ 366.132054 s
+  [WARNING] Drive motor over temperature (/Drivetrain/FR/DriveTemp)
+    above 40 C for 186.0 s, peak 49 C at 439.2 s, still past the limit when the log ended
+      @ 364.669665 s
+  [WARNING] No accepted vision pose for too long (/RealOutputs/Vision/RobotPosesAccepted/length)
+    below 1 poses for 35.1 s, across 3 intervals, longest 15.1 s, peak 0 poses at 464.4 s
+      x3, first @ 464.353822 s
+  [INFO] Peer deviation (deliberately sensitive, for test coverage) (/Drivetrain/BR/DriveTemp)
+    peak 48 C is 1.0 C above its peers (median 47 C of BL, FL, FR)
+  [INFO] Peer deviation (deliberately sensitive, for test coverage) (/Drivetrain/FR/DriveTemp)
+    peak 49 C is 2.0 C above its peers (median 47 C of BL, BR, FL)
+
+Processing: akit_26-05-01_20-28-19_q105.wpilog
+
+=== CHECK RESULTS FOR akit_26-05-01_20-28-19_q105.wpilog ===
+
+  [ERROR] Camera frames (/RealOutputs/Vision/FRONT/sending frames)
+    entry not present in this log
+  [WARNING] Drive motor over temperature (/Drivetrain/BL/DriveTemp)
+    above 40 C for 101.4 s, peak 44 C at 254.8 s
+      @ 203.485323 s
+  [WARNING] Drive motor over temperature (/Drivetrain/BR/DriveTemp)
+    above 40 C for 123.0 s, peak 45 C at 211.3 s
+      @ 192.515521 s
+  [WARNING] Drive motor over temperature (/Drivetrain/FL/DriveTemp)
+    above 40 C for 121.5 s, peak 44 C at 212.6 s
+      @ 194.632521 s
+  [WARNING] Drive motor over temperature (/Drivetrain/FR/DriveTemp)
+    above 40 C for 154.2 s, peak 45 C at 212.7 s
+      @ 192.002038 s
+  [WARNING] No accepted vision pose for too long (/RealOutputs/Vision/RobotPosesAccepted/length)
+    below 1 poses for 615.2 s, across 3 intervals, longest 441.8 s, peak 0 poses at 297.2 s, still past the limit when the log ended
+      x3, first @ 297.195675 s
+  [INFO] Peer deviation (deliberately sensitive, for test coverage) (/Drivetrain/BR/DriveTemp)
+    peak 45 C is 1.0 C above its peers (median 44 C of BL, FL, FR)
+  [INFO] Peer deviation (deliberately sensitive, for test coverage) (/Drivetrain/FR/DriveTemp)
+    peak 45 C is 1.0 C above its peers (median 44 C of BL, BR, FL)
+
+Processing: akit_26-05-01_22-45-20_johnson_q121.wpilog
+
+=== CHECK RESULTS FOR akit_26-05-01_22-45-20_johnson_q121.wpilog ===
+
+  [ERROR] Camera frames (/RealOutputs/Vision/BL/sending frames)
+    is False, expected True
+      @ 237.075193 s
+  [ERROR] Camera frames (/RealOutputs/Vision/BR/sending frames)
+    is False, expected True
+      @ 308.094851 s
+  [ERROR] Camera frames (/RealOutputs/Vision/FRONT/sending frames)
+    entry not present in this log
+  [WARNING] Drive motor over temperature (/Drivetrain/BL/DriveTemp)
+    above 40 C for 108.8 s, peak 44 C at 326.5 s
+      @ 288.451477 s
+  [WARNING] Drive motor over temperature (/Drivetrain/BR/DriveTemp)
+    above 40 C for 123.4 s, peak 45 C at 351.3 s
+      @ 288.291576 s
+  [WARNING] Drive motor over temperature (/Drivetrain/FL/DriveTemp)
+    above 40 C for 112.5 s, peak 44 C at 321.9 s
+      @ 288.336096 s
+  [WARNING] Drive motor over temperature (/Drivetrain/FR/DriveTemp)
+    above 40 C for 147.4 s, peak 47 C at 355.4 s
+      @ 287.138916 s
+  [INFO] Peer deviation (deliberately sensitive, for test coverage) (/Drivetrain/BR/DriveTemp)
+    peak 45 C is 1.0 C above its peers (median 44 C of BL, FL, FR)
+  [INFO] Peer deviation (deliberately sensitive, for test coverage) (/Drivetrain/FR/DriveTemp)
+    peak 47 C is 3.0 C above its peers (median 44 C of BL, BR, FL)
+
+=== AGGREGATED CHECK RESULTS ACROSS ALL FILES ===
+
+  [ERROR] CANivore not OK (/RealOutputs/CANivoreStatus/Status)
+    is 'InvalidNetwork', expected 'OK'
+      x3, in 2 files, first @ 650.962291 s, in akit_26-04-29_19-26-56.wpilog
+  [ERROR] Camera frames (/RealOutputs/Vision/BCH/sending frames)
+    is False, expected True
+      x27, in 7 files, first @ 348.787961 s, in akit_26-04-30_14-46-03_johnson_q12.wpilog
+  [ERROR] Camera frames (/RealOutputs/Vision/BCL/sending frames)
+    is False, expected True
+      x7, in 5 files, first @ 299.022967 s, in akit_26-04-30_16-20-07_johnson_q22.wpilog
+  [ERROR] Camera frames (/RealOutputs/Vision/BL/sending frames)
+    is False, expected True
+      x33, in 7 files, first @ 210.701594 s, in akit_26-04-30_14-46-03_johnson_q12.wpilog
+  [ERROR] Camera frames (/RealOutputs/Vision/BR/sending frames)
+    is False, expected True
+      x32, in 7 files, first @ 210.571447 s, in akit_26-04-30_16-20-07_johnson_q22.wpilog
+  [ERROR] Camera frames (/RealOutputs/Vision/FRONT/sending frames)
+    entry not present in this log
+      x10, in 10 files
+  [ERROR] Camera saw no AprilTag during the match (/RealOutputs/Vision/BCH/UpdatePoseCount)
+    only 0 reading(s) while the gate was open, so it cannot be shown to advance - the counter may have stopped publishing
+  [ERROR] Camera saw no AprilTag during the match (/RealOutputs/Vision/BCL/UpdatePoseCount)
+    only 0 reading(s) while the gate was open, so it cannot be shown to advance - the counter may have stopped publishing
+  [ERROR] Camera saw no AprilTag during the match (/RealOutputs/Vision/BL/UpdatePoseCount)
+    only 0 reading(s) while the gate was open, so it cannot be shown to advance - the counter may have stopped publishing
+    only 1 reading(s) while the gate was open, so it cannot be shown to advance - the counter may have stopped publishing
+  [ERROR] Camera saw no AprilTag during the match (/RealOutputs/Vision/BR/UpdatePoseCount)
+    only 0 reading(s) while the gate was open, so it cannot be shown to advance - the counter may have stopped publishing
+  [ERROR] Device disconnected while enabled (/Vision/BCL/Connected)
+    is False, expected True
+      x18, first @ 372.465806 s, in akit_26-05-01_15-45-36_johnson_q80.wpilog
+  [ERROR] Device disconnected while enabled (/Vision/BR/Connected)
+    is False, expected True
+      x5, in 3 files, first @ 212.708341 s, in akit_26-04-30_20-48-03_johnson_q46.wpilog
+  [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Drivetrain/GyroConnected)
+    is False, expected True
+      x3, first @ 264.002811 s, in akit_26-04-30_16-20-07_johnson_q22.wpilog
+  [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Hopper/KickerMotorConnected)
+    is False, expected True
+      x3, first @ 264.002811 s, in akit_26-04-30_16-20-07_johnson_q22.wpilog
+  [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Hopper/SpindexerMotorConnected)
+    is False, expected True
+      x3, first @ 264.002811 s, in akit_26-04-30_16-20-07_johnson_q22.wpilog
+  [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Intake/DeployerConnected)
+    is False, expected True
+      x3, first @ 264.002811 s, in akit_26-04-30_16-20-07_johnson_q22.wpilog
+  [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Intake/RollerConnectedFollower)
+    is False, expected True
+      x3, first @ 264.002811 s, in akit_26-04-30_16-20-07_johnson_q22.wpilog
+  [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Intake/RollerConnectedLead)
+    is False, expected True
+      x7, in 2 files, first @ 208.350400 s, in akit_26-04-30_14-46-03_johnson_q12.wpilog
+  [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Shooter/FlywheelFollow1Connected)
+    is False, expected True
+      x3, first @ 264.002811 s, in akit_26-04-30_16-20-07_johnson_q22.wpilog
+  [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Shooter/FlywheelFollow2Connected)
+    is False, expected True
+      x3, first @ 264.002811 s, in akit_26-04-30_16-20-07_johnson_q22.wpilog
+  [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Shooter/FlywheelLeadConnected)
+    is False, expected True
+      x3, first @ 264.002811 s, in akit_26-04-30_16-20-07_johnson_q22.wpilog
+  [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Shooter/FuelDetectorConnected)
+    is False, expected True
+      x3, first @ 264.002811 s, in akit_26-04-30_16-20-07_johnson_q22.wpilog
+  [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Shooter/HoodConnected)
+    is False, expected True
+      x3, first @ 264.002811 s, in akit_26-04-30_16-20-07_johnson_q22.wpilog
+  [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Shooter/TurretConnected)
+    is False, expected True
+      x3, first @ 264.002811 s, in akit_26-04-30_16-20-07_johnson_q22.wpilog
+  [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Vision/BCL/Connected)
+    is False, expected True
+      x18, first @ 372.465806 s, in akit_26-05-01_15-45-36_johnson_q80.wpilog
+  [ERROR] Device disconnected while enabled (broad, NT clients excluded) (/Vision/BR/Connected)
+    is False, expected True
+      x5, in 3 files, first @ 212.708341 s, in akit_26-04-30_20-48-03_johnson_q46.wpilog
+  [WARNING] Alert reported as warning (/RealOutputs/Alerts/warnings)
+    Non-competition operator controller connected.
+      @ 455.742040 s, in akit_26-05-01_17-57-36_johnson_q89.wpilog
+  [WARNING] Drive motor over temperature (/Drivetrain/BL/DriveTemp)
+    above 40 C for 101.4 s, peak 44 C at 254.8 s
+      @ 203.485323 s, in akit_26-05-01_20-28-19_q105.wpilog
+    above 40 C for 108.8 s, peak 44 C at 326.5 s
+      @ 288.451477 s, in akit_26-05-01_22-45-20_johnson_q121.wpilog
+    above 40 C for 118.3 s, peak 46 C at 302.4 s
+      @ 275.298044 s, in akit_26-04-30_20-48-03_johnson_q46.wpilog
+    above 40 C for 123.4 s, peak 47 C at 425.7 s
+      @ 384.649740 s, in akit_26-05-01_13-38-09_johnson_q67.wpilog
+    above 40 C for 130.6 s, peak 45 C at 387.9 s
+      @ 370.139929 s, in akit_26-04-30_22-42-16_johnson_q59.wpilog
+    above 40 C for 133.2 s, peak 47 C at 440.0 s
+      @ 392.259989 s, in akit_26-05-01_17-57-36_johnson_q89.wpilog
+    above 40 C for 50.3 s, peak 42 C at 299.6 s
+      @ 297.048486 s, in akit_26-04-30_16-20-07_johnson_q22.wpilog
+    above 40 C for 70.9 s, peak 45 C at 327.0 s
+      @ 318.199641 s, in akit_26-04-30_14-46-03_johnson_q12.wpilog
+    above 40 C for 79.9 s, peak 42 C at 399.4 s
+      @ 396.015866 s, in akit_26-05-01_15-45-36_johnson_q80.wpilog
+  [WARNING] Drive motor over temperature (/Drivetrain/BR/DriveTemp)
+    above 40 C for 115.4 s, peak 45 C at 325.7 s
+      @ 287.520075 s, in akit_26-04-30_14-46-03_johnson_q12.wpilog
+    above 40 C for 123.0 s, peak 45 C at 211.3 s
+      @ 192.515521 s, in akit_26-05-01_20-28-19_q105.wpilog
+    above 40 C for 123.4 s, peak 45 C at 351.3 s
+      @ 288.291576 s, in akit_26-05-01_22-45-20_johnson_q121.wpilog
+    above 40 C for 142.7 s, peak 46 C at 387.9 s, still past the limit when the log ended
+      @ 366.209332 s, in akit_26-04-30_22-42-16_johnson_q59.wpilog
+    above 40 C for 162.8 s, peak 49 C at 430.4 s
+      @ 371.630107 s, in akit_26-05-01_13-38-09_johnson_q67.wpilog
+    above 40 C for 170.8 s, peak 47 C at 302.0 s
+      @ 249.813925 s, in akit_26-04-30_20-48-03_johnson_q46.wpilog
+    above 40 C for 181.5 s, peak 48 C at 431.5 s
+      @ 365.502690 s, in akit_26-05-01_17-57-36_johnson_q89.wpilog
+    above 40 C for 81.1 s, across 2 intervals, longest 53.5 s, peak 44 C at 295.3 s
+      x2, first @ 268.940858 s, in akit_26-04-30_16-20-07_johnson_q22.wpilog
+    above 40 C for 84.8 s, peak 42 C at 396.8 s
+      @ 393.638275 s, in akit_26-05-01_15-45-36_johnson_q80.wpilog
+  [WARNING] Drive motor over temperature (/Drivetrain/FL/DriveTemp)
+    above 40 C for 112.5 s, peak 44 C at 321.9 s
+      @ 288.336096 s, in akit_26-05-01_22-45-20_johnson_q121.wpilog
+    above 40 C for 118.8 s, peak 46 C at 307.8 s
+      @ 276.999228 s, in akit_26-04-30_20-48-03_johnson_q46.wpilog
+    above 40 C for 121.5 s, peak 44 C at 212.6 s
+      @ 194.632521 s, in akit_26-05-01_20-28-19_q105.wpilog
+    above 40 C for 132.0 s, peak 45 C at 389.0 s
+      @ 369.268097 s, in akit_26-04-30_22-42-16_johnson_q59.wpilog
+    above 40 C for 139.1 s, peak 48 C at 428.0 s
+      @ 376.185468 s, in akit_26-05-01_13-38-09_johnson_q67.wpilog
+    above 40 C for 172.6 s, peak 47 C at 431.4 s
+      @ 366.132054 s, in akit_26-05-01_17-57-36_johnson_q89.wpilog
+    above 40 C for 53.3 s, across 2 intervals, longest 45.5 s, peak 42 C at 293.6 s
+      x2, first @ 288.726715 s, in akit_26-04-30_16-20-07_johnson_q22.wpilog
+    above 40 C for 85.2 s, peak 44 C at 397.0 s
+      @ 390.149985 s, in akit_26-05-01_15-45-36_johnson_q80.wpilog
+    above 40 C for 90.6 s, peak 46 C at 324.1 s
+      @ 306.962459 s, in akit_26-04-30_14-46-03_johnson_q12.wpilog
+  [WARNING] Drive motor over temperature (/Drivetrain/FR/DriveTemp)
+    above 40 C for 101.7 s, peak 45 C at 396.6 s
+      @ 388.286582 s, in akit_26-05-01_15-45-36_johnson_q80.wpilog
+    above 40 C for 141.7 s, peak 46 C at 390.2 s, still past the limit when the log ended
+      @ 367.190349 s, in akit_26-04-30_22-42-16_johnson_q59.wpilog
+    above 40 C for 147.4 s, peak 47 C at 355.4 s
+      @ 287.138916 s, in akit_26-05-01_22-45-20_johnson_q121.wpilog
+    above 40 C for 154.2 s, peak 45 C at 212.7 s
+      @ 192.002038 s, in akit_26-05-01_20-28-19_q105.wpilog
+    above 40 C for 155.9 s, peak 48 C at 313.6 s, still past the limit when the log ended
+      @ 273.084937 s, in akit_26-04-30_20-48-03_johnson_q46.wpilog
+    above 40 C for 159.1 s, peak 48 C at 425.6 s
+      @ 374.165447 s, in akit_26-05-01_13-38-09_johnson_q67.wpilog
+    above 40 C for 186.0 s, peak 49 C at 439.2 s, still past the limit when the log ended
+      @ 364.669665 s, in akit_26-05-01_17-57-36_johnson_q89.wpilog
+    above 40 C for 72.8 s, across 2 intervals, longest 46.0 s, peak 42 C at 293.3 s
+      x2, first @ 269.760156 s, in akit_26-04-30_16-20-07_johnson_q22.wpilog
+    above 40 C for 98.6 s, peak 45 C at 324.4 s
+      @ 307.950451 s, in akit_26-04-30_14-46-03_johnson_q12.wpilog
+  [WARNING] No accepted vision pose for too long (/RealOutputs/Vision/RobotPosesAccepted/length)
+    below 1 poses for 25.1 s, peak 0 poses at 422.8 s
+      @ 422.823608 s, in akit_26-04-30_16-20-07_johnson_q22.wpilog
+    below 1 poses for 35.1 s, across 3 intervals, longest 15.1 s, peak 0 poses at 464.4 s
+      x3, first @ 464.353822 s, in akit_26-05-01_17-57-36_johnson_q89.wpilog
+    below 1 poses for 615.2 s, across 3 intervals, longest 441.8 s, peak 0 poses at 297.2 s, still past the limit when the log ended
+      x3, first @ 297.195675 s, in akit_26-05-01_20-28-19_q105.wpilog
+    below 1 poses for 805.1 s, peak 0 poses at 138.1 s, still past the limit when the log ended
+      @ 138.141697 s, in akit_26-04-29_19-26-56.wpilog
+  [INFO] Peer deviation (deliberately sensitive, for test coverage) (/Drivetrain/BL/DriveTemp)
+    peak 29 C is 1.0 C above its peers (median 28 C of BR, FL, FR)
+  [INFO] Peer deviation (deliberately sensitive, for test coverage) (/Drivetrain/BR/DriveTemp)
+    peak 44 C is 2.0 C above its peers (median 42 C of BL, FL, FR)
+    peak 45 C is 1.0 C above its peers (median 44 C of BL, FL, FR)
+      x2, in 2 files
+    peak 46 C is 1.0 C above its peers (median 45 C of BL, FL, FR)
+    peak 47 C is 1.0 C above its peers (median 46 C of BL, FL, FR)
+    peak 48 C is 1.0 C above its peers (median 47 C of BL, FL, FR)
+    peak 49 C is 1.0 C above its peers (median 48 C of BL, FL, FR)
+  [INFO] Peer deviation (deliberately sensitive, for test coverage) (/Drivetrain/FL/DriveTemp)
+    peak 44 C is 2.0 C above its peers (median 42 C of BL, BR, FR)
+    peak 46 C is 1.0 C above its peers (median 45 C of BL, BR, FR)
+  [INFO] Peer deviation (deliberately sensitive, for test coverage) (/Drivetrain/FR/DriveTemp)
+    peak 45 C is 1.0 C above its peers (median 44 C of BL, BR, FL)
+    peak 45 C is 3.0 C above its peers (median 42 C of BL, BR, FL)
+    peak 46 C is 1.0 C above its peers (median 45 C of BL, BR, FL)
+    peak 47 C is 3.0 C above its peers (median 44 C of BL, BR, FL)
+    peak 48 C is 2.0 C above its peers (median 46 C of BL, BR, FL)
+    peak 49 C is 2.0 C above its peers (median 47 C of BL, BR, FL)
+  [INFO] Shooter never reached a shooting mode (/RealOutputs/ShooterModes/CurrentMode)
+    never reached 'SHOOT_OTM'
