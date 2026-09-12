@@ -26,6 +26,17 @@ Processing: akit_26-04-29_19-26-56.wpilog
       @ 650.962291 s
   [ERROR] Camera frames (/RealOutputs/Vision/FRONT/sending frames)
     entry not present in this log
+  [ERROR] Camera saw no AprilTag during the match (/RealOutputs/Vision/BCH/UpdatePoseCount)
+    only 0 reading(s) while the gate was open, so it cannot be shown to advance - the counter may have stopped publishing
+  [ERROR] Camera saw no AprilTag during the match (/RealOutputs/Vision/BCL/UpdatePoseCount)
+    only 0 reading(s) while the gate was open, so it cannot be shown to advance - the counter may have stopped publishing
+  [ERROR] Camera saw no AprilTag during the match (/RealOutputs/Vision/BL/UpdatePoseCount)
+    only 0 reading(s) while the gate was open, so it cannot be shown to advance - the counter may have stopped publishing
+  [ERROR] Camera saw no AprilTag during the match (/RealOutputs/Vision/BR/UpdatePoseCount)
+    only 0 reading(s) while the gate was open, so it cannot be shown to advance - the counter may have stopped publishing
+  [WARNING] No accepted vision pose for too long (/RealOutputs/Vision/RobotPosesAccepted/length)
+    below 1 poses for 805.1 s, peak 0 poses at 138.1 s, still past the limit when the log ended
+      @ 138.141697 s
   [INFO] Peer deviation (deliberately sensitive, for test coverage) (/Drivetrain/BL/DriveTemp)
     peak 29 C is 1.0 C above its peers (median 28 C of BR, FL, FR)
   [INFO] Shooter never reached a shooting mode (/RealOutputs/ShooterModes/CurrentMode)
@@ -130,6 +141,9 @@ Processing: akit_26-04-30_16-20-07_johnson_q22.wpilog
   [WARNING] Drive motor over temperature (/Drivetrain/FR/DriveTemp)
     above 40 C for 72.8 s, across 2 intervals, longest 46.0 s, peak 42 C at 293.3 s
       x2, first @ 269.760156 s
+  [WARNING] No accepted vision pose for too long (/RealOutputs/Vision/RobotPosesAccepted/length)
+    below 1 poses for 25.1 s, peak 0 poses at 422.8 s
+      @ 422.823608 s
   [INFO] Peer deviation (deliberately sensitive, for test coverage) (/Drivetrain/BR/DriveTemp)
     peak 44 C is 2.0 C above its peers (median 42 C of BL, FL, FR)
 
@@ -307,6 +321,8 @@ Processing: akit_26-05-01_17-57-36_johnson_q89.wpilog
       x3, first @ 394.339945 s
   [ERROR] Camera frames (/RealOutputs/Vision/FRONT/sending frames)
     entry not present in this log
+  [ERROR] Camera saw no AprilTag during the match (/RealOutputs/Vision/BL/UpdatePoseCount)
+    only 1 reading(s) while the gate was open, so it cannot be shown to advance - the counter may have stopped publishing
   [WARNING] Alert reported as warning (/RealOutputs/Alerts/warnings)
     Non-competition operator controller connected.
       @ 455.742040 s
@@ -322,6 +338,9 @@ Processing: akit_26-05-01_17-57-36_johnson_q89.wpilog
   [WARNING] Drive motor over temperature (/Drivetrain/FR/DriveTemp)
     above 40 C for 186.0 s, peak 49 C at 439.2 s, still past the limit when the log ended
       @ 364.669665 s
+  [WARNING] No accepted vision pose for too long (/RealOutputs/Vision/RobotPosesAccepted/length)
+    below 1 poses for 35.1 s, across 3 intervals, longest 15.1 s, peak 0 poses at 464.4 s
+      x3, first @ 464.353822 s
   [INFO] Peer deviation (deliberately sensitive, for test coverage) (/Drivetrain/BR/DriveTemp)
     peak 48 C is 1.0 C above its peers (median 47 C of BL, FL, FR)
   [INFO] Peer deviation (deliberately sensitive, for test coverage) (/Drivetrain/FR/DriveTemp)
@@ -345,6 +364,9 @@ Processing: akit_26-05-01_20-28-19_q105.wpilog
   [WARNING] Drive motor over temperature (/Drivetrain/FR/DriveTemp)
     above 40 C for 154.2 s, peak 45 C at 212.7 s
       @ 192.002038 s
+  [WARNING] No accepted vision pose for too long (/RealOutputs/Vision/RobotPosesAccepted/length)
+    below 1 poses for 615.2 s, across 3 intervals, longest 441.8 s, peak 0 poses at 297.2 s, still past the limit when the log ended
+      x3, first @ 297.195675 s
   [INFO] Peer deviation (deliberately sensitive, for test coverage) (/Drivetrain/BR/DriveTemp)
     peak 45 C is 1.0 C above its peers (median 44 C of BL, FL, FR)
   [INFO] Peer deviation (deliberately sensitive, for test coverage) (/Drivetrain/FR/DriveTemp)
@@ -399,6 +421,15 @@ Processing: akit_26-05-01_22-45-20_johnson_q121.wpilog
   [ERROR] Camera frames (/RealOutputs/Vision/FRONT/sending frames)
     entry not present in this log
       x10, in 10 files
+  [ERROR] Camera saw no AprilTag during the match (/RealOutputs/Vision/BCH/UpdatePoseCount)
+    only 0 reading(s) while the gate was open, so it cannot be shown to advance - the counter may have stopped publishing
+  [ERROR] Camera saw no AprilTag during the match (/RealOutputs/Vision/BCL/UpdatePoseCount)
+    only 0 reading(s) while the gate was open, so it cannot be shown to advance - the counter may have stopped publishing
+  [ERROR] Camera saw no AprilTag during the match (/RealOutputs/Vision/BL/UpdatePoseCount)
+    only 0 reading(s) while the gate was open, so it cannot be shown to advance - the counter may have stopped publishing
+    only 1 reading(s) while the gate was open, so it cannot be shown to advance - the counter may have stopped publishing
+  [ERROR] Camera saw no AprilTag during the match (/RealOutputs/Vision/BR/UpdatePoseCount)
+    only 0 reading(s) while the gate was open, so it cannot be shown to advance - the counter may have stopped publishing
   [ERROR] Device disconnected while enabled (/Vision/BCL/Connected)
     is False, expected True
       x18, first @ 372.465806 s, in akit_26-05-01_15-45-36_johnson_q80.wpilog
@@ -526,6 +557,15 @@ Processing: akit_26-05-01_22-45-20_johnson_q121.wpilog
       x2, first @ 269.760156 s, in akit_26-04-30_16-20-07_johnson_q22.wpilog
     above 40 C for 98.6 s, peak 45 C at 324.4 s
       @ 307.950451 s, in akit_26-04-30_14-46-03_johnson_q12.wpilog
+  [WARNING] No accepted vision pose for too long (/RealOutputs/Vision/RobotPosesAccepted/length)
+    below 1 poses for 25.1 s, peak 0 poses at 422.8 s
+      @ 422.823608 s, in akit_26-04-30_16-20-07_johnson_q22.wpilog
+    below 1 poses for 35.1 s, across 3 intervals, longest 15.1 s, peak 0 poses at 464.4 s
+      x3, first @ 464.353822 s, in akit_26-05-01_17-57-36_johnson_q89.wpilog
+    below 1 poses for 615.2 s, across 3 intervals, longest 441.8 s, peak 0 poses at 297.2 s, still past the limit when the log ended
+      x3, first @ 297.195675 s, in akit_26-05-01_20-28-19_q105.wpilog
+    below 1 poses for 805.1 s, peak 0 poses at 138.1 s, still past the limit when the log ended
+      @ 138.141697 s, in akit_26-04-29_19-26-56.wpilog
   [INFO] Peer deviation (deliberately sensitive, for test coverage) (/Drivetrain/BL/DriveTemp)
     peak 29 C is 1.0 C above its peers (median 28 C of BR, FL, FR)
   [INFO] Peer deviation (deliberately sensitive, for test coverage) (/Drivetrain/BR/DriveTemp)

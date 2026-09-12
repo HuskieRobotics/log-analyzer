@@ -526,6 +526,14 @@ def check_sample_findings(expectation: Any, value: Any) -> List[str]:
             return [f"is {value!r}, expected {expectation['always']!r}"]
         if "never" in expectation and value == expectation["never"]:
             return [f"is {value!r}"]
+        if "alwaysOneOf" in expectation:
+            # For a status string that has a legitimate "not yet reported" state
+            # as well as a good one: a camera's thermal reading is '' until the
+            # coprocessor answers, and flagging that would fire every match.
+            allowed = expectation["alwaysOneOf"]
+            if value not in allowed:
+                return [f"is {value!r}, expected one of "
+                        f"{', '.join(repr(a) for a in allowed)}"]
 
     return []
 
@@ -613,6 +621,36 @@ def compute_checks(log: Log, log_file_name: str,
 
             if expectation == "present":
                 continue  # presence already established by the match
+
+            if isinstance(expectation, dict) and "minIncrease" in expectation:
+                # A monotonic counter that must advance. "Did the camera see any
+                # AprilTag this match" is not answerable from any single sample:
+                # the count is meaningful only as a difference across the window.
+                minimum = float(expectation["minIncrease"])
+                if not gate.windows(gate_name, last_timestamp):
+                    # The gate admits no time at all - "after first enable" in a
+                    # log where the robot never enabled. The rule does not apply
+                    # rather than failing; a log with no match is caught by a
+                    # rule of its own, not by every gated rule in the config.
+                    continue
+                numeric = [value for timestamp, value
+                           in zip(samples.timestamps, samples.values)
+                           if isinstance(value, (int, float))
+                           and not isinstance(value, bool)
+                           and gate.applies(gate_name, timestamp)]
+                if len(numeric) < 2:
+                    report.findings.append(CheckFinding(
+                        name, severity, entry,
+                        f"only {len(numeric)} reading(s) while the gate was open, "
+                        f"so it cannot be shown to advance - the counter may have "
+                        f"stopped publishing", log_file_name))
+                elif numeric[-1] - numeric[0] < minimum:
+                    grew = numeric[-1] - numeric[0]
+                    report.findings.append(CheckFinding(
+                        name, severity, entry,
+                        f"advanced by {grew:g} ({numeric[0]:g} to {numeric[-1]:g}), "
+                        f"expected at least {minimum:g}", log_file_name))
+                continue
 
             if isinstance(expectation, dict) and (
                     "above" in expectation or "below" in expectation):

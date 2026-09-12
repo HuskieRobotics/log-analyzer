@@ -773,7 +773,56 @@ venue lifts every reading and makes it chattier — precisely the confounder §9
 attributes to historical comparison and §9.1 shows sibling comparison avoids. It
 is a stopgap for motors with no peers, not a substitute for having them.
 
-### 9.9 Cold start must be visible
+### 9.9 Vision coverage, measured
+
+Three manual post-match checks were added to `checks2026.json`. One needed no new
+machinery, which is worth recording.
+
+**"Accepted poses not empty for too long"** is A8's duration check applied to the
+flattened child of a struct array. `/RealOutputs/Vision/RobotPosesAccepted` is
+`struct:Pose3d[]`, so the raw field is unreadable, but flattening creates
+`/RealOutputs/Vision/RobotPosesAccepted/length` as a number - and naming that in
+a rule captures the parent via §6.4's segment-prefix rule, so it works from the
+config alone. `{"below": 1}` with a `minDuration` is then exactly "blind for
+longer than N seconds".
+
+Choosing N required measuring, and the first match measured was misleading: q121
+had a worst gap of 2.30 s, which suggested a 3 s threshold. Sweeping all nine
+showed why that was wrong:
+
+| Matches | Total blind | Longest gap |
+|---|---:|---:|
+| q12, q46, q59, q67, q80, q121 | 28-64 s | **1.3-5.4 s** |
+| q22 | 90 s | **25.1 s** |
+| q89 | 219 s | **15.1 s** |
+| q105 | 647 s | **441.8 s** |
+
+**10 s separates them cleanly** - it flags exactly those three and is silent on
+the six healthy matches, where 3 s would have flagged five. Note that q105 is the
+same log that lost its event name and records 254 s of enabled time (§12.1): three
+independent anomalies in one file.
+
+The other two needed new expectations, `minIncrease` and `alwaysOneOf` (§8.3).
+Both fired on real data: one camera's `UpdatePoseCount` published a single reading
+and stopped.
+
+`minIncrease` synthesises a finding from *absence* - "fewer than two readings" -
+which makes it worth being careful about what absence means. Two distinct cases:
+
+- **The gate admits no time at all**, as `afterFirstEnable` does in a log where
+  the robot never enables. The rule does not apply, and now returns nothing: a
+  log with no match is caught by the `Robot never enabled` rule rather than by
+  every gated rule in the config reporting a failure.
+- **The gate is open but the entry is silent within it.** That is a real finding,
+  and the pit log is an instance: the robot enabled at 212 s while every camera's
+  `UpdatePoseCount` stopped publishing at 145 s. Four cameras silent for the
+  whole enabled period is exactly what this rule is for.
+
+The two look identical in the output, which is why the first was initially
+mistaken for the second. Per-sample expectations have no such trap - they are
+simply silent when nothing is admitted.
+
+### 9.10 Cold start must be visible
 
 The first match of an event has no baseline, and neither does a newly added entry.
 That must report "no baseline yet" rather than nothing — a silent pass is
@@ -902,6 +951,17 @@ Expectations, covering both halves of §7:
 | `{"always": V}` | any sample differs from V |
 | `{"never": V}` | any sample equals V |
 | `{"atLeastOnce": V}` | no sample ever equals V |
+| `{"alwaysOneOf": [...]}` | any sample outside the set |
+| `{"minIncrease": N}` | a counter advanced by less than N across the window |
+
+`alwaysOneOf` exists because a status string can have a legitimate "not yet
+reported" state alongside a good one: a camera's `ThermalPressure` reads `''`
+until its coprocessor answers, so `{"always": "Nominal"}` would fire every match.
+
+`minIncrease` answers a question no single sample can: "did this camera see any
+AprilTag during the match" is a *difference* across the window, not a value.
+A counter that publishes once and then stops reports "only 1 reading ... cannot
+be shown to advance" rather than passing silently.
 
 Gates, via `"while"`:
 

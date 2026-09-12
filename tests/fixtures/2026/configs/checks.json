@@ -118,6 +118,37 @@
             "unit": "C",
             "while": "afterFirstEnable",
             "severity": "info"
+        },
+        {
+            "name": "No accepted vision pose for too long",
+            "entry": "/RealOutputs/Vision/RobotPosesAccepted/length",
+            "expect": {
+                "below": 1
+            },
+            "minDuration": 10.0,
+            "unit": "poses",
+            "while": "afterFirstEnable",
+            "severity": "warning"
+        },
+        {
+            "name": "Camera saw no AprilTag during the match",
+            "entry": "/RealOutputs/Vision/*/UpdatePoseCount",
+            "expect": {
+                "minIncrease": 1
+            },
+            "while": "afterFirstEnable",
+            "severity": "error"
+        },
+        {
+            "name": "Camera thermal pressure not nominal",
+            "entry": "/Vision/*/ThermalPressure",
+            "expect": {
+                "alwaysOneOf": [
+                    "Nominal",
+                    ""
+                ]
+            },
+            "severity": "warning"
         }
     ]
 }

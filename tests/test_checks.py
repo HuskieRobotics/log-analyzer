@@ -217,6 +217,105 @@ class WildcardRuleTest(unittest.TestCase):
         ])
 
 
+class MinIncreaseTest(unittest.TestCase):
+    """A monotonic counter that must advance. "Did the camera see any AprilTag
+    this match" is not answerable from any single sample - the count means
+    something only as a difference across the window."""
+
+    def rule(self, minimum=1, **extra):
+        base = {"name": "Counter", "entry": "/Vision/BR/UpdatePoseCount",
+                "expect": {"minIncrease": minimum}, "severity": "error"}
+        base.update(extra)
+        return [base]
+
+    def log_with(self, samples, enabled=((0.0, True),)):
+        log = log_with_enabled(enabled)
+        for timestamp, value in samples:
+            log.put_number("/Vision/BR/UpdatePoseCount", timestamp, value)
+        return log
+
+    def test_an_advancing_counter_reports_nothing(self):
+        log = self.log_with([(1.0, 10), (50.0, 900)])
+        self.assertEqual(compute_checks(log, "a.wpilog", self.rule()).findings, [])
+
+    def test_a_frozen_counter_is_reported(self):
+        log = self.log_with([(1.0, 42), (50.0, 42)])
+        findings = compute_checks(log, "a.wpilog", self.rule()).findings
+        self.assertEqual(len(findings), 1)
+        self.assertIn("advanced by 0", findings[0].detail)
+        self.assertIn("expected at least 1", findings[0].detail)
+
+    def test_a_larger_minimum_can_be_required(self):
+        log = self.log_with([(1.0, 100), (50.0, 105)])
+        self.assertEqual(compute_checks(log, "a.wpilog", self.rule(1)).findings, [])
+        self.assertEqual(
+            len(compute_checks(log, "a.wpilog", self.rule(50)).findings), 1)
+
+    def test_a_single_reading_cannot_be_judged_and_says_so(self):
+        """Silence would read as healthy; a counter that publishes once and stops
+        is the failure this rule exists to catch."""
+        log = self.log_with([(1.0, 42)])
+        findings = compute_checks(log, "a.wpilog", self.rule()).findings
+        self.assertEqual(len(findings), 1)
+        self.assertIn("1 reading", findings[0].detail)
+
+    def test_a_gate_that_admits_nothing_makes_the_rule_inapplicable(self):
+        """A pit log where the robot never enabled: "after first enable" admits
+        no time, so the rule does not apply. Synthesising a finding there made
+        every camera look dead in every non-match log."""
+        log = self.log_with([(2.0, 5), (3.0, 9)], enabled=((1.0, False),))
+        self.assertEqual(
+            compute_checks(log, "a.wpilog",
+                           self.rule(**{"while": "afterFirstEnable"})).findings, [])
+
+    def test_the_gate_restricts_which_readings_count(self):
+        log = self.log_with([(1.0, 10), (5.0, 900), (50.0, 901)],
+                            enabled=((0.0, False), (40.0, True)))
+        # Only the 50 s reading is enabled, so it cannot be judged.
+        findings = compute_checks(
+            log, "a.wpilog", self.rule(**{"while": "enabled"})).findings
+        self.assertIn("reading", findings[0].detail)
+
+
+class AlwaysOneOfTest(unittest.TestCase):
+    """For a status string with a legitimate "not yet reported" state as well as
+    a good one."""
+
+    def rule(self):
+        return [{"name": "Thermal", "entry": "/Vision/BR/ThermalPressure",
+                 "expect": {"alwaysOneOf": ["Nominal", ""]},
+                 "severity": "warning"}]
+
+    def log_with(self, values):
+        log = log_with_enabled([(0.0, True)])
+        for timestamp, value in enumerate(values, start=1):
+            log.put_string("/Vision/BR/ThermalPressure", float(timestamp), value)
+        return log
+
+    def test_an_allowed_sequence_reports_nothing(self):
+        log = self.log_with(["", "Nominal", "Nominal"])
+        self.assertEqual(compute_checks(log, "a.wpilog", self.rule()).findings, [])
+
+    def test_a_value_outside_the_set_is_reported(self):
+        log = self.log_with(["Nominal", "Throttled"])
+        findings = compute_checks(log, "a.wpilog", self.rule()).findings
+        self.assertEqual(len(findings), 1)
+        self.assertIn("'Throttled'", findings[0].detail)
+        self.assertIn("expected one of", findings[0].detail)
+
+    def test_the_blank_startup_value_is_not_a_finding(self):
+        """A camera reads '' until its coprocessor answers; flagging that would
+        fire every match."""
+        log = self.log_with([""])
+        self.assertEqual(compute_checks(log, "a.wpilog", self.rule()).findings, [])
+
+    def test_distinct_offenders_are_reported_separately(self):
+        log = self.log_with(["Throttled", "Critical", "Throttled"])
+        findings = compute_checks(log, "a.wpilog", self.rule()).findings
+        self.assertEqual(len(findings), 2)
+        self.assertEqual({f.occurrences for f in findings}, {1, 2})
+
+
 class ExpectEntriesTest(unittest.TestCase):
     """One rule covering both halves: the expected set, and the value expectation."""
 
