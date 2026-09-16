@@ -14,7 +14,7 @@ A Python tool for analyzing WPILib DataLog (.wpilog) files with configurable fil
 ## Usage
 
 ```bash
-python datalog.py <log_folder> <config_json_file>
+python analysis.py <log_folder> <config_json_file>
 ```
 
 ### Arguments
@@ -25,7 +25,7 @@ python datalog.py <log_folder> <config_json_file>
 ### Example
 
 ```bash
-python datalog.py ./logs config.json
+python analysis.py ./logs config.json
 ```
 
 ## Configuration File (config.json)
@@ -219,8 +219,8 @@ In addition, the tool supports stucts whose schema is encoded in the log file.
 
 ## Requirements
 
-- Python 3.6+
-- Standard library modules: `json`, `mmap`, `os`, `sys`, `datetime`
+- Python 3.9+
+- Standard library modules: `json`, `mmap`, `os`, `sys`
 - External dependency: `msgpack`
 
 Install msgpack:
@@ -246,7 +246,7 @@ Processing: akit_25-04-17_14-51-30_curie_q40.wpilog
 === TIME ANALYSIS RESULTS FOR akit_25-04-17_14-51-30_curie_q40.wpilog ===
 
 Analyzing: /RealOutputs/Manipulator/State (SHOOT_CORAL) -> /Manipulator/IsIndexerIRBlocked (False)
-  Total cycles found in this file: 13
+  Total values captured in this file: 13
   Average Shooting Time: 0.120009 s
   Max Shooting Time: 0.140015 s
     @ 293.243832 s 
@@ -254,7 +254,7 @@ Analyzing: /RealOutputs/Manipulator/State (SHOOT_CORAL) -> /Manipulator/IsIndexe
     @ 337.654072 s 
 
 Analyzing: /RealOutputs/Manipulator/State (WAITING_FOR_CORAL) -> /RealOutputs/LEDS/state (SCORING)
-  Total cycles found in this file: 16
+  Total values captured in this file: 16
   Average Cycle Time: 6.804564 s
   Max Cycle Time: 9.882420 s
     @ 337.774090 s 
@@ -281,7 +281,7 @@ Processing: akit_25-04-19_09-36-19_curie_e6.wpilog
 === TIME ANALYSIS RESULTS FOR akit_25-04-19_09-36-19_curie_e6.wpilog ===
 
 Analyzing: /RealOutputs/Manipulator/State (SHOOT_CORAL) -> /Manipulator/IsIndexerIRBlocked (False)
-  Total cycles found in this file: 14
+  Total values captured in this file: 14
   Average Shooting Time: 0.112864 s
   Max Shooting Time: 0.120074 s
     @ 193.556561 s 
@@ -289,7 +289,7 @@ Analyzing: /RealOutputs/Manipulator/State (SHOOT_CORAL) -> /Manipulator/IsIndexe
     @ 152.181621 s 
 
 Analyzing: /RealOutputs/Manipulator/State (WAITING_FOR_CORAL) -> /RealOutputs/LEDS/state (SCORING)
-  Total cycles found in this file: 15
+  Total values captured in this file: 15
   Average Cycle Time: 7.291700 s
   Max Cycle Time: 16.860040 s
     @ 158.646889 s 
@@ -317,7 +317,7 @@ Analyzing: /RealOutputs/DriveToReef/difference (reef frame)/translation/y when /
 
 Aggregated Analysis: /RealOutputs/Manipulator/State (SHOOT_CORAL) -> /Manipulator/IsIndexerIRBlocked (False)
   Files processed: 2
-  Total cycles found across all files: 27
+  Total values captured across all files: 27
   Average Shooting Time: 0.116304 s
   Max Shooting Time: 0.140015 s
     @ 293.243832 s in akit_25-04-17_14-51-30_curie_q40.wpilog
@@ -326,10 +326,10 @@ Aggregated Analysis: /RealOutputs/Manipulator/State (SHOOT_CORAL) -> /Manipulato
 
 Aggregated Analysis: /RealOutputs/Manipulator/State (WAITING_FOR_CORAL) -> /RealOutputs/LEDS/state (SCORING)
   Files processed: 2
-  Average cycles per file: 15.50
-  Minimum cycles in any file: 15 in akit_25-04-19_09-36-19_curie_e6.wpilog
-  Maximum cycles in any file: 16 in akit_25-04-17_14-51-30_curie_q40.wpilog
-  Total cycles found across all files: 31
+  Average matched values per file: 15.50
+  Minimum matched values in any file: 15 in akit_25-04-19_09-36-19_curie_e6.wpilog
+  Maximum matched values in any file: 16 in akit_25-04-17_14-51-30_curie_q40.wpilog
+  Total values captured across all files: 31
   Average Cycle Time: 7.040275 s
   Max Cycle Time: 16.860040 s
     @ 158.646889 s in akit_25-04-19_09-36-19_curie_e6.wpilog

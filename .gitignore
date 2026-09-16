@@ -205,3 +205,11 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# WPILib data logs used as integration test fixtures (large; not checked in).
+# See tests/README.md.
+*.wpilog
+
+# Generated analysis reports
+report.html
+report.json

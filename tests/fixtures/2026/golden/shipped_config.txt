@@ -1,0 +1,895 @@
+
+=== FILTERING CRITERIA ===
+Filter for enabled: True
+Filter for FMS attached: True
+Filter for robot mode: both
+
+=== ANALYSIS ===
+Found 10 log files to process:
+  akit_26-04-29_19-26-56.wpilog
+  akit_26-04-30_14-46-03_johnson_q12.wpilog
+  akit_26-04-30_16-20-07_johnson_q22.wpilog
+  akit_26-04-30_20-48-03_johnson_q46.wpilog
+  akit_26-04-30_22-42-16_johnson_q59.wpilog
+  akit_26-05-01_13-38-09_johnson_q67.wpilog
+  akit_26-05-01_15-45-36_johnson_q80.wpilog
+  akit_26-05-01_17-57-36_johnson_q89.wpilog
+  akit_26-05-01_20-28-19_q105.wpilog
+  akit_26-05-01_22-45-20_johnson_q121.wpilog
+
+Processing: akit_26-04-29_19-26-56.wpilog
+  Skipping analysis 0 due to missing fields: /RealOutputs/Auto/FallenBehindPath/FallenBehind or /RealOutputs/Auto/FallenBehindPath/FallenBehind
+  Skipping analysis 1 due to missing fields: /RealOutputs/ShooterModes/HubActive or /Hopper/SpindexerReferenceVelocityRPS
+  Skipping analysis 2 due to missing fields: /RealOutputs/Intake/RollerStalled or /RealOutputs/Intake/RollerStalled
+  Skipping analysis 3 due to missing fields: /RealOutputs/ShooterModes/turret not near setpoint or /RealOutputs/ShooterModes/turret not near setpoint
+  Skipping analysis 0 due to missing fields: /RealOutputs/ShooterModes/CurrentMode or /RealOutputs//ShooterModes/DistanceToHub
+
+=== TIME ANALYSIS RESULTS FOR akit_26-04-29_19-26-56.wpilog ===
+
+Analyzing: /RealOutputs/Auto/FallenBehindPath/FallenBehind (True) -> /RealOutputs/Auto/FallenBehindPath/FallenBehind (False)
+No values found for this analysis
+
+Analyzing: /RealOutputs/ShooterModes/HubActive (True) -> /Hopper/SpindexerReferenceVelocityRPS (12)
+No values found for this analysis
+
+Analyzing: /RealOutputs/Intake/RollerStalled (True) -> /RealOutputs/Intake/RollerStalled (False)
+No values found for this analysis
+
+Analyzing: /RealOutputs/ShooterModes/turret not near setpoint (True) -> /RealOutputs/ShooterModes/turret not near setpoint (False)
+No values found for this analysis
+
+=== VALUE ANALYSIS RESULTS FOR akit_26-04-29_19-26-56.wpilog ===
+
+Analyzing: /RealOutputs//ShooterModes/DistanceToHub when /RealOutputs/ShooterModes/CurrentMode = SHOOT_OTM
+No values found for this analysis
+
+Processing: akit_26-04-30_14-46-03_johnson_q12.wpilog
+  Skipping analysis 2 due to missing fields: /RealOutputs/Intake/RollerStalled or /RealOutputs/Intake/RollerStalled
+
+=== TIME ANALYSIS RESULTS FOR akit_26-04-30_14-46-03_johnson_q12.wpilog ===
+
+Analyzing: /RealOutputs/Auto/FallenBehindPath/FallenBehind (True) -> /RealOutputs/Auto/FallenBehindPath/FallenBehind (False)
+No values found for this analysis
+
+Analyzing: /RealOutputs/ShooterModes/HubActive (True) -> /Hopper/SpindexerReferenceVelocityRPS (12)
+  Total values captured in this file: 2
+  Average Start of Period Delay Time: 3.229890 s
+  Max Start of Period Delay Time: 5.279943 s
+    @ 326.884992 s 
+  Min Start of Period Delay Time: 1.179836 s
+    @ 276.877884 s 
+  Start of Period Delay Count: 2
+
+Analyzing: /RealOutputs/Intake/RollerStalled (True) -> /RealOutputs/Intake/RollerStalled (False)
+No values found for this analysis
+
+Analyzing: /RealOutputs/ShooterModes/turret not near setpoint (True) -> /RealOutputs/ShooterModes/turret not near setpoint (False)
+  Total values captured in this file: 73
+  Average Turret Lagging Time: 0.320339 s
+  Max Turret Lagging Time: 3.712783 s
+    @ 329.300128 s 
+  Min Turret Lagging Time: 0.023615 s
+    @ 317.749117 s 
+  Turret Lagging Count: 73
+  Outliers (2 std dev): 1.353019 s
+    @ 199.057146 s 
+  Outliers (2 std dev): 3.712783 s
+    @ 329.300128 s 
+
+Analyzing: /RealOutputs/Vision/BCH/sending frames (False) -> /RealOutputs/Vision/BCH/sending frames (True)
+  Total values captured in this file: 1
+  Average Camera Loss Time: 0.827515 s
+  Max Camera Loss Time: 0.827515 s
+    @ 348.787961 s 
+  Min Camera Loss Time: 0.827515 s
+    @ 348.787961 s 
+  Camera Loss Count: 1
+  Outliers (2 std dev): Cannot calculate with less than 2 values
+
+Analyzing: /RealOutputs/Vision/BL/sending frames (False) -> /RealOutputs/Vision/BL/sending frames (True)
+  Total values captured in this file: 1
+  Average Camera Loss Time: 0.610814 s
+  Max Camera Loss Time: 0.610814 s
+    @ 210.701594 s 
+  Min Camera Loss Time: 0.610814 s
+    @ 210.701594 s 
+  Camera Loss Count: 1
+  Outliers (2 std dev): Cannot calculate with less than 2 values
+
+=== VALUE ANALYSIS RESULTS FOR akit_26-04-30_14-46-03_johnson_q12.wpilog ===
+
+Analyzing: /RealOutputs//ShooterModes/DistanceToHub when /RealOutputs/ShooterModes/CurrentMode = SHOOT_OTM
+  Total values captured in this file: 13
+  Average SotM Distance to Hub: 3.939856 m
+  Max SotM Distance to Hub: 4.862519 m
+    @ 294.193975 s 
+  Min SotM Distance to Hub: 2.532039 m
+    @ 200.017944 s 
+  Average SotM Distance to Hub (abs): 3.939856 m
+  Max SotM Distance to Hub (abs): 4.862519 m
+    @ 294.193975 s 
+  Min SotM Distance to Hub (abs): 2.532039 m
+    @ 200.017944 s 
+
+Processing: akit_26-04-30_16-20-07_johnson_q22.wpilog
+  Skipping analysis 2 due to missing fields: /RealOutputs/Intake/RollerStalled or /RealOutputs/Intake/RollerStalled
+
+=== TIME ANALYSIS RESULTS FOR akit_26-04-30_16-20-07_johnson_q22.wpilog ===
+
+Analyzing: /RealOutputs/Auto/FallenBehindPath/FallenBehind (True) -> /RealOutputs/Auto/FallenBehindPath/FallenBehind (False)
+No values found for this analysis
+
+Analyzing: /RealOutputs/ShooterModes/HubActive (True) -> /Hopper/SpindexerReferenceVelocityRPS (12)
+  Total values captured in this file: 2
+  Average Start of Period Delay Time: 8.659261 s
+  Max Start of Period Delay Time: 15.655180 s
+    @ 255.007100 s 
+  Min Start of Period Delay Time: 1.663342 s
+    @ 304.993228 s 
+  Start of Period Delay Count: 2
+
+Analyzing: /RealOutputs/Intake/RollerStalled (True) -> /RealOutputs/Intake/RollerStalled (False)
+No values found for this analysis
+
+Analyzing: /RealOutputs/ShooterModes/turret not near setpoint (True) -> /RealOutputs/ShooterModes/turret not near setpoint (False)
+  Total values captured in this file: 49
+  Average Turret Lagging Time: 0.345323 s
+  Max Turret Lagging Time: 3.163368 s
+    @ 205.366892 s 
+  Min Turret Lagging Time: 0.020090 s
+    @ 240.336628 s 
+  Turret Lagging Count: 49
+  Outliers (2 std dev): 3.163368 s
+    @ 205.366892 s 
+  Outliers (2 std dev): 2.243140 s
+    @ 264.337787 s 
+
+Analyzing: /RealOutputs/Vision/BCH/sending frames (False) -> /RealOutputs/Vision/BCH/sending frames (True)
+  Total values captured in this file: 1
+  Average Camera Loss Time: 0.718349 s
+  Max Camera Loss Time: 0.718349 s
+    @ 210.545588 s 
+  Min Camera Loss Time: 0.718349 s
+    @ 210.545588 s 
+  Camera Loss Count: 1
+  Outliers (2 std dev): Cannot calculate with less than 2 values
+
+Analyzing: /RealOutputs/Vision/BCL/sending frames (False) -> /RealOutputs/Vision/BCL/sending frames (True)
+  Total values captured in this file: 1
+  Average Camera Loss Time: 0.781047 s
+  Max Camera Loss Time: 0.781047 s
+    @ 299.022967 s 
+  Min Camera Loss Time: 0.781047 s
+    @ 299.022967 s 
+  Camera Loss Count: 1
+  Outliers (2 std dev): Cannot calculate with less than 2 values
+
+Analyzing: /RealOutputs/Vision/BL/sending frames (False) -> /RealOutputs/Vision/BL/sending frames (True)
+  Total values captured in this file: 3
+  Average Camera Loss Time: 0.667614 s
+  Max Camera Loss Time: 0.752258 s
+    @ 339.929594 s 
+  Min Camera Loss Time: 0.580467 s
+    @ 202.724314 s 
+  Camera Loss Count: 3
+
+Analyzing: /RealOutputs/Vision/BR/sending frames (False) -> /RealOutputs/Vision/BR/sending frames (True)
+  Total values captured in this file: 2
+  Average Camera Loss Time: 0.728023 s
+  Max Camera Loss Time: 0.818389 s
+    @ 355.443942 s 
+  Min Camera Loss Time: 0.637656 s
+    @ 210.571447 s 
+  Camera Loss Count: 2
+
+=== VALUE ANALYSIS RESULTS FOR akit_26-04-30_16-20-07_johnson_q22.wpilog ===
+
+Analyzing: /RealOutputs//ShooterModes/DistanceToHub when /RealOutputs/ShooterModes/CurrentMode = SHOOT_OTM
+  Total values captured in this file: 7
+  Average SotM Distance to Hub: 3.471431 m
+  Max SotM Distance to Hub: 4.088469 m
+    @ 360.772911 s 
+  Min SotM Distance to Hub: 2.099234 m
+    @ 202.859859 s 
+  Average SotM Distance to Hub (abs): 3.471431 m
+  Max SotM Distance to Hub (abs): 4.088469 m
+    @ 360.772911 s 
+  Min SotM Distance to Hub (abs): 2.099234 m
+    @ 202.859859 s 
+
+Processing: akit_26-04-30_20-48-03_johnson_q46.wpilog
+  Skipping analysis 2 due to missing fields: /RealOutputs/Intake/RollerStalled or /RealOutputs/Intake/RollerStalled
+
+=== TIME ANALYSIS RESULTS FOR akit_26-04-30_20-48-03_johnson_q46.wpilog ===
+
+Analyzing: /RealOutputs/Auto/FallenBehindPath/FallenBehind (True) -> /RealOutputs/Auto/FallenBehindPath/FallenBehind (False)
+No values found for this analysis
+
+Analyzing: /RealOutputs/ShooterModes/HubActive (True) -> /Hopper/SpindexerReferenceVelocityRPS (12)
+  Total values captured in this file: 2
+  Average Start of Period Delay Time: 7.045874 s
+  Max Start of Period Delay Time: 12.630620 s
+    @ 237.418778 s 
+  Min Start of Period Delay Time: 1.461128 s
+    @ 287.400992 s 
+  Start of Period Delay Count: 2
+
+Analyzing: /RealOutputs/Intake/RollerStalled (True) -> /RealOutputs/Intake/RollerStalled (False)
+No values found for this analysis
+
+Analyzing: /RealOutputs/ShooterModes/turret not near setpoint (True) -> /RealOutputs/ShooterModes/turret not near setpoint (False)
+  Total values captured in this file: 42
+  Average Turret Lagging Time: 0.375602 s
+  Max Turret Lagging Time: 1.993569 s
+    @ 232.765881 s 
+  Min Turret Lagging Time: 0.025265 s
+    @ 290.000719 s 
+  Turret Lagging Count: 42
+  Outliers (2 std dev): 1.993569 s
+    @ 232.765881 s 
+  Outliers (2 std dev): 1.253591 s
+    @ 235.878682 s 
+
+Analyzing: /RealOutputs/Vision/BCH/sending frames (False) -> /RealOutputs/Vision/BCH/sending frames (True)
+  Total values captured in this file: 2
+  Average Camera Loss Time: 0.643054 s
+  Max Camera Loss Time: 0.652274 s
+    @ 207.848519 s 
+  Min Camera Loss Time: 0.633835 s
+    @ 214.343505 s 
+  Camera Loss Count: 2
+
+Analyzing: /RealOutputs/Vision/BCL/sending frames (False) -> /RealOutputs/Vision/BCL/sending frames (True)
+  Total values captured in this file: 2
+  Average Camera Loss Time: 0.703593 s
+  Max Camera Loss Time: 0.736565 s
+    @ 207.827205 s 
+  Min Camera Loss Time: 0.670620 s
+    @ 214.343505 s 
+  Camera Loss Count: 2
+
+Analyzing: /RealOutputs/Vision/BL/sending frames (False) -> /RealOutputs/Vision/BL/sending frames (True)
+  Total values captured in this file: 2
+  Average Camera Loss Time: 0.710799 s
+  Max Camera Loss Time: 0.715251 s
+    @ 207.848519 s 
+  Min Camera Loss Time: 0.706347 s
+    @ 214.343505 s 
+  Camera Loss Count: 2
+
+Analyzing: /RealOutputs/Vision/BR/sending frames (False) -> /RealOutputs/Vision/BR/sending frames (True)
+  Total values captured in this file: 2
+  Average Camera Loss Time: 5.318489 s
+  Max Camera Loss Time: 9.833337 s
+    @ 206.735111 s 
+  Min Camera Loss Time: 0.803642 s
+    @ 284.678557 s 
+  Camera Loss Count: 2
+
+=== VALUE ANALYSIS RESULTS FOR akit_26-04-30_20-48-03_johnson_q46.wpilog ===
+
+Analyzing: /RealOutputs//ShooterModes/DistanceToHub when /RealOutputs/ShooterModes/CurrentMode = SHOOT_OTM
+  Total values captured in this file: 7
+  Average SotM Distance to Hub: 3.662333 m
+  Max SotM Distance to Hub: 3.793948 m
+    @ 313.966799 s 
+  Min SotM Distance to Hub: 3.213362 m
+    @ 250.023874 s 
+  Average SotM Distance to Hub (abs): 3.662333 m
+  Max SotM Distance to Hub (abs): 3.793948 m
+    @ 313.966799 s 
+  Min SotM Distance to Hub (abs): 3.213362 m
+    @ 250.023874 s 
+  Outliers (2 std dev; abs): 3.213362 m
+    @ 250.023874 s 
+
+Processing: akit_26-04-30_22-42-16_johnson_q59.wpilog
+  Skipping analysis 2 due to missing fields: /RealOutputs/Intake/RollerStalled or /RealOutputs/Intake/RollerStalled
+
+=== TIME ANALYSIS RESULTS FOR akit_26-04-30_22-42-16_johnson_q59.wpilog ===
+
+Analyzing: /RealOutputs/Auto/FallenBehindPath/FallenBehind (True) -> /RealOutputs/Auto/FallenBehindPath/FallenBehind (False)
+No values found for this analysis
+
+Analyzing: /RealOutputs/ShooterModes/HubActive (True) -> /Hopper/SpindexerReferenceVelocityRPS (12)
+  Total values captured in this file: 2
+  Average Start of Period Delay Time: 4.657339 s
+  Max Start of Period Delay Time: 6.788650 s
+    @ 332.039268 s 
+  Min Start of Period Delay Time: 2.526027 s
+    @ 382.062348 s 
+  Start of Period Delay Count: 2
+
+Analyzing: /RealOutputs/Intake/RollerStalled (True) -> /RealOutputs/Intake/RollerStalled (False)
+No values found for this analysis
+
+Analyzing: /RealOutputs/ShooterModes/turret not near setpoint (True) -> /RealOutputs/ShooterModes/turret not near setpoint (False)
+  Total values captured in this file: 52
+  Average Turret Lagging Time: 0.332270 s
+  Max Turret Lagging Time: 1.478992 s
+    @ 282.427107 s 
+  Min Turret Lagging Time: 0.020146 s
+    @ 358.064101 s 
+  Turret Lagging Count: 52
+  Outliers (2 std dev): 1.478992 s
+    @ 282.427107 s 
+
+Analyzing: /RealOutputs/Vision/BCH/sending frames (False) -> /RealOutputs/Vision/BCH/sending frames (True)
+  Total values captured in this file: 2
+  Average Camera Loss Time: 0.828341 s
+  Max Camera Loss Time: 0.832876 s
+    @ 326.604823 s 
+  Min Camera Loss Time: 0.823806 s
+    @ 364.279798 s 
+  Camera Loss Count: 2
+
+Analyzing: /RealOutputs/Vision/BCL/sending frames (False) -> /RealOutputs/Vision/BCL/sending frames (True)
+  Total values captured in this file: 1
+  Average Camera Loss Time: 0.694865 s
+  Max Camera Loss Time: 0.694865 s
+    @ 313.216341 s 
+  Min Camera Loss Time: 0.694865 s
+    @ 313.216341 s 
+  Camera Loss Count: 1
+  Outliers (2 std dev): Cannot calculate with less than 2 values
+
+Analyzing: /RealOutputs/Vision/BL/sending frames (False) -> /RealOutputs/Vision/BL/sending frames (True)
+  Total values captured in this file: 4
+  Average Camera Loss Time: 0.780900 s
+  Max Camera Loss Time: 0.834472 s
+    @ 282.963536 s 
+  Min Camera Loss Time: 0.667095 s
+    @ 379.615269 s 
+  Camera Loss Count: 4
+
+Analyzing: /RealOutputs/Vision/BR/sending frames (False) -> /RealOutputs/Vision/BR/sending frames (True)
+No values found for this analysis
+
+=== VALUE ANALYSIS RESULTS FOR akit_26-04-30_22-42-16_johnson_q59.wpilog ===
+
+Analyzing: /RealOutputs//ShooterModes/DistanceToHub when /RealOutputs/ShooterModes/CurrentMode = SHOOT_OTM
+  Total values captured in this file: 17
+  Average SotM Distance to Hub: 3.617695 m
+  Max SotM Distance to Hub: 4.087262 m
+    @ 439.322061 s 
+  Min SotM Distance to Hub: 2.943639 m
+    @ 415.588560 s 
+  Average SotM Distance to Hub (abs): 3.617695 m
+  Max SotM Distance to Hub (abs): 4.087262 m
+    @ 439.322061 s 
+  Min SotM Distance to Hub (abs): 2.943639 m
+    @ 415.588560 s 
+
+Processing: akit_26-05-01_13-38-09_johnson_q67.wpilog
+  Skipping analysis 2 due to missing fields: /RealOutputs/Intake/RollerStalled or /RealOutputs/Intake/RollerStalled
+
+=== TIME ANALYSIS RESULTS FOR akit_26-05-01_13-38-09_johnson_q67.wpilog ===
+
+Analyzing: /RealOutputs/Auto/FallenBehindPath/FallenBehind (True) -> /RealOutputs/Auto/FallenBehindPath/FallenBehind (False)
+No values found for this analysis
+
+Analyzing: /RealOutputs/ShooterModes/HubActive (True) -> /Hopper/SpindexerReferenceVelocityRPS (12)
+  Total values captured in this file: 2
+  Average Start of Period Delay Time: 9.143935 s
+  Max Start of Period Delay Time: 17.204142 s
+    @ 334.788342 s 
+  Min Start of Period Delay Time: 1.083728 s
+    @ 384.763322 s 
+  Start of Period Delay Count: 2
+
+Analyzing: /RealOutputs/Intake/RollerStalled (True) -> /RealOutputs/Intake/RollerStalled (False)
+No values found for this analysis
+
+Analyzing: /RealOutputs/ShooterModes/turret not near setpoint (True) -> /RealOutputs/ShooterModes/turret not near setpoint (False)
+  Total values captured in this file: 32
+  Average Turret Lagging Time: 0.327341 s
+  Max Turret Lagging Time: 1.652434 s
+    @ 284.738865 s 
+  Min Turret Lagging Time: 0.022983 s
+    @ 321.526075 s 
+  Turret Lagging Count: 32
+  Outliers (2 std dev): 1.652434 s
+    @ 284.738865 s 
+  Outliers (2 std dev): 1.229197 s
+    @ 370.571032 s 
+
+Analyzing: /RealOutputs/Vision/BCH/sending frames (False) -> /RealOutputs/Vision/BCH/sending frames (True)
+  Total values captured in this file: 2
+  Average Camera Loss Time: 0.740525 s
+  Max Camera Loss Time: 0.746656 s
+    @ 379.992206 s 
+  Min Camera Loss Time: 0.734394 s
+    @ 374.450802 s 
+  Camera Loss Count: 2
+
+Analyzing: /RealOutputs/Vision/BCL/sending frames (False) -> /RealOutputs/Vision/BCL/sending frames (True)
+  Total values captured in this file: 2
+  Average Camera Loss Time: 0.840473 s
+  Max Camera Loss Time: 0.858049 s
+    @ 374.450802 s 
+  Min Camera Loss Time: 0.822897 s
+    @ 379.992206 s 
+  Camera Loss Count: 2
+
+Analyzing: /RealOutputs/Vision/BL/sending frames (False) -> /RealOutputs/Vision/BL/sending frames (True)
+  Total values captured in this file: 4
+  Average Camera Loss Time: 0.772733 s
+  Max Camera Loss Time: 0.864245 s
+    @ 379.992206 s 
+  Min Camera Loss Time: 0.696144 s
+    @ 285.636574 s 
+  Camera Loss Count: 4
+
+Analyzing: /RealOutputs/Vision/BR/sending frames (False) -> /RealOutputs/Vision/BR/sending frames (True)
+  Total values captured in this file: 4
+  Average Camera Loss Time: 3.114842 s
+  Max Camera Loss Time: 10.161875 s
+    @ 372.159914 s 
+  Min Camera Loss Time: 0.751590 s
+    @ 347.956301 s 
+  Camera Loss Count: 4
+
+=== VALUE ANALYSIS RESULTS FOR akit_26-05-01_13-38-09_johnson_q67.wpilog ===
+
+Analyzing: /RealOutputs//ShooterModes/DistanceToHub when /RealOutputs/ShooterModes/CurrentMode = SHOOT_OTM
+  Total values captured in this file: 6
+  Average SotM Distance to Hub: 3.832896 m
+  Max SotM Distance to Hub: 4.132657 m
+    @ 302.690999 s 
+  Min SotM Distance to Hub: 3.492276 m
+    @ 351.834326 s 
+  Average SotM Distance to Hub (abs): 3.832896 m
+  Max SotM Distance to Hub (abs): 4.132657 m
+    @ 302.690999 s 
+  Min SotM Distance to Hub (abs): 3.492276 m
+    @ 351.834326 s 
+
+Processing: akit_26-05-01_15-45-36_johnson_q80.wpilog
+  Skipping analysis 2 due to missing fields: /RealOutputs/Intake/RollerStalled or /RealOutputs/Intake/RollerStalled
+
+=== TIME ANALYSIS RESULTS FOR akit_26-05-01_15-45-36_johnson_q80.wpilog ===
+
+Analyzing: /RealOutputs/Auto/FallenBehindPath/FallenBehind (True) -> /RealOutputs/Auto/FallenBehindPath/FallenBehind (False)
+No values found for this analysis
+
+Analyzing: /RealOutputs/ShooterModes/HubActive (True) -> /Hopper/SpindexerReferenceVelocityRPS (12)
+  Total values captured in this file: 2
+  Average Start of Period Delay Time: 1.992140 s
+  Max Start of Period Delay Time: 3.954785 s
+    @ 350.048150 s 
+  Min Start of Period Delay Time: 0.029495 s
+    @ 400.047059 s 
+  Start of Period Delay Count: 2
+
+Analyzing: /RealOutputs/Intake/RollerStalled (True) -> /RealOutputs/Intake/RollerStalled (False)
+No values found for this analysis
+
+Analyzing: /RealOutputs/ShooterModes/turret not near setpoint (True) -> /RealOutputs/ShooterModes/turret not near setpoint (False)
+  Total values captured in this file: 54
+  Average Turret Lagging Time: 0.409983 s
+  Max Turret Lagging Time: 3.119553 s
+    @ 331.542039 s 
+  Min Turret Lagging Time: 0.022594 s
+    @ 384.556232 s 
+  Turret Lagging Count: 54
+  Outliers (2 std dev): 2.631540 s
+    @ 323.341399 s 
+  Outliers (2 std dev): 3.119553 s
+    @ 331.542039 s 
+  Outliers (2 std dev): 1.592647 s
+    @ 361.220073 s 
+
+Analyzing: /RealOutputs/Vision/BCH/sending frames (False) -> /RealOutputs/Vision/BCH/sending frames (True)
+  Total values captured in this file: 18
+  Average Camera Loss Time: 0.771927 s
+  Max Camera Loss Time: 0.874910 s
+    @ 413.078249 s 
+  Min Camera Loss Time: 0.587943 s
+    @ 432.623363 s 
+  Camera Loss Count: 18
+  Outliers (2 std dev): 0.587943 s
+    @ 432.623363 s 
+
+Analyzing: /RealOutputs/Vision/BCL/sending frames (False) -> /RealOutputs/Vision/BCL/sending frames (True)
+No values found for this analysis
+
+Analyzing: /RealOutputs/Vision/BL/sending frames (False) -> /RealOutputs/Vision/BL/sending frames (True)
+  Total values captured in this file: 18
+  Average Camera Loss Time: 0.787312 s
+  Max Camera Loss Time: 0.883128 s
+    @ 452.264326 s 
+  Min Camera Loss Time: 0.665148 s
+    @ 432.588118 s 
+  Camera Loss Count: 18
+
+Analyzing: /RealOutputs/Vision/BR/sending frames (False) -> /RealOutputs/Vision/BR/sending frames (True)
+  Total values captured in this file: 19
+  Average Camera Loss Time: 0.772327 s
+  Max Camera Loss Time: 0.905073 s
+    @ 447.420828 s 
+  Min Camera Loss Time: 0.623039 s
+    @ 422.700616 s 
+  Camera Loss Count: 19
+
+=== VALUE ANALYSIS RESULTS FOR akit_26-05-01_15-45-36_johnson_q80.wpilog ===
+
+Analyzing: /RealOutputs//ShooterModes/DistanceToHub when /RealOutputs/ShooterModes/CurrentMode = SHOOT_OTM
+  Total values captured in this file: 17
+  Average SotM Distance to Hub: 3.956189 m
+  Max SotM Distance to Hub: 5.068144 m
+    @ 448.282457 s 
+  Min SotM Distance to Hub: 2.180387 m
+    @ 324.166373 s 
+  Average SotM Distance to Hub (abs): 3.956189 m
+  Max SotM Distance to Hub (abs): 5.068144 m
+    @ 448.282457 s 
+  Min SotM Distance to Hub (abs): 2.180387 m
+    @ 324.166373 s 
+  Outliers (2 std dev; abs): 2.180387 m
+    @ 324.166373 s 
+
+Processing: akit_26-05-01_17-57-36_johnson_q89.wpilog
+  Skipping analysis 2 due to missing fields: /RealOutputs/Intake/RollerStalled or /RealOutputs/Intake/RollerStalled
+
+=== TIME ANALYSIS RESULTS FOR akit_26-05-01_17-57-36_johnson_q89.wpilog ===
+
+Analyzing: /RealOutputs/Auto/FallenBehindPath/FallenBehind (True) -> /RealOutputs/Auto/FallenBehindPath/FallenBehind (False)
+No values found for this analysis
+
+Analyzing: /RealOutputs/ShooterModes/HubActive (True) -> /Hopper/SpindexerReferenceVelocityRPS (12)
+  Total values captured in this file: 1
+  Average Start of Period Delay Time: 7.503754 s
+  Max Start of Period Delay Time: 7.503754 s
+    @ 359.869685 s 
+  Min Start of Period Delay Time: 7.503754 s
+    @ 359.869685 s 
+  Start of Period Delay Count: 1
+  Outliers (2 std dev): Cannot calculate with less than 2 values
+
+Analyzing: /RealOutputs/Intake/RollerStalled (True) -> /RealOutputs/Intake/RollerStalled (False)
+No values found for this analysis
+
+Analyzing: /RealOutputs/ShooterModes/turret not near setpoint (True) -> /RealOutputs/ShooterModes/turret not near setpoint (False)
+  Total values captured in this file: 75
+  Average Turret Lagging Time: 0.334702 s
+  Max Turret Lagging Time: 1.524791 s
+    @ 406.534956 s 
+  Min Turret Lagging Time: 0.022278 s
+    @ 305.467878 s 
+  Turret Lagging Count: 75
+  Outliers (2 std dev): 1.256281 s
+    @ 352.683953 s 
+  Outliers (2 std dev): 1.242758 s
+    @ 366.070041 s 
+  Outliers (2 std dev): 1.524791 s
+    @ 406.534956 s 
+  Outliers (2 std dev): 1.132867 s
+    @ 409.352367 s 
+
+Analyzing: /RealOutputs/Vision/BCH/sending frames (False) -> /RealOutputs/Vision/BCH/sending frames (True)
+  Total values captured in this file: 1
+  Average Camera Loss Time: 0.632834 s
+  Max Camera Loss Time: 0.632834 s
+    @ 339.733456 s 
+  Min Camera Loss Time: 0.632834 s
+    @ 339.733456 s 
+  Camera Loss Count: 1
+  Outliers (2 std dev): Cannot calculate with less than 2 values
+
+Analyzing: /RealOutputs/Vision/BR/sending frames (False) -> /RealOutputs/Vision/BR/sending frames (True)
+  Total values captured in this file: 3
+  Average Camera Loss Time: 0.747608 s
+  Max Camera Loss Time: 0.797037 s
+    @ 394.339945 s 
+  Min Camera Loss Time: 0.656540 s
+    @ 407.515416 s 
+  Camera Loss Count: 3
+
+=== VALUE ANALYSIS RESULTS FOR akit_26-05-01_17-57-36_johnson_q89.wpilog ===
+
+Analyzing: /RealOutputs//ShooterModes/DistanceToHub when /RealOutputs/ShooterModes/CurrentMode = SHOOT_OTM
+  Total values captured in this file: 7
+  Average SotM Distance to Hub: 3.200970 m
+  Max SotM Distance to Hub: 3.909241 m
+    @ 321.935139 s 
+  Min SotM Distance to Hub: 2.293073 m
+    @ 293.669169 s 
+  Average SotM Distance to Hub (abs): 3.200970 m
+  Max SotM Distance to Hub (abs): 3.909241 m
+    @ 321.935139 s 
+  Min SotM Distance to Hub (abs): 2.293073 m
+    @ 293.669169 s 
+
+Processing: akit_26-05-01_20-28-19_q105.wpilog
+  Skipping analysis 2 due to missing fields: /RealOutputs/Intake/RollerStalled or /RealOutputs/Intake/RollerStalled
+
+=== TIME ANALYSIS RESULTS FOR akit_26-05-01_20-28-19_q105.wpilog ===
+
+Analyzing: /RealOutputs/Auto/FallenBehindPath/FallenBehind (True) -> /RealOutputs/Auto/FallenBehindPath/FallenBehind (False)
+No values found for this analysis
+
+Analyzing: /RealOutputs/ShooterModes/HubActive (True) -> /Hopper/SpindexerReferenceVelocityRPS (12)
+  Total values captured in this file: 2
+  Average Start of Period Delay Time: 8.097744 s
+  Max Start of Period Delay Time: 12.652826 s
+    @ 206.879657 s 
+  Min Start of Period Delay Time: 3.542661 s
+    @ 156.880729 s 
+  Start of Period Delay Count: 2
+
+Analyzing: /RealOutputs/Intake/RollerStalled (True) -> /RealOutputs/Intake/RollerStalled (False)
+No values found for this analysis
+
+Analyzing: /RealOutputs/ShooterModes/turret not near setpoint (True) -> /RealOutputs/ShooterModes/turret not near setpoint (False)
+  Total values captured in this file: 61
+  Average Turret Lagging Time: 0.219692 s
+  Max Turret Lagging Time: 0.868455 s
+    @ 197.415837 s 
+  Min Turret Lagging Time: 0.020627 s
+    @ 192.585473 s 
+  Turret Lagging Count: 61
+  Outliers (2 std dev): 0.684569 s
+    @ 142.727209 s 
+  Outliers (2 std dev): 0.747120 s
+    @ 194.132283 s 
+  Outliers (2 std dev): 0.868455 s
+    @ 197.415837 s 
+
+=== VALUE ANALYSIS RESULTS FOR akit_26-05-01_20-28-19_q105.wpilog ===
+
+Analyzing: /RealOutputs//ShooterModes/DistanceToHub when /RealOutputs/ShooterModes/CurrentMode = SHOOT_OTM
+  Total values captured in this file: 16
+  Average SotM Distance to Hub: 3.791227 m
+  Max SotM Distance to Hub: 4.111103 m
+    @ 180.069064 s 
+  Min SotM Distance to Hub: 3.472695 m
+    @ 172.827849 s 
+  Average SotM Distance to Hub (abs): 3.791227 m
+  Max SotM Distance to Hub (abs): 4.111103 m
+    @ 180.069064 s 
+  Min SotM Distance to Hub (abs): 3.472695 m
+    @ 172.827849 s 
+
+Processing: akit_26-05-01_22-45-20_johnson_q121.wpilog
+  Skipping analysis 2 due to missing fields: /RealOutputs/Intake/RollerStalled or /RealOutputs/Intake/RollerStalled
+
+=== TIME ANALYSIS RESULTS FOR akit_26-05-01_22-45-20_johnson_q121.wpilog ===
+
+Analyzing: /RealOutputs/Auto/FallenBehindPath/FallenBehind (True) -> /RealOutputs/Auto/FallenBehindPath/FallenBehind (False)
+No values found for this analysis
+
+Analyzing: /RealOutputs/ShooterModes/HubActive (True) -> /Hopper/SpindexerReferenceVelocityRPS (12)
+  Total values captured in this file: 2
+  Average Start of Period Delay Time: 5.176739 s
+  Max Start of Period Delay Time: 6.975746 s
+    @ 300.112044 s 
+  Min Start of Period Delay Time: 3.377732 s
+    @ 250.117791 s 
+  Start of Period Delay Count: 2
+
+Analyzing: /RealOutputs/Intake/RollerStalled (True) -> /RealOutputs/Intake/RollerStalled (False)
+No values found for this analysis
+
+Analyzing: /RealOutputs/ShooterModes/turret not near setpoint (True) -> /RealOutputs/ShooterModes/turret not near setpoint (False)
+  Total values captured in this file: 72
+  Average Turret Lagging Time: 0.304575 s
+  Max Turret Lagging Time: 1.090016 s
+    @ 278.359424 s 
+  Min Turret Lagging Time: 0.020479 s
+    @ 273.361720 s 
+  Turret Lagging Count: 72
+  Outliers (2 std dev): 0.996394 s
+    @ 248.398744 s 
+  Outliers (2 std dev): 1.088255 s
+    @ 276.191522 s 
+  Outliers (2 std dev): 1.090016 s
+    @ 278.359424 s 
+
+Analyzing: /RealOutputs/Vision/BL/sending frames (False) -> /RealOutputs/Vision/BL/sending frames (True)
+  Total values captured in this file: 1
+  Average Camera Loss Time: 0.593693 s
+  Max Camera Loss Time: 0.593693 s
+    @ 237.075193 s 
+  Min Camera Loss Time: 0.593693 s
+    @ 237.075193 s 
+  Camera Loss Count: 1
+  Outliers (2 std dev): Cannot calculate with less than 2 values
+
+Analyzing: /RealOutputs/Vision/BR/sending frames (False) -> /RealOutputs/Vision/BR/sending frames (True)
+  Total values captured in this file: 1
+  Average Camera Loss Time: 0.790119 s
+  Max Camera Loss Time: 0.790119 s
+    @ 308.094851 s 
+  Min Camera Loss Time: 0.790119 s
+    @ 308.094851 s 
+  Camera Loss Count: 1
+  Outliers (2 std dev): Cannot calculate with less than 2 values
+
+=== VALUE ANALYSIS RESULTS FOR akit_26-05-01_22-45-20_johnson_q121.wpilog ===
+
+Analyzing: /RealOutputs//ShooterModes/DistanceToHub when /RealOutputs/ShooterModes/CurrentMode = SHOOT_OTM
+  Total values captured in this file: 11
+  Average SotM Distance to Hub: 3.891275 m
+  Max SotM Distance to Hub: 4.764905 m
+    @ 307.059650 s 
+  Min SotM Distance to Hub: 3.488508 m
+    @ 349.398838 s 
+  Average SotM Distance to Hub (abs): 3.891275 m
+  Max SotM Distance to Hub (abs): 4.764905 m
+    @ 307.059650 s 
+  Min SotM Distance to Hub (abs): 3.488508 m
+    @ 349.398838 s 
+  Outliers (2 std dev; abs): 4.764905 m
+    @ 307.059650 s 
+
+=== AGGREGATED TIME ANALYSIS RESULTS ACROSS ALL FILES ===
+
+Aggregated Analysis: /RealOutputs/Auto/FallenBehindPath/FallenBehind (True) -> /RealOutputs/Auto/FallenBehindPath/FallenBehind (False)
+  Files processed: 10
+  Average matched values per file: 0.00
+  Minimum matched values in any file: 0 in akit_26-04-29_19-26-56.wpilog
+  Maximum matched values in any file: 0 in akit_26-04-29_19-26-56.wpilog
+No values found for this analysis
+
+Aggregated Analysis: /RealOutputs/ShooterModes/HubActive (True) -> /Hopper/SpindexerReferenceVelocityRPS (12)
+  Files processed: 10
+  Average matched values per file: 1.70
+  Minimum matched values in any file: 0 in akit_26-04-29_19-26-56.wpilog
+  Maximum matched values in any file: 2 in akit_26-04-30_14-46-03_johnson_q12.wpilog
+  Total values captured across all files: 17
+  Average Start of Period Delay Time: 6.088800 s
+  Max Start of Period Delay Time: 17.204142 s
+    @ 334.788342 s in akit_26-05-01_13-38-09_johnson_q67.wpilog
+  Min Start of Period Delay Time: 0.029495 s
+    @ 400.047059 s in akit_26-05-01_15-45-36_johnson_q80.wpilog
+  Start of Period Delay Count: 17
+  Outliers (2 std dev): 17.204142 s
+    @ 334.788342 s in akit_26-05-01_13-38-09_johnson_q67.wpilog
+
+Aggregated Analysis: /RealOutputs/Intake/RollerStalled (True) -> /RealOutputs/Intake/RollerStalled (False)
+  Files processed: 10
+  Average matched values per file: 0.00
+  Minimum matched values in any file: 0 in akit_26-04-29_19-26-56.wpilog
+  Maximum matched values in any file: 0 in akit_26-04-29_19-26-56.wpilog
+No values found for this analysis
+
+Aggregated Analysis: /RealOutputs/ShooterModes/turret not near setpoint (True) -> /RealOutputs/ShooterModes/turret not near setpoint (False)
+  Files processed: 10
+  Average matched values per file: 51.00
+  Minimum matched values in any file: 0 in akit_26-04-29_19-26-56.wpilog
+  Maximum matched values in any file: 75 in akit_26-05-01_17-57-36_johnson_q89.wpilog
+  Total values captured across all files: 510
+  Average Turret Lagging Time: 0.326287 s
+  Max Turret Lagging Time: 3.712783 s
+    @ 329.300128 s in akit_26-04-30_14-46-03_johnson_q12.wpilog
+  Min Turret Lagging Time: 0.020090 s
+    @ 240.336628 s in akit_26-04-30_16-20-07_johnson_q22.wpilog
+  Turret Lagging Count: 510
+  Outliers (2 std dev): 1.353019 s
+    @ 199.057146 s in akit_26-04-30_14-46-03_johnson_q12.wpilog
+  Outliers (2 std dev): 3.712783 s
+    @ 329.300128 s in akit_26-04-30_14-46-03_johnson_q12.wpilog
+  Outliers (2 std dev): 3.163368 s
+    @ 205.366892 s in akit_26-04-30_16-20-07_johnson_q22.wpilog
+  Outliers (2 std dev): 1.393587 s
+    @ 245.403969 s in akit_26-04-30_16-20-07_johnson_q22.wpilog
+  Outliers (2 std dev): 2.243140 s
+    @ 264.337787 s in akit_26-04-30_16-20-07_johnson_q22.wpilog
+  Outliers (2 std dev): 1.993569 s
+    @ 232.765881 s in akit_26-04-30_20-48-03_johnson_q46.wpilog
+  Outliers (2 std dev): 1.253591 s
+    @ 235.878682 s in akit_26-04-30_20-48-03_johnson_q46.wpilog
+  Outliers (2 std dev): 1.478992 s
+    @ 282.427107 s in akit_26-04-30_22-42-16_johnson_q59.wpilog
+  Outliers (2 std dev): 1.652434 s
+    @ 284.738865 s in akit_26-05-01_13-38-09_johnson_q67.wpilog
+  Outliers (2 std dev): 1.229197 s
+    @ 370.571032 s in akit_26-05-01_13-38-09_johnson_q67.wpilog
+  Outliers (2 std dev): 2.631540 s
+    @ 323.341399 s in akit_26-05-01_15-45-36_johnson_q80.wpilog
+  Outliers (2 std dev): 3.119553 s
+    @ 331.542039 s in akit_26-05-01_15-45-36_johnson_q80.wpilog
+  Outliers (2 std dev): 1.592647 s
+    @ 361.220073 s in akit_26-05-01_15-45-36_johnson_q80.wpilog
+  Outliers (2 std dev): 1.221888 s
+    @ 440.286888 s in akit_26-05-01_15-45-36_johnson_q80.wpilog
+  Outliers (2 std dev): 1.256281 s
+    @ 352.683953 s in akit_26-05-01_17-57-36_johnson_q89.wpilog
+  Outliers (2 std dev): 1.242758 s
+    @ 366.070041 s in akit_26-05-01_17-57-36_johnson_q89.wpilog
+  Outliers (2 std dev): 1.524791 s
+    @ 406.534956 s in akit_26-05-01_17-57-36_johnson_q89.wpilog
+
+Aggregated Analysis: /RealOutputs/Vision/BCH/sending frames (False) -> /RealOutputs/Vision/BCH/sending frames (True)
+  Files processed: 10
+  Average matched values per file: 2.70
+  Minimum matched values in any file: 0 in akit_26-04-29_19-26-56.wpilog
+  Maximum matched values in any file: 18 in akit_26-05-01_15-45-36_johnson_q80.wpilog
+  Total values captured across all files: 27
+  Average Camera Loss Time: 0.759157 s
+  Max Camera Loss Time: 0.874910 s
+    @ 413.078249 s in akit_26-05-01_15-45-36_johnson_q80.wpilog
+  Min Camera Loss Time: 0.587943 s
+    @ 432.623363 s in akit_26-05-01_15-45-36_johnson_q80.wpilog
+  Camera Loss Count: 27
+  Outliers (2 std dev): 0.587943 s
+    @ 432.623363 s in akit_26-05-01_15-45-36_johnson_q80.wpilog
+
+Aggregated Analysis: /RealOutputs/Vision/BCL/sending frames (False) -> /RealOutputs/Vision/BCL/sending frames (True)
+  Files processed: 10
+  Average matched values per file: 0.60
+  Minimum matched values in any file: 0 in akit_26-04-29_19-26-56.wpilog
+  Maximum matched values in any file: 2 in akit_26-04-30_20-48-03_johnson_q46.wpilog
+  Total values captured across all files: 6
+  Average Camera Loss Time: 0.760674 s
+  Max Camera Loss Time: 0.858049 s
+    @ 374.450802 s in akit_26-05-01_13-38-09_johnson_q67.wpilog
+  Min Camera Loss Time: 0.670620 s
+    @ 214.343505 s in akit_26-04-30_20-48-03_johnson_q46.wpilog
+  Camera Loss Count: 6
+
+Aggregated Analysis: /RealOutputs/Vision/BL/sending frames (False) -> /RealOutputs/Vision/BL/sending frames (True)
+  Files processed: 10
+  Average matched values per file: 3.30
+  Minimum matched values in any file: 0 in akit_26-04-29_19-26-56.wpilog
+  Maximum matched values in any file: 18 in akit_26-05-01_15-45-36_johnson_q80.wpilog
+  Total values captured across all files: 33
+  Average Camera Loss Time: 0.758033 s
+  Max Camera Loss Time: 0.883128 s
+    @ 452.264326 s in akit_26-05-01_15-45-36_johnson_q80.wpilog
+  Min Camera Loss Time: 0.580467 s
+    @ 202.724314 s in akit_26-04-30_16-20-07_johnson_q22.wpilog
+  Camera Loss Count: 33
+  Outliers (2 std dev): 0.580467 s
+    @ 202.724314 s in akit_26-04-30_16-20-07_johnson_q22.wpilog
+
+Aggregated Analysis: /RealOutputs/Vision/BR/sending frames (False) -> /RealOutputs/Vision/BR/sending frames (True)
+  Files processed: 10
+  Average matched values per file: 3.10
+  Minimum matched values in any file: 0 in akit_26-04-29_19-26-56.wpilog
+  Maximum matched values in any file: 19 in akit_26-05-01_15-45-36_johnson_q80.wpilog
+  Total values captured across all files: 31
+  Average Camera Loss Time: 1.363211 s
+  Max Camera Loss Time: 10.161875 s
+    @ 372.159914 s in akit_26-05-01_13-38-09_johnson_q67.wpilog
+  Min Camera Loss Time: 0.623039 s
+    @ 422.700616 s in akit_26-05-01_15-45-36_johnson_q80.wpilog
+  Camera Loss Count: 31
+  Outliers (2 std dev): 9.833337 s
+    @ 206.735111 s in akit_26-04-30_20-48-03_johnson_q46.wpilog
+  Outliers (2 std dev): 10.161875 s
+    @ 372.159914 s in akit_26-05-01_13-38-09_johnson_q67.wpilog
+
+=== AGGREGATED VALUE ANALYSIS RESULTS ACROSS ALL FILES ===
+
+Aggregated Value Analysis: /RealOutputs//ShooterModes/DistanceToHub when /RealOutputs/ShooterModes/CurrentMode = SHOOT_OTM
+  Files processed: 10
+  Total values captured across all files: 101
+  Average SotM Distance to Hub: 3.750280 m
+  Max SotM Distance to Hub: 5.068144 m
+    @ 448.282457 s in akit_26-05-01_15-45-36_johnson_q80.wpilog
+  Min SotM Distance to Hub: 2.099234 m
+    @ 202.859859 s in akit_26-04-30_16-20-07_johnson_q22.wpilog
+  Average SotM Distance to Hub (abs): 3.750280 m
+  Max SotM Distance to Hub (abs): 5.068144 m
+    @ 448.282457 s in akit_26-05-01_15-45-36_johnson_q80.wpilog
+  Min SotM Distance to Hub (abs): 2.099234 m
+    @ 202.859859 s in akit_26-04-30_16-20-07_johnson_q22.wpilog
+  Outliers (2 std dev; abs): 2.532039 m
+    @ 200.017944 s in akit_26-04-30_14-46-03_johnson_q12.wpilog
+  Outliers (2 std dev; abs): 2.099234 m
+    @ 202.859859 s in akit_26-04-30_16-20-07_johnson_q22.wpilog
+  Outliers (2 std dev; abs): 2.295324 m
+    @ 213.954002 s in akit_26-04-30_16-20-07_johnson_q22.wpilog
+  Outliers (2 std dev; abs): 2.487026 m
+    @ 309.231991 s in akit_26-05-01_15-45-36_johnson_q80.wpilog
+  Outliers (2 std dev; abs): 2.180387 m
+    @ 324.166373 s in akit_26-05-01_15-45-36_johnson_q80.wpilog
+  Outliers (2 std dev; abs): 5.066677 m
+    @ 447.800788 s in akit_26-05-01_15-45-36_johnson_q80.wpilog
+  Outliers (2 std dev; abs): 5.068144 m
+    @ 448.282457 s in akit_26-05-01_15-45-36_johnson_q80.wpilog
+  Outliers (2 std dev; abs): 2.457803 m
+    @ 282.661877 s in akit_26-05-01_17-57-36_johnson_q89.wpilog
+  Outliers (2 std dev; abs): 2.293073 m
+    @ 293.669169 s in akit_26-05-01_17-57-36_johnson_q89.wpilog

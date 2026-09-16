@@ -1,0 +1,45 @@
+
+=== FILTERING CRITERIA ===
+Filter for enabled: True
+Filter for FMS attached: True
+Filter for robot mode: teleop
+
+=== ANALYSIS ===
+Found 2 log files to process:
+  akit_25-04-17_14-51-30_curie_q40.wpilog
+  akit_25-04-19_09-36-19_curie_e6.wpilog
+
+Processing: akit_25-04-17_14-51-30_curie_q40.wpilog
+
+=== VALUE ANALYSIS RESULTS FOR akit_25-04-17_14-51-30_curie_q40.wpilog ===
+
+Analyzing: /RealOutputs/DriveToReef/difference (reef frame)/translation/y when /Manipulator/IsIndexerIRBlocked = False
+  Total values captured in this file: 13
+  Captured Value Count: 13
+  Average Y Diff at Reef: -0.003209 m
+  Max Y Diff at Reef (abs): 0.012699 m
+    @ 289.276043 s 
+
+Processing: akit_25-04-19_09-36-19_curie_e6.wpilog
+
+=== VALUE ANALYSIS RESULTS FOR akit_25-04-19_09-36-19_curie_e6.wpilog ===
+
+Analyzing: /RealOutputs/DriveToReef/difference (reef frame)/translation/y when /Manipulator/IsIndexerIRBlocked = False
+  Total values captured in this file: 14
+  Captured Value Count: 14
+  Average Y Diff at Reef: -0.000523 m
+  Max Y Diff at Reef (abs): 0.012569 m
+    @ 210.868924 s 
+
+=== AGGREGATED VALUE ANALYSIS RESULTS ACROSS ALL FILES ===
+
+Aggregated Value Analysis: /RealOutputs/DriveToReef/difference (reef frame)/translation/y when /Manipulator/IsIndexerIRBlocked = False
+  Files processed: 2
+  Average matched values per file: 13.50
+  Minimum matched values in any file: 13 in akit_25-04-17_14-51-30_curie_q40.wpilog
+  Maximum matched values in any file: 14 in akit_25-04-19_09-36-19_curie_e6.wpilog
+  Total values captured across all files: 27
+  Captured Value Count: 27
+  Average Y Diff at Reef: -0.001816 m
+  Max Y Diff at Reef (abs): 0.012699 m
+    @ 289.276043 s in akit_25-04-17_14-51-30_curie_q40.wpilog

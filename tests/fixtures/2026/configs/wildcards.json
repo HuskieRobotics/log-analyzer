@@ -1,0 +1,18 @@
+{
+    "enabled": true,
+    "fmsAttached": true,
+    "robotMode": "both",
+    "timeAnalysis": [{
+        "startEntry": "/RealOutputs/Vision/*/sending frames",
+        "startValue": false,
+        "endEntry": "/RealOutputs/Vision/*/sending frames",
+        "endValue": true,
+        "calculations": [
+            {"type": "average", "name": "Average Camera Loss Time"},
+            {"type": "max", "name": "Max Camera Loss Time"},
+            {"type": "min", "name": "Min Camera Loss Time"},
+            {"type": "count", "name": "Camera Loss Count"},
+            {"type": "outlier_2std", "name": "Outliers (2 std dev)"}
+        ]
+    }]
+}

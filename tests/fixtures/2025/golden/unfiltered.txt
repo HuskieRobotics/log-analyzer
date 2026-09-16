@@ -1,0 +1,47 @@
+
+=== FILTERING CRITERIA ===
+Filter for enabled: False
+Filter for FMS attached: False
+Filter for robot mode: both
+
+=== ANALYSIS ===
+Found 2 log files to process:
+  akit_25-04-17_14-51-30_curie_q40.wpilog
+  akit_25-04-19_09-36-19_curie_e6.wpilog
+
+Processing: akit_25-04-17_14-51-30_curie_q40.wpilog
+
+=== TIME ANALYSIS RESULTS FOR akit_25-04-17_14-51-30_curie_q40.wpilog ===
+
+Analyzing: /RealOutputs/Manipulator/State (SHOOT_CORAL) -> /Manipulator/IsIndexerIRBlocked (False)
+  Total values captured in this file: 17
+  Shot Count: 17
+  Average Shooting Time: 0.120004 s
+  Outliers (2 std dev): 0.099984 s
+    @ 228.459033 s 
+  Outliers (2 std dev): 0.140034 s
+    @ 236.828737 s 
+
+Processing: akit_25-04-19_09-36-19_curie_e6.wpilog
+
+=== TIME ANALYSIS RESULTS FOR akit_25-04-19_09-36-19_curie_e6.wpilog ===
+
+Analyzing: /RealOutputs/Manipulator/State (SHOOT_CORAL) -> /Manipulator/IsIndexerIRBlocked (False)
+  Total values captured in this file: 18
+  Shot Count: 18
+  Average Shooting Time: 0.111598 s
+
+=== AGGREGATED TIME ANALYSIS RESULTS ACROSS ALL FILES ===
+
+Aggregated Analysis: /RealOutputs/Manipulator/State (SHOOT_CORAL) -> /Manipulator/IsIndexerIRBlocked (False)
+  Files processed: 2
+  Average matched values per file: 17.50
+  Minimum matched values in any file: 17 in akit_25-04-17_14-51-30_curie_q40.wpilog
+  Maximum matched values in any file: 18 in akit_25-04-19_09-36-19_curie_e6.wpilog
+  Total values captured across all files: 35
+  Shot Count: 35
+  Average Shooting Time: 0.115681 s
+  Outliers (2 std dev): 0.140034 s
+    @ 236.828737 s in akit_25-04-17_14-51-30_curie_q40.wpilog
+  Outliers (2 std dev): 0.140015 s
+    @ 293.243832 s in akit_25-04-17_14-51-30_curie_q40.wpilog

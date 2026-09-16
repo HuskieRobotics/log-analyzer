@@ -1,0 +1,16 @@
+{
+    "enabled": false,
+    "fmsAttached": false,
+    "robotMode": "both",
+    "timeAnalysis": [{
+        "startEntry": "/RealOutputs/Manipulator/State",
+        "startValue": "SHOOT_CORAL",
+        "endEntry": "/Manipulator/IsIndexerIRBlocked",
+        "endValue": false,
+        "calculations": [
+            {"type": "count", "name": "Shot Count"},
+            {"type": "average", "name": "Average Shooting Time"},
+            {"type": "outlier_2std", "name": "Outliers (2 std dev)"}
+        ]
+    }]
+}

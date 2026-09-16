@@ -1,0 +1,281 @@
+{
+    "enabled": false,
+    "fmsAttached": false,
+    "robotMode": "both",
+    "checks": [
+        {
+            "name": "Robot never enabled",
+            "entry": "/DriverStation/Enabled",
+            "expect": {
+                "atLeastOnce": true
+            },
+            "severity": "error"
+        },
+        {
+            "name": "Alert reported as error",
+            "entry": "/RealOutputs/Alerts/errors",
+            "expect": "empty",
+            "severity": "error",
+            "while": "afterFirstEnable"
+        },
+        {
+            "name": "Alert reported as warning",
+            "entry": "/RealOutputs/Alerts/warnings",
+            "expect": "empty",
+            "severity": "warning",
+            "while": "afterFirstEnable"
+        },
+        {
+            "name": "Camera frames",
+            "entry": "/RealOutputs/Vision/*/sending frames",
+            "expectEntries": [
+                "BCH",
+                "BCL",
+                "BL",
+                "BR"
+            ],
+            "expect": {
+                "always": true
+            },
+            "while": "enabled",
+            "severity": "error"
+        },
+        {
+            "name": "Device disconnected while enabled",
+            "entry": "/**/*Connected*",
+            "expect": {
+                "always": true
+            },
+            "while": "enabled",
+            "severity": "error",
+            "excludeEntry": [
+                "/SystemStats/NTClients/**"
+            ]
+        },
+        {
+            "name": "CANivore not OK",
+            "entry": "/RealOutputs/CANivoreStatus/Status",
+            "expect": {
+                "always": "OK"
+            },
+            "severity": "error",
+            "while": "afterFirstEnable"
+        },
+        {
+            "name": "Intake roller stalled",
+            "entry": "/RealOutputs/Intake/RollerStalled",
+            "expect": {
+                "always": false
+            },
+            "severity": "warning",
+            "while": "afterFirstEnable"
+        },
+        {
+            "name": "Drive motor over temperature",
+            "entry": "/Drivetrain/*/DriveTemp",
+            "expect": {
+                "above": 70
+            },
+            "clearBelow": 65,
+            "minDuration": 5.0,
+            "unit": "C",
+            "while": "afterFirstEnable",
+            "severity": "warning"
+        },
+        {
+            "name": "Drive motor hotter than its peers",
+            "entry": "/Drivetrain/*/DriveTemp",
+            "compare": "siblings",
+            "statistic": "peak",
+            "deviation": {
+                "aboveSiblingsBy": 5
+            },
+            "unit": "C",
+            "while": "afterFirstEnable",
+            "severity": "warning"
+        },
+        {
+            "name": "Steer motor hotter than its peers",
+            "entry": "/Drivetrain/*/SteerTemp",
+            "compare": "siblings",
+            "statistic": "peak",
+            "deviation": {
+                "aboveSiblingsBy": 5
+            },
+            "unit": "C",
+            "while": "afterFirstEnable",
+            "severity": "warning"
+        },
+        {
+            "name": "Flywheel motor hotter than its peers",
+            "entry": "/Shooter/Flywheel*Temperature",
+            "compare": "siblings",
+            "statistic": "peak",
+            "deviation": {
+                "aboveSiblingsBy": 5
+            },
+            "unit": "C",
+            "while": "afterFirstEnable",
+            "severity": "warning"
+        },
+        {
+            "name": "Intake roller lead and follower disagree",
+            "entry": "/Intake/RollerTempCelsius*",
+            "compare": "siblings",
+            "statistic": "peak",
+            "deviation": {
+                "aboveSiblingsBy": 5
+            },
+            "minimumSiblings": 2,
+            "unit": "C",
+            "while": "afterFirstEnable",
+            "severity": "warning"
+        },
+        {
+            "name": "Spindexer hotter than usual (Kraken X60)",
+            "entry": "/Hopper/SpindexerTemperatureCelsius",
+            "expect": {
+                "above": 50
+            },
+            "clearBelow": 45,
+            "minDuration": 5.0,
+            "unit": "C",
+            "while": "afterFirstEnable",
+            "severity": "warning"
+        },
+        {
+            "name": "Spindexer temperature critical (Kraken X60)",
+            "entry": "/Hopper/SpindexerTemperatureCelsius",
+            "expect": {
+                "above": 70
+            },
+            "clearBelow": 60,
+            "unit": "C",
+            "while": "afterFirstEnable",
+            "severity": "error"
+        },
+        {
+            "name": "Kicker hotter than usual (Kraken X44)",
+            "entry": "/Hopper/KickerTemperatureCelsius",
+            "expect": {
+                "above": 55
+            },
+            "clearBelow": 50,
+            "minDuration": 5.0,
+            "unit": "C",
+            "while": "afterFirstEnable",
+            "severity": "warning"
+        },
+        {
+            "name": "Kicker temperature critical (Kraken X44)",
+            "entry": "/Hopper/KickerTemperatureCelsius",
+            "expect": {
+                "above": 70
+            },
+            "clearBelow": 60,
+            "unit": "C",
+            "while": "afterFirstEnable",
+            "severity": "error"
+        },
+        {
+            "name": "Turret hotter than usual (Kraken X44)",
+            "entry": "/Shooter/TurretTemperature",
+            "expect": {
+                "above": 40
+            },
+            "clearBelow": 35,
+            "minDuration": 5.0,
+            "unit": "C",
+            "while": "afterFirstEnable",
+            "severity": "warning"
+        },
+        {
+            "name": "Turret temperature critical (Kraken X44)",
+            "entry": "/Shooter/TurretTemperature",
+            "expect": {
+                "above": 70
+            },
+            "clearBelow": 60,
+            "unit": "C",
+            "while": "afterFirstEnable",
+            "severity": "error"
+        },
+        {
+            "name": "Hood hotter than usual (Kraken X44)",
+            "entry": "/Shooter/HoodTemperature",
+            "expect": {
+                "above": 35
+            },
+            "clearBelow": 30,
+            "minDuration": 5.0,
+            "unit": "C",
+            "while": "afterFirstEnable",
+            "severity": "warning"
+        },
+        {
+            "name": "Hood temperature critical (Kraken X44)",
+            "entry": "/Shooter/HoodTemperature",
+            "expect": {
+                "above": 70
+            },
+            "clearBelow": 60,
+            "unit": "C",
+            "while": "afterFirstEnable",
+            "severity": "error"
+        },
+        {
+            "name": "Deployer hotter than usual (Kraken X44)",
+            "entry": "/Intake/DeployerTempCelsius",
+            "expect": {
+                "above": 40
+            },
+            "clearBelow": 35,
+            "minDuration": 5.0,
+            "unit": "C",
+            "while": "afterFirstEnable",
+            "severity": "warning"
+        },
+        {
+            "name": "Deployer temperature critical (Kraken X44)",
+            "entry": "/Intake/DeployerTempCelsius",
+            "expect": {
+                "above": 70
+            },
+            "clearBelow": 60,
+            "unit": "C",
+            "while": "afterFirstEnable",
+            "severity": "error"
+        },
+        {
+            "name": "No accepted vision pose for too long",
+            "entry": "/RealOutputs/Vision/RobotPosesAccepted/length",
+            "expect": {
+                "below": 1
+            },
+            "minDuration": 10.0,
+            "unit": "poses",
+            "while": "afterFirstEnable",
+            "severity": "warning"
+        },
+        {
+            "name": "Camera saw no AprilTag during the match",
+            "entry": "/RealOutputs/Vision/*/UpdatePoseCount",
+            "expect": {
+                "minIncrease": 1
+            },
+            "while": "afterFirstEnable",
+            "severity": "error"
+        },
+        {
+            "name": "Camera thermal pressure not nominal",
+            "entry": "/Vision/*/ThermalPressure",
+            "expect": {
+                "alwaysOneOf": [
+                    "Nominal",
+                    ""
+                ]
+            },
+            "severity": "warning"
+        }
+    ]
+}
