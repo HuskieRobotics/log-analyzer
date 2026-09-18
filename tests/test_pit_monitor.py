@@ -9,6 +9,7 @@ import io
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from contextlib import redirect_stdout
 from pathlib import Path
 
@@ -20,6 +21,7 @@ from pit_monitor import (  # noqa: E402
     describe,
     find_target,
     list_logs,
+    run_analysis,
 )
 
 REAL_LOGS = Path(__file__).resolve().parent.parent / "test" / "2026"
@@ -108,11 +110,73 @@ class TargetSelectionTest(MonitorBase):
         """Proving a pit log is not a match needs a full read; do it once."""
         (self.folder / PIT_LOG).write_bytes((REAL_LOGS / PIT_LOG).read_bytes())
         cache = {}
-        find_target(self.folder, 0, cache)
-        self.assertEqual(list(cache.values()), [False])
-        before = dict(cache)
-        find_target(self.folder, 0, cache)
-        self.assertEqual(cache, before)
+        reads = []
+        find_target(self.folder, 0, cache, announce=reads.append)
+        size = (self.folder / PIT_LOG).stat().st_size
+        self.assertEqual(cache, {PIT_LOG: (size, False)})
+        self.assertEqual(len(reads), 1)
+        find_target(self.folder, 0, cache, announce=reads.append)
+        self.assertEqual(len(reads), 1, "a cached verdict must not re-read")
+
+    def test_a_reused_name_with_a_new_size_is_reclassified(self):
+        """The size is what makes a remembered verdict safe to trust."""
+        (self.folder / PIT_LOG).write_bytes((REAL_LOGS / PIT_LOG).read_bytes())
+        cache = {PIT_LOG: (17, True)}  # stale: wrong size
+        target, _ = find_target(self.folder, 0, cache)
+        self.assertIsNone(target)
+        self.assertFalse(cache[PIT_LOG][1])
+
+    def test_the_cache_survives_a_restart(self):
+        """The whole point: a laptop restarted between matches re-reads nothing."""
+        (self.folder / PIT_LOG).write_bytes((REAL_LOGS / PIT_LOG).read_bytes())
+        first = self.monitor()
+        first.cycle()
+        reads = []
+        second = self.monitor(announce=reads.append)
+        self.assertEqual(second.match_cache, first.match_cache)
+        second.cycle()
+        self.assertEqual([m for m in reads if "to see whether" in m], [])
+
+    def test_messages_are_shown_as_they_happen(self):
+        """A cold cycle runs for minutes; holding its output looks like a hang."""
+        seen = []
+        monitor = self.monitor(announce=seen.append)
+        result = monitor.cycle()
+        self.assertEqual(seen, result.messages)
+        self.assertIn("no finished match log yet", seen)
+
+
+class AnalysisReportingTest(unittest.TestCase):
+    """What the monitor echoes from the analysis subprocess."""
+
+    def run_with(self, stdout, stderr, code=0):
+        script = (f"import sys\n"
+                  f"sys.stdout.write({stdout!r})\n"
+                  f"sys.stderr.write({stderr!r})\n"
+                  f"sys.exit({code})\n")
+        with tempfile.TemporaryDirectory() as folder:
+            fake = Path(folder) / "fake_analysis.py"
+            fake.write_text(script)
+            with unittest.mock.patch("pit_monitor.ANALYSIS", fake):
+                return run_analysis(Path(folder), Path("c.json"),
+                                    Path(folder) / "r.html", [])
+
+    def test_success_reports_the_conclusion_not_the_last_warning(self):
+        """Progress goes to stderr, so the streams must not just be concatenated."""
+        ok, message = self.run_with("Wrote HTML report to r.html\n",
+                                    "Scanning big.wpilog...\n")
+        self.assertTrue(ok)
+        self.assertEqual(message, "Wrote HTML report to r.html")
+
+    def test_failure_reports_the_error(self):
+        ok, message = self.run_with("some progress\n", "Error: bad config\n", code=1)
+        self.assertFalse(ok)
+        self.assertEqual(message, "Error: bad config")
+
+    def test_a_silent_stream_falls_back_to_the_other(self):
+        ok, message = self.run_with("", "only stderr said anything\n")
+        self.assertTrue(ok)
+        self.assertEqual(message, "only stderr said anything")
 
 
 class CycleTest(MonitorBase):

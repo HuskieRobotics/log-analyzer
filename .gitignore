@@ -213,3 +213,6 @@ __marimo__/
 # Generated analysis reports
 report.html
 report.json
+
+# Sidecar cache of which logs are matches (derived; see analysis.load_match_cache)
+.match-cache.json

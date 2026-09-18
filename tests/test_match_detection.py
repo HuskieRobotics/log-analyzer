@@ -17,7 +17,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from analysis import log_contains_match, partition_match_logs  # noqa: E402
+from analysis import (  # noqa: E402
+    MATCH_CACHE_NAME,
+    classify_match_log,
+    load_match_cache,
+    log_contains_match,
+    partition_match_logs,
+    save_match_cache,
+)
 from datalog import DataLogReader  # noqa: E402
 
 LOG_DIR = Path(__file__).resolve().parent.parent / "test" / "2026"
@@ -140,6 +147,59 @@ class LogContainsMatchTest(unittest.TestCase):
 
     def test_partition_of_nothing(self):
         self.assertEqual(partition_match_logs([]), ([], []))
+
+
+class MatchCacheTest(unittest.TestCase):
+    """The verdict for a file never changes, so it is worth keeping.
+
+    Proving a pit log is *not* a match costs a full read - measured at 3.5 s for
+    56 MB, and a driver station laptop can hold a gigabyte of them. Without a
+    cache on disk that price is paid again on every process start.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.folder = self._tmp.name
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_a_round_trip_returns_what_was_stored(self):
+        cache = {"a.wpilog": (10, True), "b.wpilog": (20, False)}
+        save_match_cache(self.folder, cache)
+        self.assertEqual(load_match_cache(self.folder), cache)
+
+    def test_an_absent_cache_is_empty_not_an_error(self):
+        self.assertEqual(load_match_cache(self.folder), {})
+        self.assertEqual(load_match_cache("/no/such/folder"), {})
+
+    def test_a_corrupt_cache_is_discarded_rather_than_raised(self):
+        Path(self.folder, MATCH_CACHE_NAME).write_text("{ this is not json")
+        self.assertEqual(load_match_cache(self.folder), {})
+
+    def test_one_bad_entry_does_not_lose_the_others(self):
+        Path(self.folder, MATCH_CACHE_NAME).write_text(
+            '{"version": 1, "logs": {"good.wpilog": {"size": 5, "match": true},'
+            ' "bad.wpilog": {"size": "huh"}}}')
+        self.assertEqual(load_match_cache(self.folder), {"good.wpilog": (5, True)})
+
+    def test_an_unwritable_folder_is_survived(self):
+        save_match_cache("/no/such/folder", {"a.wpilog": (1, True)})  # must not raise
+
+    def test_a_cached_verdict_is_returned_without_reading(self):
+        pit = str(LOG_DIR / PIT_LOG)
+        size = Path(pit).stat().st_size
+        cache = {PIT_LOG: (size, False)}
+        start = time.perf_counter()
+        self.assertFalse(classify_match_log(pit, cache))
+        self.assertLess(time.perf_counter() - start, 0.1,
+                        "a cache hit must not re-read the log")
+
+    def test_partition_fills_the_cache_it_is_given(self):
+        paths = [str(LOG_DIR / MATCH_LOG)]
+        cache = {}
+        partition_match_logs(paths, cache)
+        self.assertEqual(cache, {MATCH_LOG: (Path(paths[0]).stat().st_size, True)})
 
 
 if __name__ == "__main__":

@@ -11,11 +11,12 @@ re-runs the analyser only if that has changed. Paired with the report's meta
 refresh, a browser left open on the report tracks the newest match with nothing
 typed between matches.
 
-Deciding the target is deliberately cheap. Candidates are taken newest-first and
-the search stops at the first settled match log, so the usual cycle classifies
-exactly one file in about 10 ms. The expensive case - proving a pit session is
-not a match, which needs a full read - happens once per session and is then
-cached against the file's size.
+Candidates are taken newest-first and the search stops at the first settled match
+log, so once the cache is warm a cycle classifies one file in about 10 ms. Cold
+is a different story: proving a pit session is *not* a match needs a full read,
+and after a week of practice the newest ten logs can all be pit sessions. That
+first pass is therefore both cached to disk - so it is paid once ever rather than
+once per start - and narrated, because the alternative is a silent terminal.
 
 Nothing in a cycle is allowed to kill the loop. A robot that is absent, an
 unreachable host, a bad config or a failed analysis are all reported and the loop
@@ -31,7 +32,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 
-from analysis import log_contains_match, log_recorded_at
+from analysis import (MatchCache, classify_match_log, load_match_cache,
+                      log_recorded_at, save_match_cache)
 from sync_logs import UNREACHABLE_NOTICE
 
 HERE = Path(__file__).resolve().parent
@@ -94,14 +96,17 @@ def settled_sizes(paths: List[str], settle_seconds: float) -> Dict[str, bool]:
 
 
 def find_target(folder: Path, settle_seconds: float,
-                match_cache: Dict[Tuple[str, int], bool]) -> Tuple[Optional[str], List[str]]:
+                match_cache: MatchCache,
+                announce: Optional[Callable[[str], None]] = None
+                ) -> Tuple[Optional[str], List[str]]:
     """Return (newest settled match log, names of logs still being written).
 
     Args:
         folder: Directory holding the logs
         settle_seconds: Window over which a file must not change size
-        match_cache: Keyed on (path, size); a settled file's size is stable, so
-            an entry stays valid and the costly negative is paid once
+        match_cache: Name -> (size, verdict), read and written in place; a
+            settled file's size is stable, so the costly negative is paid once
+        announce: Called before each full read, which can run to tens of seconds
 
     Returns:
         The path to analyse, or None, plus the growing logs seen along the way
@@ -109,18 +114,17 @@ def find_target(folder: Path, settle_seconds: float,
     ordered = list_logs(folder)
     settled = settled_sizes(ordered, settle_seconds)
 
+    def note(path: str, size: int) -> None:
+        if announce is not None:
+            announce(f"reading {os.path.basename(path)} ({size / 1e6:.0f} MB) "
+                     f"to see whether it is a match; first time only")
+
     growing = []
     for path in ordered:
         if not settled[path]:
             growing.append(os.path.basename(path))
             continue
-        try:
-            key = (path, os.path.getsize(path))
-        except OSError:
-            continue
-        if key not in match_cache:
-            match_cache[key] = log_contains_match(path)
-        if match_cache[key]:
+        if classify_match_log(path, match_cache, note):
             return path, growing
     return None, growing
 
@@ -151,8 +155,22 @@ def run_analysis(folder: Path, config: Path, html: Path,
         done = subprocess.run(command, capture_output=True, text=True, timeout=1800)
     except (subprocess.TimeoutExpired, OSError) as error:
         return False, f"analysis failed: {error}"
-    output = (done.stdout + done.stderr).strip().splitlines()
-    return done.returncode == 0, output[-1] if output else ""
+
+    # Report what the run concluded, not whatever it happened to say last.
+    # Progress and warnings go to stderr, so concatenating the two streams and
+    # taking the final line surfaced "Scanning <file>..." in place of "Wrote
+    # HTML report" on any run that had to classify a log.
+    def last_line(*streams: str) -> str:
+        for stream in streams:
+            lines = stream.strip().splitlines()
+            if lines:
+                return lines[-1]
+        return ""
+
+    ok = done.returncode == 0
+    if ok:
+        return True, last_line(done.stdout, done.stderr)
+    return False, last_line(done.stderr, done.stdout)
 
 
 class Monitor:
@@ -164,7 +182,8 @@ class Monitor:
                  sync_extra: Optional[List[str]] = None,
                  analysis_extra: Optional[List[str]] = None,
                  syncer: Callable = run_sync,
-                 analyser: Callable = run_analysis):
+                 analyser: Callable = run_analysis,
+                 announce: Optional[Callable[[str], None]] = None):
         self.folder = folder
         self.config = config
         self.html = html
@@ -174,8 +193,21 @@ class Monitor:
         self.analysis_extra = analysis_extra or []
         self.syncer = syncer
         self.analyser = analyser
+        self.announce = announce
         self.last_analysed: Optional[str] = None
-        self.match_cache: Dict[Tuple[str, int], bool] = {}
+        # Seeded from disk so a restart, or a laptop that has already run once
+        # today, does not re-read every pit session it has ever synced.
+        self.match_cache: MatchCache = load_match_cache(str(folder))
+
+    def say(self, result: CycleResult, message: str) -> None:
+        """Record a message and, if anyone is listening, show it now.
+
+        A cycle can run for minutes on a cold cache, so holding its messages
+        until it returns is what makes the terminal look hung.
+        """
+        result.messages.append(message)
+        if self.announce is not None:
+            self.announce(message)
 
     def cycle(self) -> CycleResult:
         """Run one pass. Never raises; failures are reported and survived."""
@@ -189,20 +221,24 @@ class Monitor:
                 status, message = "failed", f"sync raised: {error}"
             result.sync_status = status
             if message:
-                result.messages.append(message)
+                self.say(result, message)
 
+        cached_before = dict(self.match_cache)
         try:
-            target, growing = find_target(self.folder, self.settle_seconds,
-                                          self.match_cache)
+            target, growing = find_target(
+                self.folder, self.settle_seconds, self.match_cache,
+                announce=None if self.announce is None else self.announce)
         except Exception as error:  # noqa: BLE001
-            result.messages.append(f"could not inspect {self.folder}: {error}")
+            self.say(result, f"could not inspect {self.folder}: {error}")
             return result
+        if self.match_cache != cached_before:
+            save_match_cache(str(self.folder), self.match_cache)
 
         result.target = target
         result.still_writing = growing
 
         if target is None:
-            result.messages.append("no finished match log yet")
+            self.say(result, "no finished match log yet")
             return result
 
         if target == self.last_analysed:
@@ -214,7 +250,7 @@ class Monitor:
         except Exception as error:  # noqa: BLE001
             ok, message = False, f"analysis raised: {error}"
         if message:
-            result.messages.append(message)
+            self.say(result, message)
         if ok:
             self.last_analysed = target
             result.analysed = True
@@ -273,9 +309,13 @@ def main() -> None:
     if args.sync_newest > 0:
         sync_extra = ["--newest", str(args.sync_newest)] + sync_extra
 
+    def announce(message: str) -> None:
+        print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
+
     monitor = Monitor(folder, Path(args.config_json_file), Path(args.html),
                       settle_seconds=args.settle_seconds,
-                      sync_host=args.sync_from, sync_extra=sync_extra)
+                      sync_host=args.sync_from, sync_extra=sync_extra,
+                      announce=announce)
 
     print(f"Watching {folder} -> {args.html}"
           + (f", syncing {' '.join(sync_extra)} from {args.sync_from}"
@@ -284,10 +324,9 @@ def main() -> None:
     try:
         while True:
             result = monitor.cycle()
-            stamp = time.strftime("%H:%M:%S")
-            print(f"[{stamp}] {describe(result)}", flush=True)
-            for message in result.messages:
-                print(f"          {message}", flush=True)
+            # The detail lines have already been printed by `announce` as they
+            # happened; this is only the summary.
+            print(f"[{time.strftime('%H:%M:%S')}] {describe(result)}", flush=True)
             if args.once:
                 break
             time.sleep(args.interval)
