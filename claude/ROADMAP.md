@@ -1495,9 +1495,35 @@ poses, so it is coincidence. No check was built on it.
 ### What shipped
 
 Four threshold rules in `checks2026.json` on the flattened struct leaves
-`/RealOutputs/Drivetrain/Pose/translation/{x,y}`, bounding the 2026 field
-(17.55 × 8.05 m) with 0.5 m of margin, `while: enabled`, severity `error`. Run
-against all ten logs they fire on q22 and nothing else.
+`/RealOutputs/Drivetrain/Pose/translation/{x,y}`, bounding the field with 0.5 m
+of margin, `while: enabled`, severity `error`. Run against all ten logs they
+fire on q22 and nothing else.
+
+### The field size is a per-season input, and it is not yet verified
+
+The field changes between seasons, and by more than the margin: 2024 to 2025
+moved the length by roughly a metre. A config copied forward without
+re-measuring **fails open** — the bound sits beyond the real edge, and an
+excursion between the two goes unreported. That is the quiet direction to fail
+in.
+
+The dimensions therefore live in one named place, `checks2026.json`'s `field`
+block, and the four thresholds are derived from it; a test asserts they stay
+derived, so a rollover cannot update them by halves.
+
+What the logs can and cannot settle:
+
+| | assumed | observed while enabled | verdict |
+|---|---|---|---|
+| width | 8.05 m | matches reach 8.11–8.12 m | **corroborated** — bumper-width rounding at the edge |
+| length | 17.55 m | nothing exceeds 17.08 m, typically ~16.5 m | **not determined** — the robot never drives that far |
+
+So the width is grounded in data and the length is not: the `+x` bound carries
+about a metre of unverified slack. The measured separation is wide enough that
+this does not affect a q22-class divergence — 17.9 m out, with `x` reaching
+24.4 m — but a marginal 0.6–1.5 m excursion in `+x` would currently be missed.
+`field.source` is marked `UNVERIFIED` until the number is confirmed against the
+game manual.
 
 Reported in log time, not match time: log timestamps are what AdvantageScope
 scrubs to.

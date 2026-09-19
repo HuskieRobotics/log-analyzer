@@ -2,6 +2,13 @@
     "enabled": false,
     "fmsAttached": false,
     "robotMode": "both",
+    "field": {
+        "length": 17.55,
+        "width": 8.05,
+        "margin": 0.5,
+        "season": 2026,
+        "source": "UNVERIFIED - confirm against the game manual"
+    },
     "checks": [
         {
             "name": "Robot never enabled",

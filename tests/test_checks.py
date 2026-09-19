@@ -388,13 +388,37 @@ class PoseOffFieldTest(unittest.TestCase):
     between them with about seventy times the margin it needs.
     """
 
-    FIELD_X, FIELD_Y = 17.55, 8.05
-
     @classmethod
     def setUpClass(cls):
         config = json.loads((REPO_ROOT / "checks2026.json").read_text())
+        cls.field = config["field"]
+        cls.FIELD_X = cls.field["length"]
+        cls.FIELD_Y = cls.field["width"]
         cls.rules = [rule for rule in config["checks"]
                      if rule["name"].startswith("Robot pose off the field")]
+
+    def test_the_bounds_are_derived_from_the_declared_field_size(self):
+        """The field changes between seasons - 2024 to 2025 moved the length by
+        about a metre, more than the margin. A config copied forward without
+        re-measuring fails open: the bound sits beyond the real edge and a real
+        excursion goes unreported. Pinning the four thresholds to the one
+        declared size means a rollover cannot update them by halves."""
+        margin = self.field["margin"]
+        expected = {
+            "Robot pose off the field (-x)": ("below", -margin),
+            "Robot pose off the field (+x)": ("above", self.FIELD_X + margin),
+            "Robot pose off the field (-y)": ("below", -margin),
+            "Robot pose off the field (+y)": ("above", self.FIELD_Y + margin),
+        }
+        self.assertEqual({rule["name"] for rule in self.rules}, set(expected))
+        for rule in self.rules:
+            key, value = expected[rule["name"]]
+            with self.subTest(rule=rule["name"]):
+                self.assertAlmostEqual(rule["expect"][key], value, places=6)
+
+    def test_the_margin_clears_the_worst_healthy_excursion(self):
+        """Measured: healthy 2026 matches leave the field by at most 0.25 m."""
+        self.assertGreater(self.field["margin"], 0.25 * 1.5)
 
     def setUp(self):
         self.assertEqual(len(self.rules), 4, "expected one rule per field edge")
