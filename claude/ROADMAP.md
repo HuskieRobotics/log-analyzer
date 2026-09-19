@@ -1449,6 +1449,71 @@ Fix these along the way — each will otherwise distort a feature above:
   recorded under the configured `robotMode` — would catch all three before a
   multi-minute run. Cheap once B1's manifest exists; useful enough to do sooner.
 
+## 13b. Pose Estimator Divergence (shipped)
+
+`akit_26-04-30_16-20-07_johnson_q22.wpilog` puts the estimated pose 21.9 m away
+in a single 50 ms cycle, at `/DriverStation/MatchTime` 66.00 s remaining:
+
+```
+296.4362  pose  x=  0.445 y=  4.006
+296.4866  pose  x= -0.591 y=-17.896   <- 436 m/s implied
+296.5307  pose  x= -0.591 y=  0.000
+296.5508  pose  x=  0.000 y=  0.000   <- estimator walks back through the origin
+```
+
+Seven off-field episodes in that match; three gross (17.9 m, 24.4 m, 14.6 m
+outside the field).
+
+### Which signal discriminates
+
+Measured across all nine 2026 match logs:
+
+| signal | q22 | other match logs | usable |
+|---|---|---|---|
+| **max distance outside the field** | **17.91 m** | 0.00 – 0.25 m | **yes, ~70x margin** |
+| any pose off-field at all | 346 samples | 0 – 121 samples | no — 6 of 9 logs |
+| max single-step jump speed | 436 m/s | 32 – 75 m/s | no — every log |
+| `ConstrainPoseToFieldCount` | 482 | 0 – 133 | weak, see below |
+
+Three of these are traps:
+
+- **Jump speed is not the signal.** Healthy logs reach 75 m/s from *legitimate*
+  pose resets — vision re-localization and the `reset pose to vision` command.
+  Those teleport but land on the field. A jump-speed check fires on every match.
+- **"Off the field" as a boolean is not the signal.** Six of nine matches leave
+  the field, but by at most 0.25 m: bumper-width rounding at the boundary.
+  Magnitude is the whole story.
+- **`ConstrainPoseToFieldCount` cannot tell 5 cm from 18 m.** It is the robot
+  code's own detector and tracks off-field cycles almost 1:1, but q89 logged 133
+  clamps with a worst excursion of 0.09 m. Usable as a `warning` at a high
+  threshold; over-reports as the primary signal.
+
+A hypothesis that died: 12 vision poses were accepted in the cycle immediately
+before the divergence, which looked causal. Every log peaks at 10–13 accepted
+poses, so it is coincidence. No check was built on it.
+
+### What shipped
+
+Four threshold rules in `checks2026.json` on the flattened struct leaves
+`/RealOutputs/Drivetrain/Pose/translation/{x,y}`, bounding the 2026 field
+(17.55 × 8.05 m) with 0.5 m of margin, `while: enabled`, severity `error`. Run
+against all ten logs they fire on q22 and nothing else.
+
+Reported in log time, not match time: log timestamps are what AdvantageScope
+scrubs to.
+
+### Follow-ons not taken
+
+- **One rule instead of four.** A `withinField` check kind reading the Pose2d
+  directly would yield one finding carrying distance-outside-the-rectangle, and
+  would correctly measure a diagonal excursion past a corner that four
+  independent axis bounds under-measure.
+- **One-off versus systematic.** q22 is the only log in the set with this
+  signature. One occurrence is "look at it when there is time"; three matches in
+  five is "do not queue". Each report sees one match, so the tool cannot tell
+  them apart — that is §11's B3, and this is a stronger motivating case for it
+  than the motor-temperature one it was written around.
+
 ## 14. What Must Not Regress
 
 The folder-wide aggregate analysis is the feature that replaced hours of

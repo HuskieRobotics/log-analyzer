@@ -276,6 +276,46 @@
                 ]
             },
             "severity": "warning"
+        },
+        {
+            "name": "Robot pose off the field (-x)",
+            "entry": "/RealOutputs/Drivetrain/Pose/translation/x",
+            "expect": {
+                "below": -0.5
+            },
+            "unit": "m",
+            "while": "enabled",
+            "severity": "error"
+        },
+        {
+            "name": "Robot pose off the field (+x)",
+            "entry": "/RealOutputs/Drivetrain/Pose/translation/x",
+            "expect": {
+                "above": 18.05
+            },
+            "unit": "m",
+            "while": "enabled",
+            "severity": "error"
+        },
+        {
+            "name": "Robot pose off the field (-y)",
+            "entry": "/RealOutputs/Drivetrain/Pose/translation/y",
+            "expect": {
+                "below": -0.5
+            },
+            "unit": "m",
+            "while": "enabled",
+            "severity": "error"
+        },
+        {
+            "name": "Robot pose off the field (+y)",
+            "entry": "/RealOutputs/Drivetrain/Pose/translation/y",
+            "expect": {
+                "above": 8.55
+            },
+            "unit": "m",
+            "while": "enabled",
+            "severity": "error"
         }
     ]
 }

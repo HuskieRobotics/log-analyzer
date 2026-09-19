@@ -133,6 +133,13 @@ h2 { font-size: 1rem; text-transform: uppercase; letter-spacing: .08em;
 .notice { margin: 0 1.5rem 1rem; padding: .7rem .9rem; border-radius: 8px;
           background: var(--panel); border-left: 5px solid var(--info);
           font-size: .9rem; }
+.alert { margin: 0 1.5rem 1rem; padding: .8rem 1rem; border-radius: 8px;
+         background: var(--panel); border-left: 6px solid var(--error); }
+.alert .k { color: var(--error); text-transform: uppercase;
+            letter-spacing: .08em; font-size: .75rem; font-weight: 700; }
+.alert .a { margin-top: .4rem; }
+.alert .a b { font-weight: 600; }
+.alert .a span { color: var(--muted); }
 .notice .k { color: var(--muted); text-transform: uppercase;
              letter-spacing: .08em; font-size: .72rem; }
 .notice .f { word-break: break-all; }
@@ -151,6 +158,56 @@ summary { cursor: pointer; font-weight: 600; }
 def _e(value: Any) -> str:
     """Escape a value for HTML. Alert text is arbitrary and must not be trusted."""
     return html.escape(str(value), quote=True)
+
+
+ALERT_RULE_LIMIT = 10
+
+
+def _alert_html(findings: List[Any]) -> str:
+    """A headline band naming what is wrong, above everything else on the page.
+
+    The per-check list is ordered but flat, so a pose estimator that teleported
+    off the field reads the same as a motor two degrees over its warning
+    threshold - and on a season's config it can be the eighteenth of twenty-nine
+    rows. Errors are the findings that should stop the next match, so they are
+    also stated at the top.
+
+    Findings are grouped by rule, because they are not evenly distributed: a
+    folder-wide run over the nine 2026 match logs raises 65 errors, 41 of them
+    one rule and 14 another. Listing those flat is not a headline, it is the
+    same list again without the timestamps. Grouped, the same run is nine lines.
+    A rule that fired once shows its detail; one that fired repeatedly shows how
+    often, since the details differ and no single one of them represents the
+    group. Exact entries and timestamps are left to the section below.
+    """
+    errors = [f for f in findings if f.severity == "error"]
+    if not errors:
+        return ""
+
+    grouped: Dict[str, List[Any]] = {}
+    for finding in errors:
+        grouped.setdefault(finding.rule_name, []).append(finding)
+    # Biggest clusters first; rule name breaks ties so the order is stable.
+    order = sorted(grouped.items(), key=lambda kv: (-len(kv[1]), kv[0]))
+
+    label = "1 error" if len(errors) == 1 else f"{len(errors)} errors"
+    if len(order) > 1:
+        label += f", {len(order)} rules"
+
+    lines = []
+    for rule_name, group in order[:ALERT_RULE_LIMIT]:
+        if len(group) == 1:
+            note = group[0].detail
+        else:
+            note = f"{len(group)} findings"
+        lines.append(f'<div class="a"><b>{_e(rule_name)}</b> '
+                     f'<span>&#183; {_e(note)}</span></div>')
+    hidden = len(order) - ALERT_RULE_LIMIT
+    if hidden > 0:
+        lines.append(f'<div class="a"><span>and {hidden} more rule'
+                     f'{"" if hidden == 1 else "s"} below</span></div>')
+    return (f'<div class="alert"><div class="k">{_e(label)}</div>'
+            f'{"".join(lines)}</div>')
 
 
 def _finding_html(finding: Any, is_aggregate: bool) -> str:
@@ -298,6 +355,10 @@ def render_html(report: Report, refresh_seconds: int = 30) -> str:
         + "</div>"
         for label, names in bands)
 
+    # Errors outrank the informational bands: a log still being written is worth
+    # knowing, but it is not what should stop the next match.
+    alert = _alert_html(report.aggregate_findings)
+
     per_file = []
     for entry in report.files:
         per_file.append(
@@ -319,6 +380,7 @@ def render_html(report: Report, refresh_seconds: int = 30) -> str:
     &#183; {_e(filters)} &#183; generated {_e(report.generated_at)}</div>
 </header>
 <div class="verdict">{"".join(tiles)}</div>
+{alert}
 {notice}
 <main>
   <section><h2>Concerns across all files</h2>

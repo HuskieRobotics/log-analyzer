@@ -243,6 +243,21 @@ locations.
 Non-numeric captured values are silently dropped from `numeric_values` before
 calculations, which means string-valued analyses print "No numeric values found".
 
+**The HTML report leads with an error band.** Below the verdict tiles and above
+the informational notices, `_alert_html` restates every `error`-severity
+aggregate finding. The per-check list is ordered by severity but flat, so on a
+season's config a pose estimator that teleported off the field reads the same as
+a motor two degrees over its warning threshold, eighteen rows down.
+
+Findings are grouped by rule because they are not evenly distributed: a
+folder-wide run over the nine 2026 match logs raises 65 errors, 41 of them from
+`Alert reported as error` and 14 from `Device disconnected while enabled`.
+Listed flat that is the same page again without the timestamps; grouped it is
+nine lines. A rule that fired once shows its detail, one that fired repeatedly
+shows only how often, since the details differ and no single one represents the
+group. Entries and timestamps stay in the section below. Warnings are
+deliberately excluded — a band that holds everything ranks nothing.
+
 ## 4. Config Model
 
 ```

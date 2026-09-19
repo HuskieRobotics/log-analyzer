@@ -5,11 +5,14 @@ No .wpilog fixtures: the Log objects are built directly, so these run in
 milliseconds and cover the cases the real logs happen not to contain.
 """
 
+import json
+import struct
 import sys
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
 
 from Log import Log  # noqa: E402
 from analysis import (  # noqa: E402
@@ -370,6 +373,91 @@ class ExpectEntriesTest(unittest.TestCase):
         findings = compute_checks(log, "a.wpilog", self.rule()).findings
         self.assertEqual(len(findings), 4)
         self.assertTrue(all(f.detail == "entry not present in this log" for f in findings))
+
+
+class PoseOffFieldTest(unittest.TestCase):
+    """The shipped bounds on the pose estimator, against measured magnitudes.
+
+    Rules are read from checks2026.json rather than restated, so the thresholds
+    this pins are the ones actually shipped.
+
+    The numbers come from the ten 2026 logs. Six of the nine matches put the
+    estimated pose outside the field at some point, but by at most 0.25 m -
+    bumper-width rounding at the boundary, which must not raise anything. q22's
+    estimator left the field by 17.91 m, which must. The 0.5 m threshold sits
+    between them with about seventy times the margin it needs.
+    """
+
+    FIELD_X, FIELD_Y = 17.55, 8.05
+
+    @classmethod
+    def setUpClass(cls):
+        config = json.loads((REPO_ROOT / "checks2026.json").read_text())
+        cls.rules = [rule for rule in config["checks"]
+                     if rule["name"].startswith("Robot pose off the field")]
+
+    def setUp(self):
+        self.assertEqual(len(self.rules), 4, "expected one rule per field edge")
+
+    def log_with_poses(self, poses):
+        """A Log holding Pose2d structs, flattened the way the real logs are.
+
+        The schemas are registered by hand so this needs no .wpilog: it also
+        pins that a Pose2d still flattens to translation/x and translation/y,
+        which is what the config's entry paths depend on.
+        """
+        log = log_with_enabled([(0.0, True)])
+        log.struct_decoder.add_schema("Translation2d", b"double x;double y")
+        log.struct_decoder.add_schema("Rotation2d", b"double value")
+        log.struct_decoder.add_schema(
+            "Pose2d", b"Translation2d translation;Rotation2d rotation")
+        for timestamp, x, y in poses:
+            log.put_struct("/RealOutputs/Drivetrain/Pose", timestamp,
+                           struct.pack("<ddd", x, y, 0.0), "Pose2d", False)
+        return log
+
+    def findings(self, poses):
+        log = self.log_with_poses(poses)
+        return compute_checks(log, "a.wpilog", self.rules).findings
+
+    def test_a_pose_on_the_field_raises_nothing(self):
+        self.assertEqual(self.findings([(1.0, 8.0, 4.0), (2.0, 1.2, 7.9)]), [])
+
+    def test_the_struct_still_flattens_to_the_entries_the_config_names(self):
+        """If this breaks, the rules stop matching and silently never fire."""
+        log = self.log_with_poses([(1.0, 1.0, 2.0)])
+        for axis in ("x", "y"):
+            self.assertIn(f"/RealOutputs/Drivetrain/Pose/translation/{axis}",
+                          log.fields)
+
+    def test_bumper_width_overshoot_at_the_boundary_is_not_a_finding(self):
+        """Six of nine 2026 matches do this; none of them is a real anomaly."""
+        self.assertEqual(self.findings([
+            (1.0, 8.0, self.FIELD_Y + 0.25),
+            (2.0, -0.25, 4.0),
+            (3.0, self.FIELD_X + 0.24, 4.0),
+        ]), [])
+
+    def test_the_q22_divergence_is_an_error(self):
+        """The real event: 21.9 m in one cycle, to y = -17.896."""
+        found = self.findings([(1.0, 0.445, 4.006), (1.05, -0.591, -17.896),
+                               (1.09, -0.591, 0.0)])
+        by_rule = {f.rule_name: f for f in found}
+        self.assertIn("Robot pose off the field (-y)", by_rule)
+        self.assertIn("Robot pose off the field (-x)", by_rule)
+        self.assertTrue(all(f.severity == "error" for f in found))
+        self.assertIn("-17.8", by_rule["Robot pose off the field (-y)"].detail)
+
+    def test_each_edge_is_covered(self):
+        for x, y, expected in [
+            (-4.0, 4.0, "Robot pose off the field (-x)"),
+            (self.FIELD_X + 4.0, 4.0, "Robot pose off the field (+x)"),
+            (8.0, -4.0, "Robot pose off the field (-y)"),
+            (8.0, self.FIELD_Y + 4.0, "Robot pose off the field (+y)"),
+        ]:
+            with self.subTest(x=x, y=y):
+                names = {f.rule_name for f in self.findings([(1.0, x, y)])}
+                self.assertIn(expected, names)
 
 
 class MergeAndFormatTest(unittest.TestCase):
