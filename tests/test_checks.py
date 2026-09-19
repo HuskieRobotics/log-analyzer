@@ -381,11 +381,13 @@ class PoseOffFieldTest(unittest.TestCase):
     Rules are read from checks2026.json rather than restated, so the thresholds
     this pins are the ones actually shipped.
 
-    The numbers come from the ten 2026 logs. Six of the nine matches put the
-    estimated pose outside the field at some point, but by at most 0.25 m -
-    bumper-width rounding at the boundary, which must not raise anything. q22's
-    estimator left the field by 17.91 m, which must. The 0.5 m threshold sits
-    between them with about seventy times the margin it needs.
+    The numbers come from the ten 2026 logs, measured against the real REBUILT
+    field. Healthy matches put the estimated pose outside it by at most 0.54 m:
+    that worst case is q89, where the pose drifts smoothly from 16.59 to 17.08
+    over a quarter second while pinned in the corner at y~0 - wheel slip
+    integrating into odometry, not a fault. q22's estimator left the field by
+    17.91 m, discontinuously. The margin sits between them, clearing the drift
+    with headroom while leaving the teleport an order of magnitude clear of it.
     """
 
     @classmethod
@@ -417,8 +419,16 @@ class PoseOffFieldTest(unittest.TestCase):
                 self.assertAlmostEqual(rule["expect"][key], value, places=6)
 
     def test_the_margin_clears_the_worst_healthy_excursion(self):
-        """Measured: healthy 2026 matches leave the field by at most 0.25 m."""
-        self.assertGreater(self.field["margin"], 0.25 * 1.5)
+        """Measured against the real field: healthy matches reach 0.54 m out.
+
+        Tightening below that starts reporting wall drift as a fault. q89 is
+        exactly that case, and it is benign.
+        """
+        self.assertGreater(self.field["margin"], self.WORST_HEALTHY)
+
+    def test_the_margin_still_leaves_a_real_divergence_far_clear(self):
+        """q22 left the field by 17.91 m."""
+        self.assertGreater(17.91 / self.field["margin"], 10)
 
     def setUp(self):
         self.assertEqual(len(self.rules), 4, "expected one rule per field edge")
@@ -454,13 +464,33 @@ class PoseOffFieldTest(unittest.TestCase):
             self.assertIn(f"/RealOutputs/Drivetrain/Pose/translation/{axis}",
                           log.fields)
 
-    def test_bumper_width_overshoot_at_the_boundary_is_not_a_finding(self):
-        """Six of nine 2026 matches do this; none of them is a real anomaly."""
+    # The worst excursion any healthy 2026 match makes, measured against the
+    # real field: q89 drifting into the corner at MatchTime 47.
+    WORST_HEALTHY = 0.54
+
+    def test_wall_drift_at_the_boundary_is_not_a_finding(self):
+        """A robot pushing into the wall slips, and odometry integrates it.
+
+        Every healthy 2026 match does some of this; none is a fault.
+        """
         self.assertEqual(self.findings([
-            (1.0, 8.0, self.FIELD_Y + 0.25),
-            (2.0, -0.25, 4.0),
-            (3.0, self.FIELD_X + 0.24, 4.0),
+            (1.0, 8.0, self.FIELD_Y + self.WORST_HEALTHY),
+            (2.0, -self.WORST_HEALTHY, 4.0),
+            (3.0, self.FIELD_X + self.WORST_HEALTHY, 4.0),
+            (4.0, -self.WORST_HEALTHY, self.FIELD_Y + self.WORST_HEALTHY),
         ]), [])
+
+    def test_the_q89_wall_drift_specifically_stays_quiet(self):
+        """Its real samples: a smooth walk to 0.543 m outside, then back.
+
+        Against the field length this config shipped with before the game
+        manual was consulted, these same samples sat 0.09 m outside and looked
+        healthy for the wrong reason.
+        """
+        drift = [(395.606, 16.594, -0.006), (395.701, 16.875, -0.002),
+                 (395.798, 17.066, -0.001), (395.839, 17.083, 0.0),
+                 (395.870, 17.081, 0.0)]
+        self.assertEqual(self.findings(drift), [])
 
     def test_the_q22_divergence_is_an_error(self):
         """The real event: 21.9 m in one cycle, to y = -17.896."""
@@ -468,9 +498,12 @@ class PoseOffFieldTest(unittest.TestCase):
                                (1.09, -0.591, 0.0)])
         by_rule = {f.rule_name: f for f in found}
         self.assertIn("Robot pose off the field (-y)", by_rule)
-        self.assertIn("Robot pose off the field (-x)", by_rule)
         self.assertTrue(all(f.severity == "error" for f in found))
         self.assertIn("-17.8", by_rule["Robot pose off the field (-y)"].detail)
+        # x reached only -0.591 here, inside the drift the margin allows. The
+        # divergence is caught on the axis that actually left the field, which
+        # is why each edge is bounded separately.
+        self.assertNotIn("Robot pose off the field (-x)", by_rule)
 
     def test_each_edge_is_covered(self):
         for x, y, expected in [

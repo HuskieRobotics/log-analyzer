@@ -1470,7 +1470,7 @@ Measured across all nine 2026 match logs:
 
 | signal | q22 | other match logs | usable |
 |---|---|---|---|
-| **max distance outside the field** | **17.91 m** | 0.00 – 0.25 m | **yes, ~70x margin** |
+| **max distance outside the field** | **17.91 m** | 0.00 – 0.54 m | **yes, ~33x margin** |
 | any pose off-field at all | 346 samples | 0 – 121 samples | no — 6 of 9 logs |
 | max single-step jump speed | 436 m/s | 32 – 75 m/s | no — every log |
 | `ConstrainPoseToFieldCount` | 482 | 0 – 133 | weak, see below |
@@ -1483,10 +1483,10 @@ Three of these are traps:
 - **"Off the field" as a boolean is not the signal.** Six of nine matches leave
   the field, but by at most 0.25 m: bumper-width rounding at the boundary.
   Magnitude is the whole story.
-- **`ConstrainPoseToFieldCount` cannot tell 5 cm from 18 m.** It is the robot
-  code's own detector and tracks off-field cycles almost 1:1, but q89 logged 133
-  clamps with a worst excursion of 0.09 m. Usable as a `warning` at a high
-  threshold; over-reports as the primary signal.
+- **`ConstrainPoseToFieldCount` cannot tell half a metre from eighteen.** It is
+  the robot code's own detector and tracks off-field cycles almost 1:1, but q89
+  logged 133 clamps for an excursion that turned out to be benign wall drift.
+  Usable as a `warning` at a high threshold; over-reports as the primary signal.
 
 A hypothesis that died: 12 vision poses were accepted in the cycle immediately
 before the divergence, which looked causal. Every log peaks at 10–13 accepted
@@ -1495,35 +1495,54 @@ poses, so it is coincidence. No check was built on it.
 ### What shipped
 
 Four threshold rules in `checks2026.json` on the flattened struct leaves
-`/RealOutputs/Drivetrain/Pose/translation/{x,y}`, bounding the field with 0.5 m
+`/RealOutputs/Drivetrain/Pose/translation/{x,y}`, bounding the field with 1.0 m
 of margin, `while: enabled`, severity `error`. Run against all ten logs they
-fire on q22 and nothing else.
+fire on q22 and nothing else. `-x` is not among them: q22 reached only
+-0.591 m, inside the drift allowance, and the divergence is caught on the three
+axes that did leave the field.
 
-### The field size is a per-season input, and it is not yet verified
+### The field size is a per-season input, and guessing it corrupts the baseline
 
-The field changes between seasons, and by more than the margin: 2024 to 2025
-moved the length by roughly a metre. A config copied forward without
-re-measuring **fails open** — the bound sits beyond the real edge, and an
-excursion between the two goes unreported. That is the quiet direction to fail
-in.
+REBUILT: **8.07 m × 16.54 m** (317.7 in × 651.2 in of carpet), from the game
+manual. These live in one named place, `checks2026.json`'s `field` block, with
+the four thresholds derived from it and a test asserting they stay derived — a
+season rollover cannot update them by halves.
 
-The dimensions therefore live in one named place, `checks2026.json`'s `field`
-block, and the four thresholds are derived from it; a test asserts they stay
-derived, so a rollover cannot update them by halves.
+This was first shipped against an assumed 17.55 m length, and the correction is
+worth recording because of *how* it was wrong. Nothing in any log exceeds
+`x = 17.08 m`, so the data could never have caught it: the robot simply never
+drives that far, and a length a metre too long looks exactly like a length that
+is right. Only the width was corroborated, by matches reaching 8.11–8.12 m
+against a 8.07 m edge.
 
-What the logs can and cannot settle:
+The cost was not a missed q22 — that is 17.9 m out either way. It was a
+**corrupted healthy baseline**. Against the wrong rectangle the worst healthy
+excursion measured 0.25 m; against the real one it is 0.54 m, because q89's
+drift into the `+x` corner was being scored against an edge a metre too far
+away. A margin chosen from the first number would have reported wall drift as a
+fault on a real match.
 
-| | assumed | observed while enabled | verdict |
-|---|---|---|---|
-| width | 8.05 m | matches reach 8.11–8.12 m | **corroborated** — bumper-width rounding at the edge |
-| length | 17.55 m | nothing exceeds 17.08 m, typically ~16.5 m | **not determined** — the robot never drives that far |
+### Wall drift is not divergence
 
-So the width is grounded in data and the length is not: the `+x` bound carries
-about a metre of unverified slack. The measured separation is wide enough that
-this does not affect a q22-class divergence — 17.9 m out, with `x` reaching
-24.4 m — but a marginal 0.6–1.5 m excursion in `+x` would currently be missed.
-`field.source` is marked `UNVERIFIED` until the number is confirmed against the
-game manual.
+q89 is the case that sets the floor. Its pose walks 16.59 → 17.08 m smoothly
+over a quarter second, pinned in the corner at `y ≈ 0`:
+
+```
+395.606  x=16.594   out 0.055
+395.701  x=16.875   out 0.335
+395.798  x=17.066   out 0.526
+395.839  x=17.083   out 0.543
+```
+
+That is wheel slip integrating into odometry while the robot pushes into the
+wall — expected, and not a fault. q22 by contrast is discontinuous: 21.9 m in a
+single 50 ms cycle. Magnitude still separates the two, but 0.5 m does not; the
+margin is **1.0 m**, which clears the drift with headroom and still leaves the
+teleport an order of magnitude clear.
+
+Duration cannot be used instead: q89's drift lasts 0.17 s while q22's worst
+spike is two samples, 0.04 s. A `minDuration` would filter out the real event
+and keep the benign one.
 
 Reported in log time, not match time: log timestamps are what AdvantageScope
 scrubs to.

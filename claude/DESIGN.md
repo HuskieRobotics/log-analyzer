@@ -261,9 +261,10 @@ deliberately excluded — a band that holds everything ranks nothing.
 **Season-specific constants belong in the config as data.** `checks2026.json`
 carries a `field` block (`length`, `width`, `margin`, `season`, `source`) and
 the four pose-bounds thresholds are derived from it rather than written out
-four times. The field changes between seasons by more than the margin, and a
-stale bound fails open, so the number is stated once and a test pins the
-derivation. See [ROADMAP.md §13b](ROADMAP.md#13b-pose-estimator-divergence-shipped).
+four times. The field changes between seasons by more than the margin allows,
+and getting it wrong does not just loosen a bound — it silently rescales the
+healthy baseline every other threshold is chosen against. The number is stated
+once, cited to the game manual, and a test pins the derivation. See [ROADMAP.md §13b](ROADMAP.md#13b-pose-estimator-divergence-shipped).
 
 ## 4. Config Model
 

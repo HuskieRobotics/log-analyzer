@@ -3,11 +3,11 @@
     "fmsAttached": false,
     "robotMode": "both",
     "field": {
-        "length": 17.55,
-        "width": 8.05,
-        "margin": 0.5,
+        "length": 16.54,
+        "width": 8.07,
+        "margin": 1.0,
         "season": 2026,
-        "source": "UNVERIFIED - confirm against the game manual"
+        "source": "REBUILT game manual: each FIELD is approximately 317.7in (~8.07m) by 651.2in (~16.54m) of carpeted area"
     },
     "checks": [
         {
@@ -288,7 +288,7 @@
             "name": "Robot pose off the field (-x)",
             "entry": "/RealOutputs/Drivetrain/Pose/translation/x",
             "expect": {
-                "below": -0.5
+                "below": -1.0
             },
             "unit": "m",
             "while": "enabled",
@@ -298,7 +298,7 @@
             "name": "Robot pose off the field (+x)",
             "entry": "/RealOutputs/Drivetrain/Pose/translation/x",
             "expect": {
-                "above": 18.05
+                "above": 17.54
             },
             "unit": "m",
             "while": "enabled",
@@ -308,7 +308,7 @@
             "name": "Robot pose off the field (-y)",
             "entry": "/RealOutputs/Drivetrain/Pose/translation/y",
             "expect": {
-                "below": -0.5
+                "below": -1.0
             },
             "unit": "m",
             "while": "enabled",
@@ -318,7 +318,7 @@
             "name": "Robot pose off the field (+y)",
             "entry": "/RealOutputs/Drivetrain/Pose/translation/y",
             "expect": {
-                "above": 8.55
+                "above": 9.07
             },
             "unit": "m",
             "while": "enabled",
