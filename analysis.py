@@ -7,12 +7,14 @@ import mmap
 import os
 import sys
 import bisect
+import tempfile
 import statistics
 import time
 from datetime import datetime
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set, Tuple, Any, Union
+from typing import (Dict, List, Optional, Set, Tuple, Any, Union,
+                    Callable)
 from datalog import DataLogReader
 from Log import Log, LoggableType
 from entry_patterns import EntryPattern, expand_roles
@@ -970,11 +972,106 @@ def log_contains_match(log_file_path: str) -> bool:
     return False
 
 
-def partition_match_logs(log_files: List[str]) -> Tuple[List[str], List[str]]:
+# Classifying a match is nearly free - the read stops at the first attached
+# record - but proving a *pit* log is not a match costs a full pass, measured at
+# ~16 MB/s. A driver station laptop that has synced a week of test sessions can
+# hold a gigabyte of them, so paying that again on every process start is the
+# difference between a report that appears at once and one that appears in
+# minutes. The answer never changes for a given file, so it is kept on disk
+# beside the logs and shared by the analyser and the monitor.
+MATCH_CACHE_NAME = ".match-cache.json"
+
+MatchCache = Dict[str, Tuple[int, bool]]
+
+
+def load_match_cache(folder: str) -> MatchCache:
+    """Read the sidecar cache of match classifications.
+
+    A missing, truncated or hand-edited file is not an error: the cache is an
+    optimisation, and an empty one only costs time.
+    """
+    try:
+        with open(os.path.join(folder, MATCH_CACHE_NAME),
+                  encoding="utf-8") as handle:
+            entries = json.load(handle)["logs"]
+        items = entries.items()
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return {}
+    cache: MatchCache = {}
+    for name, entry in items:
+        try:
+            cache[name] = (int(entry["size"]), bool(entry["match"]))
+        except (KeyError, TypeError, ValueError):
+            continue  # one bad entry should not discard the rest
+    return cache
+
+
+def save_match_cache(folder: str, cache: MatchCache) -> None:
+    """Write the cache beside the logs, atomically.
+
+    The monitor and the analysis subprocess it spawns both write this file. The
+    rename makes a reader see one version or the other, and because both derive
+    the same answers a lost update costs only a re-read.
+    """
+    payload = {"version": 1,
+               "logs": {name: {"size": size, "match": match}
+                        for name, (size, match) in cache.items()}}
+    try:
+        handle = tempfile.NamedTemporaryFile(
+            "w", encoding="utf-8", dir=folder, prefix=".match-cache-",
+            suffix=".tmp", delete=False)
+        try:
+            with handle:
+                json.dump(payload, handle)
+            os.replace(handle.name, os.path.join(folder, MATCH_CACHE_NAME))
+        except BaseException:
+            try:
+                os.remove(handle.name)
+            except OSError:
+                pass
+            raise
+    except (OSError, ValueError):
+        pass  # a read-only log folder still analyses fine, just not as fast
+
+
+def classify_match_log(path: str, cache: Optional[MatchCache] = None,
+                       progress: Optional[Callable[[str, int], None]] = None
+                       ) -> bool:
+    """Whether this log is a match, consulting and filling `cache`.
+
+    Args:
+        path: The log to classify
+        cache: Name -> (size, verdict). Size guards against a name being reused
+            by a different file, which is the only way the verdict can go stale.
+        progress: Called with (path, size) only when the answer is not cached
+            and a full read is therefore about to happen
+    """
+    name = os.path.basename(path)
+    try:
+        size = os.path.getsize(path)
+    except OSError:
+        size = -1
+    if cache is not None:
+        remembered = cache.get(name)
+        if remembered is not None and remembered[0] == size:
+            return remembered[1]
+    if progress is not None:
+        progress(path, size)
+    verdict = log_contains_match(path)
+    if cache is not None:
+        cache[name] = (size, verdict)
+    return verdict
+
+
+def partition_match_logs(log_files: List[str],
+                         cache: Optional[MatchCache] = None,
+                         progress: Optional[Callable[[str, int], None]] = None
+                         ) -> Tuple[List[str], List[str]]:
     """Split paths into (match logs, everything else), preserving order."""
     matches, others = [], []
     for path in log_files:
-        (matches if log_contains_match(path) else others).append(path)
+        target = matches if classify_match_log(path, cache, progress) else others
+        target.append(path)
     return matches, others
 
 
@@ -1496,7 +1593,14 @@ def main() -> None:
     still_writing = []
     non_matches = []
     if args.matches_only:
-        log_files, skipped = partition_match_logs(sorted(log_files))
+        def announce_scan(path: str, size: int) -> None:
+            print(f"Scanning {os.path.basename(path)} ({size / 1e6:.0f} MB) "
+                  f"to see whether it is a match...", file=sys.stderr, flush=True)
+
+        cache = load_match_cache(log_folder)
+        log_files, skipped = partition_match_logs(sorted(log_files), cache,
+                                                  announce_scan)
+        save_match_cache(log_folder, cache)
         non_matches = [os.path.basename(path) for path in skipped]
         if not log_files:
             for name in non_matches:

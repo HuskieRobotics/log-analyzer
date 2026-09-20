@@ -293,7 +293,8 @@ not O(one file), though only the VERBOSE summary uses the retained list.
 - **`--matches-only`** drops logs the robot recorded outside a match, detected by
   `/DriverStation/FMSAttached` rather than by name or by how long it was enabled
   (a pit session can be enabled longer than a match). Reading stops at the first
-  attached record, so a match costs almost nothing.
+  attached record, so a match costs almost nothing; the *negative* costs a full
+  read, which is why the verdict is cached — see §7.
 - **`--latest`** narrows the folder to the most recent **finished** match, ordered
   by the timestamp in the log's name rather than its mtime (which `scp` resets to
   copy time). A powered robot is always logging, so the newest file may still be
@@ -376,6 +377,42 @@ Python.
 
 Records are mmapped whole-file, and every captured value is retained in Python
 lists, so peak memory scales with total captured records across all files.
+
+### 7.1 Match classification, and why it is cached
+
+`--matches-only` and the pit monitor both have to answer "is this log a match?".
+The answer is asymmetric, measured on the ten 2026 fixtures:
+
+| | files | verdict | time |
+|---|---|---|---|
+| Match logs | 9 | `True` | 0.00–0.11 s |
+| Pit session, 56 MB | 1 | `False` | 3.47 s |
+
+A match is cheap because the scan stops at the first FMS-attached record. Proving
+the negative has no early exit — it is a full pass at ~16 MB/s.
+
+This surfaced as the pit monitor printing nothing for minutes on the driver
+station laptop. `--sync-newest 10` had fetched the ten newest logs, which during
+a week of practice were all pit sessions totalling ~1.1 GB, so target selection
+read every one of them before reaching a match: ~70 s on a development machine
+and several minutes on the laptop. Two things made it worse than slow:
+
+- the cache was an in-memory dict, so **every process start paid it again** — and
+  the monitor spawns `analysis.py`, which paid it a second time in the same cycle;
+- `Monitor.cycle()` collected its messages and `main()` printed them only after
+  the cycle returned, so sync's "no new files" appeared *after* the scan it
+  preceded. The terminal looked hung.
+
+The fix is `load_match_cache` / `save_match_cache`: a `.match-cache.json` sidecar
+in the log folder mapping name → `(size, verdict)`, shared by both tools and
+written atomically. The size is what makes a remembered verdict safe — it is the
+only way a name can come to mean a different file. Classification then costs
+4.01 s cold and under a millisecond warm on the 2026 fixtures, and warm is every
+run after the first, including after a restart between matches.
+
+The cold pass is still paid once, so it is now narrated: each full read announces
+itself before it starts, and `Monitor` reports messages as they happen rather
+than at the end of the cycle.
 
 ## 8. Known Defects Found During Review
 
