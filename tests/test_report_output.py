@@ -3,6 +3,7 @@
 
 import html as html_module
 import json
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -12,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from analysis import compute_analysis, compute_checks, compute_per_file_counts  # noqa: E402
 from Log import Log  # noqa: E402
 from report_output import (  # noqa: E402
+    ALERT_RULE_LIMIT,
     FileReport,
     Report,
     ReportSection,
@@ -184,6 +186,102 @@ class RenderHtmlTest(unittest.TestCase):
     def test_empty_report_renders(self):
         page = render_html(Report(log_folder="x", config_path="y"))
         self.assertIn("No concerns found.", page)
+
+
+class Finding:
+    """Minimal stand-in. The band reads severity, rule_name and detail; the
+    rest is what the section below the band needs to render alongside it."""
+
+    def __init__(self, severity, rule_name, detail="d", entry="/e"):
+        self.severity = severity
+        self.rule_name = rule_name
+        self.detail = detail
+        self.entry = entry
+        self.timestamp = None
+        self.occurrences = 1
+        self.file_count = 1
+        self.log_file_name = "q1.wpilog"
+
+
+def report_with(findings):
+    return Report(log_folder="x", config_path="y", aggregate_findings=findings)
+
+
+def error_band(page):
+    """Just the headline band, so assertions cannot match the section below."""
+    match = re.search(r'<div class="alert">.*?</div></div>', page, re.S)
+    return match.group(0) if match else ""
+
+
+class ErrorBandTest(unittest.TestCase):
+    """The headline band: what should stop the next match, stated up front.
+
+    Without it an error is one row among the rest, and a season's config can
+    push it a long way down the page.
+    """
+
+    def test_no_band_when_there_are_no_findings(self):
+        self.assertNotIn('class="alert"', render_html(report_with([])))
+
+    def test_no_band_for_warnings_alone(self):
+        page = render_html(report_with([Finding("warning", "Hot motor"),
+                                        Finding("info", "Note")]))
+        self.assertNotIn('class="alert"', page)
+
+    def test_a_single_error_shows_its_detail(self):
+        page = render_html(report_with([
+            Finding("error", "Robot pose off the field (-y)",
+                    "below -0.5 m, peak -17.8958 m at 296.5 s")]))
+        self.assertIn('class="alert"', page)
+        self.assertIn("1 error", page)
+        self.assertIn("Robot pose off the field (-y)", page)
+        self.assertIn("peak -17.8958 m at 296.5 s", page)
+
+    def test_repeats_of_one_rule_collapse_to_a_count(self):
+        """41 of the 65 errors in a folder-wide 2026 run are a single rule."""
+        page = render_html(report_with(
+            [Finding("error", "Alert reported as error", f"alert {i}")
+             for i in range(41)]))
+        self.assertIn("41 errors", page)
+        self.assertIn("41 findings", page)
+        # The individual details belong to the section below, not the headline.
+        self.assertNotIn('<span>&#183; alert 7</span>', page)
+
+    def test_rules_are_ordered_by_how_many_findings_they_raised(self):
+        page = render_html(report_with(
+            [Finding("error", "Few", "a"), Finding("error", "Few", "b")]
+            + [Finding("error", "Many", str(i)) for i in range(5)]))
+        band = error_band(page)
+        self.assertLess(band.index("Many"), band.index("Few"))
+
+    def test_the_band_counts_errors_and_rules(self):
+        page = render_html(report_with([Finding("error", "A"), Finding("error", "A"),
+                                        Finding("error", "B")]))
+        self.assertIn("3 errors, 2 rules", page)
+
+    def test_warnings_are_left_out_of_the_band_but_kept_below(self):
+        page = render_html(report_with([Finding("error", "Real problem"),
+                                        Finding("warning", "Hot motor")]))
+        band = error_band(page)
+        self.assertNotIn("Hot motor", band)
+        self.assertIn("Hot motor", page)
+
+    def test_a_long_tail_of_rules_is_truncated(self):
+        page = render_html(report_with(
+            [Finding("error", f"Rule {i:02d}") for i in range(ALERT_RULE_LIMIT + 3)]))
+        self.assertIn("and 3 more rules below", page)
+
+    def test_untrusted_rule_text_is_escaped(self):
+        page = render_html(report_with(
+            [Finding("error", "<script>x</script>", "<b>bad</b>")]))
+        self.assertNotIn("<script>x</script>", page)
+        self.assertIn("&lt;script&gt;", page)
+
+    def test_the_band_sits_above_the_informational_notices(self):
+        report = report_with([Finding("error", "Real problem")])
+        report.still_writing = ["live.wpilog"]
+        page = render_html(report)
+        self.assertLess(page.index('class="alert"'), page.index('class="notice"'))
 
 
 if __name__ == "__main__":

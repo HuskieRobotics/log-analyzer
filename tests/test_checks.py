@@ -5,11 +5,14 @@ No .wpilog fixtures: the Log objects are built directly, so these run in
 milliseconds and cover the cases the real logs happen not to contain.
 """
 
+import json
+import struct
 import sys
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
 
 from Log import Log  # noqa: E402
 from analysis import (  # noqa: E402
@@ -370,6 +373,148 @@ class ExpectEntriesTest(unittest.TestCase):
         findings = compute_checks(log, "a.wpilog", self.rule()).findings
         self.assertEqual(len(findings), 4)
         self.assertTrue(all(f.detail == "entry not present in this log" for f in findings))
+
+
+class PoseOffFieldTest(unittest.TestCase):
+    """The shipped bounds on the pose estimator, against measured magnitudes.
+
+    Rules are read from checks2026.json rather than restated, so the thresholds
+    this pins are the ones actually shipped.
+
+    The numbers come from the ten 2026 logs, measured against the real REBUILT
+    field. Healthy matches put the estimated pose outside it by at most 0.54 m:
+    that worst case is q89, where the pose drifts smoothly from 16.59 to 17.08
+    over a quarter second while pinned in the corner at y~0 - wheel slip
+    integrating into odometry, not a fault. q22's estimator left the field by
+    17.91 m, discontinuously. The margin sits between them, clearing the drift
+    with headroom while leaving the teleport an order of magnitude clear of it.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        config = json.loads((REPO_ROOT / "checks2026.json").read_text())
+        cls.field = config["field"]
+        cls.FIELD_X = cls.field["length"]
+        cls.FIELD_Y = cls.field["width"]
+        cls.rules = [rule for rule in config["checks"]
+                     if rule["name"].startswith("Robot pose off the field")]
+
+    def test_the_bounds_are_derived_from_the_declared_field_size(self):
+        """The field changes between seasons - 2024 to 2025 moved the length by
+        about a metre, more than the margin. A config copied forward without
+        re-measuring fails open: the bound sits beyond the real edge and a real
+        excursion goes unreported. Pinning the four thresholds to the one
+        declared size means a rollover cannot update them by halves."""
+        margin = self.field["margin"]
+        expected = {
+            "Robot pose off the field (-x)": ("below", -margin),
+            "Robot pose off the field (+x)": ("above", self.FIELD_X + margin),
+            "Robot pose off the field (-y)": ("below", -margin),
+            "Robot pose off the field (+y)": ("above", self.FIELD_Y + margin),
+        }
+        self.assertEqual({rule["name"] for rule in self.rules}, set(expected))
+        for rule in self.rules:
+            key, value = expected[rule["name"]]
+            with self.subTest(rule=rule["name"]):
+                self.assertAlmostEqual(rule["expect"][key], value, places=6)
+
+    def test_the_margin_clears_the_worst_healthy_excursion(self):
+        """Measured against the real field: healthy matches reach 0.54 m out.
+
+        Tightening below that starts reporting wall drift as a fault. q89 is
+        exactly that case, and it is benign.
+        """
+        self.assertGreater(self.field["margin"], self.WORST_HEALTHY)
+
+    def test_the_margin_still_leaves_a_real_divergence_far_clear(self):
+        """q22 left the field by 17.91 m."""
+        self.assertGreater(17.91 / self.field["margin"], 10)
+
+    def setUp(self):
+        self.assertEqual(len(self.rules), 4, "expected one rule per field edge")
+
+    def log_with_poses(self, poses):
+        """A Log holding Pose2d structs, flattened the way the real logs are.
+
+        The schemas are registered by hand so this needs no .wpilog: it also
+        pins that a Pose2d still flattens to translation/x and translation/y,
+        which is what the config's entry paths depend on.
+        """
+        log = log_with_enabled([(0.0, True)])
+        log.struct_decoder.add_schema("Translation2d", b"double x;double y")
+        log.struct_decoder.add_schema("Rotation2d", b"double value")
+        log.struct_decoder.add_schema(
+            "Pose2d", b"Translation2d translation;Rotation2d rotation")
+        for timestamp, x, y in poses:
+            log.put_struct("/RealOutputs/Drivetrain/Pose", timestamp,
+                           struct.pack("<ddd", x, y, 0.0), "Pose2d", False)
+        return log
+
+    def findings(self, poses):
+        log = self.log_with_poses(poses)
+        return compute_checks(log, "a.wpilog", self.rules).findings
+
+    def test_a_pose_on_the_field_raises_nothing(self):
+        self.assertEqual(self.findings([(1.0, 8.0, 4.0), (2.0, 1.2, 7.9)]), [])
+
+    def test_the_struct_still_flattens_to_the_entries_the_config_names(self):
+        """If this breaks, the rules stop matching and silently never fire."""
+        log = self.log_with_poses([(1.0, 1.0, 2.0)])
+        for axis in ("x", "y"):
+            self.assertIn(f"/RealOutputs/Drivetrain/Pose/translation/{axis}",
+                          log.fields)
+
+    # The worst excursion any healthy 2026 match makes, measured against the
+    # real field: q89 drifting into the corner at MatchTime 47.
+    WORST_HEALTHY = 0.54
+
+    def test_wall_drift_at_the_boundary_is_not_a_finding(self):
+        """A robot pushing into the wall slips, and odometry integrates it.
+
+        Every healthy 2026 match does some of this; none is a fault.
+        """
+        self.assertEqual(self.findings([
+            (1.0, 8.0, self.FIELD_Y + self.WORST_HEALTHY),
+            (2.0, -self.WORST_HEALTHY, 4.0),
+            (3.0, self.FIELD_X + self.WORST_HEALTHY, 4.0),
+            (4.0, -self.WORST_HEALTHY, self.FIELD_Y + self.WORST_HEALTHY),
+        ]), [])
+
+    def test_the_q89_wall_drift_specifically_stays_quiet(self):
+        """Its real samples: a smooth walk to 0.543 m outside, then back.
+
+        Against the field length this config shipped with before the game
+        manual was consulted, these same samples sat 0.09 m outside and looked
+        healthy for the wrong reason.
+        """
+        drift = [(395.606, 16.594, -0.006), (395.701, 16.875, -0.002),
+                 (395.798, 17.066, -0.001), (395.839, 17.083, 0.0),
+                 (395.870, 17.081, 0.0)]
+        self.assertEqual(self.findings(drift), [])
+
+    def test_the_q22_divergence_is_an_error(self):
+        """The real event: 21.9 m in one cycle, to y = -17.896."""
+        found = self.findings([(1.0, 0.445, 4.006), (1.05, -0.591, -17.896),
+                               (1.09, -0.591, 0.0)])
+        by_rule = {f.rule_name: f for f in found}
+        self.assertIn("Robot pose off the field (-y)", by_rule)
+        self.assertTrue(all(f.severity == "error" for f in found))
+        self.assertIn("-17.8", by_rule["Robot pose off the field (-y)"].detail)
+        # x reached only -0.591 here, inside the drift the margin allows. The
+        # divergence is caught on the axis that actually left the field, which
+        # is why each edge is bounded separately.
+        self.assertNotIn("Robot pose off the field (-x)", by_rule)
+
+    def test_each_edge_is_covered(self):
+        for x, y, expected in [
+            (-4.0, 4.0, "Robot pose off the field (-x)"),
+            (self.FIELD_X + 4.0, 4.0, "Robot pose off the field (+x)"),
+            (8.0, -4.0, "Robot pose off the field (-y)"),
+            (8.0, self.FIELD_Y + 4.0, "Robot pose off the field (+y)"),
+        ]:
+            with self.subTest(x=x, y=y):
+                names = {f.rule_name for f in self.findings([(1.0, x, y)])}
+                self.assertIn(expected, names)
 
 
 class MergeAndFormatTest(unittest.TestCase):

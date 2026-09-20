@@ -1449,6 +1449,116 @@ Fix these along the way — each will otherwise distort a feature above:
   recorded under the configured `robotMode` — would catch all three before a
   multi-minute run. Cheap once B1's manifest exists; useful enough to do sooner.
 
+## 13b. Pose Estimator Divergence (shipped)
+
+`akit_26-04-30_16-20-07_johnson_q22.wpilog` puts the estimated pose 21.9 m away
+in a single 50 ms cycle, at `/DriverStation/MatchTime` 66.00 s remaining:
+
+```
+296.4362  pose  x=  0.445 y=  4.006
+296.4866  pose  x= -0.591 y=-17.896   <- 436 m/s implied
+296.5307  pose  x= -0.591 y=  0.000
+296.5508  pose  x=  0.000 y=  0.000   <- estimator walks back through the origin
+```
+
+Seven off-field episodes in that match; three gross (17.9 m, 24.4 m, 14.6 m
+outside the field).
+
+### Which signal discriminates
+
+Measured across all nine 2026 match logs:
+
+| signal | q22 | other match logs | usable |
+|---|---|---|---|
+| **max distance outside the field** | **17.91 m** | 0.00 – 0.54 m | **yes, ~33x margin** |
+| any pose off-field at all | 346 samples | 0 – 121 samples | no — 6 of 9 logs |
+| max single-step jump speed | 436 m/s | 32 – 75 m/s | no — every log |
+| `ConstrainPoseToFieldCount` | 482 | 0 – 133 | weak, see below |
+
+Three of these are traps:
+
+- **Jump speed is not the signal.** Healthy logs reach 75 m/s from *legitimate*
+  pose resets — vision re-localization and the `reset pose to vision` command.
+  Those teleport but land on the field. A jump-speed check fires on every match.
+- **"Off the field" as a boolean is not the signal.** Six of nine matches leave
+  the field, but by at most 0.25 m: bumper-width rounding at the boundary.
+  Magnitude is the whole story.
+- **`ConstrainPoseToFieldCount` cannot tell half a metre from eighteen.** It is
+  the robot code's own detector and tracks off-field cycles almost 1:1, but q89
+  logged 133 clamps for an excursion that turned out to be benign wall drift.
+  Usable as a `warning` at a high threshold; over-reports as the primary signal.
+
+A hypothesis that died: 12 vision poses were accepted in the cycle immediately
+before the divergence, which looked causal. Every log peaks at 10–13 accepted
+poses, so it is coincidence. No check was built on it.
+
+### What shipped
+
+Four threshold rules in `checks2026.json` on the flattened struct leaves
+`/RealOutputs/Drivetrain/Pose/translation/{x,y}`, bounding the field with 1.0 m
+of margin, `while: enabled`, severity `error`. Run against all ten logs they
+fire on q22 and nothing else. `-x` is not among them: q22 reached only
+-0.591 m, inside the drift allowance, and the divergence is caught on the three
+axes that did leave the field.
+
+### The field size is a per-season input, and guessing it corrupts the baseline
+
+REBUILT: **8.07 m × 16.54 m** (317.7 in × 651.2 in of carpet), from the game
+manual. These live in one named place, `checks2026.json`'s `field` block, with
+the four thresholds derived from it and a test asserting they stay derived — a
+season rollover cannot update them by halves.
+
+This was first shipped against an assumed 17.55 m length, and the correction is
+worth recording because of *how* it was wrong. Nothing in any log exceeds
+`x = 17.08 m`, so the data could never have caught it: the robot simply never
+drives that far, and a length a metre too long looks exactly like a length that
+is right. Only the width was corroborated, by matches reaching 8.11–8.12 m
+against a 8.07 m edge.
+
+The cost was not a missed q22 — that is 17.9 m out either way. It was a
+**corrupted healthy baseline**. Against the wrong rectangle the worst healthy
+excursion measured 0.25 m; against the real one it is 0.54 m, because q89's
+drift into the `+x` corner was being scored against an edge a metre too far
+away. A margin chosen from the first number would have reported wall drift as a
+fault on a real match.
+
+### Wall drift is not divergence
+
+q89 is the case that sets the floor. Its pose walks 16.59 → 17.08 m smoothly
+over a quarter second, pinned in the corner at `y ≈ 0`:
+
+```
+395.606  x=16.594   out 0.055
+395.701  x=16.875   out 0.335
+395.798  x=17.066   out 0.526
+395.839  x=17.083   out 0.543
+```
+
+That is wheel slip integrating into odometry while the robot pushes into the
+wall — expected, and not a fault. q22 by contrast is discontinuous: 21.9 m in a
+single 50 ms cycle. Magnitude still separates the two, but 0.5 m does not; the
+margin is **1.0 m**, which clears the drift with headroom and still leaves the
+teleport an order of magnitude clear.
+
+Duration cannot be used instead: q89's drift lasts 0.17 s while q22's worst
+spike is two samples, 0.04 s. A `minDuration` would filter out the real event
+and keep the benign one.
+
+Reported in log time, not match time: log timestamps are what AdvantageScope
+scrubs to.
+
+### Follow-ons not taken
+
+- **One rule instead of four.** A `withinField` check kind reading the Pose2d
+  directly would yield one finding carrying distance-outside-the-rectangle, and
+  would correctly measure a diagonal excursion past a corner that four
+  independent axis bounds under-measure.
+- **One-off versus systematic.** q22 is the only log in the set with this
+  signature. One occurrence is "look at it when there is time"; three matches in
+  five is "do not queue". Each report sees one match, so the tool cannot tell
+  them apart — that is §11's B3, and this is a stronger motivating case for it
+  than the motor-temperature one it was written around.
+
 ## 14. What Must Not Regress
 
 The folder-wide aggregate analysis is the feature that replaced hours of
