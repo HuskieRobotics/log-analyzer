@@ -7,6 +7,7 @@ import mmap
 import os
 import sys
 import bisect
+import fnmatch
 import tempfile
 import statistics
 import time
@@ -18,7 +19,7 @@ from typing import (Dict, List, Optional, Set, Tuple, Any, Union,
 from datalog import DataLogReader
 from Log import Log, LoggableType
 from entry_patterns import EntryPattern, expand_roles
-from report_output import (FileReport, Report, ReportSection,
+from report_output import (FileReport, Report, ReportSection, describe_durations,
                            now_text, render_html, render_json)
 
 # Constants for structured types
@@ -242,6 +243,13 @@ class CheckFinding:
     timestamp: Optional[float] = None
     occurrences: int = 1
     file_count: int = 1
+    # Seconds per unbroken spell in the reported state, already clipped to the
+    # rule's gate. A camera dark for 0.75 s and one dark for a minute both read
+    # as "is False, expected True" without this. Kept as the individual spells
+    # rather than reduced, so merging across files can pool them and still give
+    # a true median - medians of medians are not.
+    durations: List[float] = field(default_factory=list)
+    unresolved: bool = False       # still in that state when the log ended
 
 
 @dataclass
@@ -406,6 +414,7 @@ def describe_excursions(excursions: List[Excursion], enter: float, above: bool,
     if any(e.unresolved for e in excursions):
         parts.append("still past the limit when the log ended")
     return ", ".join(parts)
+
 
 
 def match_statistic(samples: Any, statistic: str, gate: "EnabledGate",
@@ -577,6 +586,27 @@ def compute_checks(log: Log, log_file_name: str,
         excludes = rule.get("excludeEntry") or []
         if isinstance(excludes, str):
             excludes = [excludes]
+
+        # The Alerts stream is a catch-all, so every precise rule added for
+        # something it also mentions creates a second report of one fact. The
+        # camera case is the clearest: "sending frames" reports one BCL outage
+        # as a single 178.68 s spell, while the alerts split the same outage
+        # into 34 as the camera flaps between connected-but-silent and
+        # disconnected, handing off between two messages. Measured over all ten
+        # 2026 logs, 650 samples carried a camera alert and not one of them had
+        # "sending frames" still true, so dropping them here loses nothing.
+        #
+        # Plain fnmatch, not EntryPattern: an alert is free text rather than a
+        # "/"-delimited path, so "*" should cross anything. fnmatchcase because
+        # fnmatch folds case by platform, and a config must not mean different
+        # things on Windows.
+        excluded_messages = rule.get("excludeMessage") or []
+        if isinstance(excluded_messages, str):
+            excluded_messages = [excluded_messages]
+
+        def reportable(detail: str) -> bool:
+            return not any(fnmatch.fnmatchcase(detail, pattern)
+                           for pattern in excluded_messages)
         if excludes:
             excluded = [EntryPattern(text) for text in excludes]
             matched = [name for name in matched
@@ -694,27 +724,62 @@ def compute_checks(log: Log, log_file_name: str,
             reached = False
             wanted = (expectation.get("atLeastOnce")
                       if isinstance(expectation, dict) else None)
+            at_least_once = (isinstance(expectation, dict)
+                             and "atLeastOnce" in expectation)
+
+            # A sample's value holds until the next one - the same convention
+            # find_excursions documents - so a spell runs from the sample that
+            # entered the state to the one that left it.
+            #
+            # Spells are tracked over every sample while findings are still
+            # raised only from samples the gate admits. Tracking only admitted
+            # samples would merge a spell either side of a brief disable into
+            # one; clipping the spans to the gate afterwards keeps the count
+            # right and excludes time the gate does not admit.
+            open_at: Dict[str, float] = {}
+            spans: Dict[str, List[Tuple[float, float, bool]]] = {}
 
             for timestamp, value in zip(samples.timestamps, samples.values):
-                if not gate.applies(gate_name, timestamp):
-                    continue
-                if isinstance(expectation, dict) and "atLeastOnce" in expectation:
-                    if value == wanted:
+                if at_least_once:
+                    if gate.applies(gate_name, timestamp) and value == wanted:
                         reached = True
                     continue
-                for detail in check_sample_findings(expectation, value):
+
+                details = {detail
+                           for detail in check_sample_findings(expectation, value)
+                           if reportable(detail)}
+                for detail in [d for d in open_at if d not in details]:
+                    spans.setdefault(detail, []).append(
+                        (open_at.pop(detail), timestamp, False))
+
+                admitted = gate.applies(gate_name, timestamp)
+                for detail in details:
+                    open_at.setdefault(detail, timestamp)
+                    if not admitted:
+                        continue
                     if detail in seen:
                         seen[detail].occurrences += 1
                     else:
                         seen[detail] = CheckFinding(
                             name, severity, entry, detail, log_file_name, timestamp)
 
-            if isinstance(expectation, dict) and "atLeastOnce" in expectation:
+            for detail, start in open_at.items():
+                spans.setdefault(detail, []).append((start, last_timestamp, True))
+
+            if at_least_once:
                 if not reached:
                     report.findings.append(CheckFinding(
                         name, severity, entry,
                         f"never reached {wanted!r}", log_file_name))
             else:
+                admitted_windows = gate.windows(gate_name, last_timestamp)
+                for detail, finding in seen.items():
+                    for start, end, unresolved in spans.get(detail, []):
+                        counted = overlap_seconds(start, end, admitted_windows)
+                        if counted <= 0:
+                            continue  # the gate admits none of this spell
+                        finding.durations.append(counted)
+                        finding.unresolved = finding.unresolved or unresolved
                 report.findings.extend(seen.values())
 
     return report
@@ -734,9 +799,15 @@ def merge_check_findings(reports: List[CheckReport]) -> List[CheckFinding]:
             key = (finding.rule_name, finding.entry, finding.detail)
             files_seen.setdefault(key, set()).add(finding.log_file_name)
             if key not in merged:
-                merged[key] = CheckFinding(**vars(finding))
+                merged[key] = CheckFinding(
+                    **{**vars(finding), "durations": list(finding.durations)})
             else:
                 merged[key].occurrences += finding.occurrences
+                # Pooling the spells themselves is what keeps the merged median
+                # honest across files.
+                merged[key].durations.extend(finding.durations)
+                merged[key].unresolved = (merged[key].unresolved
+                                          or finding.unresolved)
     for key, finding in merged.items():
         finding.file_count = len(files_seen[key])
     return sort_check_findings(list(merged.values()))
@@ -830,14 +901,22 @@ def format_check_findings(findings: List[CheckFinding], is_aggregate: bool) -> L
             heading = this_heading
             lines.append(f"  [{finding.severity.upper()}] {finding.rule_name} ({finding.entry})")
         lines.append(f"    {finding.detail}")
+        held = describe_durations(finding.durations, finding.unresolved)
+        if held:
+            lines.append(f"      {held}")
 
         parts = []
-        if finding.occurrences > 1:
+        # The spell count on the line above supersedes the sample count, which
+        # only reflects how often the condition was logged.
+        multiple = (len(finding.durations) > 1 if finding.durations
+                    else finding.occurrences > 1)
+        if finding.occurrences > 1 and not finding.durations:
             parts.append(f"x{finding.occurrences}")
         if is_aggregate and finding.file_count > 1:
             parts.append(f"in {finding.file_count} files")
         if finding.timestamp is not None:
-            where = f"first @ {finding.timestamp:.6f} s" if parts else f"@ {finding.timestamp:.6f} s"
+            where = (f"first @ {finding.timestamp:.6f} s"
+                     if parts or multiple else f"@ {finding.timestamp:.6f} s")
             parts.append(where)
             if is_aggregate:
                 parts.append(f"in {finding.log_file_name}")

@@ -22,6 +22,10 @@
             "name": "Alert reported as error",
             "entry": "/RealOutputs/Alerts/errors",
             "expect": "empty",
+            "excludeMessage": [
+                "camera * connected to NT but not publishing frames",
+                "camera * disconnected from NT"
+            ],
             "severity": "error",
             "while": "afterFirstEnable"
         },

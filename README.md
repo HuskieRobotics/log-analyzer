@@ -223,6 +223,7 @@ AdvantageScope.
 | `name` | Rule name, as it appears in findings |
 | `entry` | Entry name or pattern to check |
 | `excludeEntry` | Pattern, or list of patterns, whose matches are removed from `entry`'s matches |
+| `excludeMessage` | Message pattern, or list, dropped before reporting. For `expect: "empty"` streams such as `Alerts`, to suppress messages a more precise rule already covers |
 | `expect` | What the entry should show — see below |
 | `expectEntries` | Names that `entry`'s wildcard **must** expand to; a missing one is a finding of its own |
 | `while` | Gate: `enabled`, `disabled`, `afterFirstEnable`; omit for the whole log |
@@ -239,7 +240,7 @@ AdvantageScope.
 
 | Form | Meaning |
 |------|---------|
-| `"empty"` | The entry must be empty. For an array, **each element becomes its own finding** — this is how AdvantageKit's `Alerts` streams are read. |
+| `"empty"` | The entry must be empty. For an array, **each element becomes its own finding** — this is how AdvantageKit's `Alerts` streams are read. Pair with `excludeMessage` to drop messages another rule measures better. |
 | `"present"` | The entry must merely exist in the log |
 | `{"always": v}` | Every sample must equal `v` |
 | `{"never": v}` | No sample may equal `v` |
@@ -248,6 +249,40 @@ AdvantageScope.
 | `{"above": n}` | Report excursions above `n`, with `clearBelow` and `minDuration` |
 | `{"below": n}` | Report excursions below `n`, with `clearAbove` and `minDuration` |
 | `{"minIncrease": n}` | A monotonic counter must advance by at least `n` across the gate window |
+
+### Suppressing duplicate alerts
+
+The `Alerts` stream is a catch-all, so every precise rule added for something it
+also mentions reports one fact twice. `excludeMessage` drops the generic copy:
+
+```json
+{
+    "name": "Alert reported as error",
+    "entry": "/RealOutputs/Alerts/errors",
+    "expect": "empty",
+    "excludeMessage": [
+        "camera * connected to NT but not publishing frames",
+        "camera * disconnected from NT"
+    ],
+    "while": "afterFirstEnable",
+    "severity": "error"
+}
+```
+
+Patterns are matched with plain `fnmatch`, case-sensitively — an alert is free
+text rather than a `/`-delimited path, so `*` crosses anything, unlike the
+segment-scoped matching used for entry names.
+
+This only affects the report. The robot still raises the alert, so the drive
+team still sees it live during the match.
+
+The cameras are the clearest case for it. `/RealOutputs/Vision/*/sending frames`
+reports one BCL outage as a single 178.68 s spell; the alerts split the same
+outage into 34, because the camera flaps between connected-but-silent and
+disconnected and the two messages hand off to each other. Across the ten 2026
+logs, 650 samples carried a camera alert and not one of them had `sending frames`
+still true — so the boolean loses nothing and measures it properly, and it also
+supports `expectEntries`, which catches a camera missing from the log entirely.
 
 ### Gates
 

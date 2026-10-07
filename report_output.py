@@ -24,6 +24,7 @@ the dependency one-way and avoids a cycle.
 
 import html
 import json
+import statistics
 from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -86,6 +87,33 @@ def _plain(value: Any) -> Any:
     return value
 
 
+def describe_durations(durations: List[float], unresolved: bool = False) -> str:
+    """Summarise how many times a finding's state held, and for how long.
+
+    The spell count leads because it is the honest answer to "how many times":
+    CheckFinding.occurrences counts the samples that carried the condition,
+    which is a function of logging rate, not of events. One 0.72 s camera
+    dropout logged three times reads as "x3" there, which invites exactly the
+    wrong conclusion.
+
+    One spell still states its count, so a finding with one spell and a finding
+    with several differ only in detail rather than in shape.
+    """
+    if not durations:
+        return ""
+    total = sum(durations)
+    if len(durations) == 1:
+        text = f"1 spell, {total:.2f} s"
+    else:
+        text = (f"{len(durations)} spells, {total:.2f} s total"
+                f" (min {min(durations):.2f} s,"
+                f" median {statistics.median(durations):.2f} s,"
+                f" max {max(durations):.2f} s)")
+    if unresolved:
+        text += ", still in that state when the log ended"
+    return text
+
+
 def render_json(report: Report, indent: int = 2) -> str:
     """Serialise a whole run as JSON."""
     return json.dumps(_plain(report), indent=indent, default=str) + "\n"
@@ -129,6 +157,7 @@ h2 { font-size: 1rem; text-transform: uppercase; letter-spacing: .08em;
 .entry { color: var(--muted); font-size: .85rem; word-break: break-all; }
 .detail { margin-top: .3rem; }
 .where { color: var(--muted); font-size: .82rem; margin-top: .2rem; }
+.held { margin-top: .25rem; font-size: .9rem; font-variant-numeric: tabular-nums; }
 .none { color: var(--ok); }
 .notice { margin: 0 1.5rem 1rem; padding: .7rem .9rem; border-radius: 8px;
           background: var(--panel); border-left: 5px solid var(--info);
@@ -211,13 +240,19 @@ def _alert_html(findings: List[Any]) -> str:
 
 
 def _finding_html(finding: Any, is_aggregate: bool) -> str:
+    durations = getattr(finding, "durations", None) or []
+    multiple = (len(durations) > 1 if durations
+                else getattr(finding, "occurrences", 1) > 1)
+    held = describe_durations(durations, getattr(finding, "unresolved", False))
+    held_html = f'<div class="held">{_e(held)}</div>' if held else ""
     where = []
-    if getattr(finding, "occurrences", 1) > 1:
+    if getattr(finding, "occurrences", 1) > 1 and not durations:
         where.append(f"x{finding.occurrences}")
     if is_aggregate and getattr(finding, "file_count", 1) > 1:
         where.append(f"in {finding.file_count} files")
     if finding.timestamp is not None:
-        where.append(("first @ " if where else "@ ") + f"{finding.timestamp:.3f} s")
+        where.append(("first @ " if where or multiple else "@ ")
+                     + f"{finding.timestamp:.3f} s")
         if is_aggregate:
             where.append(f"in {finding.log_file_name}")
     where_html = (f'<div class="where">{_e(", ".join(where))}</div>') if where else ""
@@ -226,7 +261,7 @@ def _finding_html(finding: Any, is_aggregate: bool) -> str:
         f'<div class="rule">{_e(finding.rule_name)}</div>'
         f'<div class="entry">{_e(finding.entry)}</div>'
         f'<div class="detail">{_e(finding.detail)}</div>'
-        f"{where_html}</div>"
+        f"{held_html}{where_html}</div>"
     )
 
 
