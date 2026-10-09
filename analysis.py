@@ -545,6 +545,13 @@ def check_sample_findings(expectation: Any, value: Any) -> List[str]:
             if value not in allowed:
                 return [f"is {value!r}, expected one of "
                         f"{', '.join(repr(a) for a in allowed)}"]
+        if "alwaysStartsWith" in expectation:
+            # For a name that follows a convention rather than being one fixed
+            # value: an event branch is "event-<name>", and only the prefix is
+            # what the deploy tooling keys on.
+            prefix = expectation["alwaysStartsWith"]
+            if not (isinstance(value, str) and value.startswith(prefix)):
+                return [f"is {value!r}, expected to start with {prefix!r}"]
 
     return []
 

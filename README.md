@@ -245,6 +245,7 @@ AdvantageScope.
 | `{"always": v}` | Every sample must equal `v` |
 | `{"never": v}` | No sample may equal `v` |
 | `{"alwaysOneOf": [...]}` | Every sample must be one of these. Use when a status string has a legitimate "not yet reported" state as well as a good one. |
+| `{"alwaysStartsWith": "s"}` | Every sample must be a string starting with `s`. Use for a name that follows a convention, such as an `event-` Git branch. |
 | `{"atLeastOnce": v}` | At least one sample must equal `v`; otherwise one finding |
 | `{"above": n}` | Report excursions above `n`, with `clearBelow` and `minDuration` |
 | `{"below": n}` | Report excursions below `n`, with `clearAbove` and `minDuration` |

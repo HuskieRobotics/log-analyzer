@@ -322,6 +322,35 @@ class AlwaysOneOfTest(unittest.TestCase):
         self.assertEqual({f.occurrences for f in findings}, {1, 2})
 
 
+class AlwaysStartsWithTest(unittest.TestCase):
+    """For a name that follows a convention, such as an event branch."""
+
+    def rule(self):
+        return [{"name": "Branch", "entry": "/RealMetadata/GitBranch",
+                 "expect": {"alwaysStartsWith": "event-"},
+                 "severity": "error"}]
+
+    def log_with(self, value):
+        log = log_with_enabled([(0.0, True)])
+        log.put_string("/RealMetadata/GitBranch", 1.0, value)
+        return log
+
+    def test_an_event_branch_reports_nothing(self):
+        log = self.log_with("event-worlds")
+        self.assertEqual(compute_checks(log, "a.wpilog", self.rule()).findings, [])
+
+    def test_another_branch_is_reported(self):
+        log = self.log_with("main")
+        findings = compute_checks(log, "a.wpilog", self.rule()).findings
+        self.assertEqual(len(findings), 1)
+        self.assertIn("'main'", findings[0].detail)
+        self.assertIn("expected to start with 'event-'", findings[0].detail)
+
+    def test_the_prefix_must_be_at_the_start(self):
+        log = self.log_with("fix-event-worlds")
+        self.assertEqual(len(compute_checks(log, "a.wpilog", self.rule()).findings), 1)
+
+
 class ExpectEntriesTest(unittest.TestCase):
     """One rule covering both halves: the expected set, and the value expectation."""
 
