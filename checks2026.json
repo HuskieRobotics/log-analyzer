@@ -19,9 +19,21 @@
             "severity": "error"
         },
         {
+            "name": "Code not deployed from an event branch",
+            "entry": "/RealMetadata/GitBranch",
+            "expect": {
+                "alwaysStartsWith": "event-"
+            },
+            "severity": "error"
+        },
+        {
             "name": "Alert reported as error",
             "entry": "/RealOutputs/Alerts/errors",
             "expect": "empty",
+            "excludeMessage": [
+                "camera * connected to NT but not publishing frames",
+                "camera * disconnected from NT"
+            ],
             "severity": "error",
             "while": "afterFirstEnable"
         },

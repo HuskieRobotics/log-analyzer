@@ -10,7 +10,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from analysis import compute_analysis, compute_checks, compute_per_file_counts  # noqa: E402
+from analysis import (  # noqa: E402
+    CheckFinding,
+    compute_analysis,
+    compute_checks,
+    compute_per_file_counts,
+)
 from Log import Log  # noqa: E402
 from report_output import (  # noqa: E402
     ALERT_RULE_LIMIT,
@@ -201,6 +206,8 @@ class Finding:
         self.occurrences = 1
         self.file_count = 1
         self.log_file_name = "q1.wpilog"
+        self.durations = []
+        self.unresolved = False
 
 
 def report_with(findings):
@@ -211,6 +218,77 @@ def error_band(page):
     """Just the headline band, so assertions cannot match the section below."""
     match = re.search(r'<div class="alert">.*?</div></div>', page, re.S)
     return match.group(0) if match else ""
+
+
+class FindingDurationHtmlTest(unittest.TestCase):
+    """How long the state held, on the page.
+
+    "is False, expected True" reads the same for a camera dark 0.7 s and one
+    dark a minute; the page has to separate them.
+    """
+
+    def page(self, durations, unresolved=False):
+        finding = Finding("error", "Camera frames", "is False, expected True",
+                          "/RealOutputs/Vision/BR/sending frames")
+        finding.durations = durations
+        finding.unresolved = unresolved
+        finding.occurrences = max(1, len(durations))
+        return render_html(report_with([finding]))
+
+    def test_a_single_spell_shows_its_duration(self):
+        page = self.page([0.75])
+        self.assertIn('class="held"', page)
+        self.assertIn("1 spell, 0.75 s", page)
+
+    def test_several_spells_show_the_spread(self):
+        page = self.page([0.668, 9.968, 0.724])
+        self.assertIn("3 spells, 11.36 s total", page)
+        self.assertIn("max 9.97 s", page)
+        self.assertIn("median 0.72 s", page)
+
+    def test_no_band_element_when_there_are_no_durations(self):
+        """Threshold findings carry their own wording; do not add an empty row."""
+        self.assertNotIn('class="held"', self.page([]))
+
+    def test_an_unfinished_spell_says_so(self):
+        self.assertIn("still in that state when the log ended",
+                      self.page([30.0], True))
+
+    def test_the_style_is_defined(self):
+        self.assertIn(".held {", self.page([1.0]))
+
+    def test_the_sample_count_is_not_shown_beside_a_spell_count(self):
+        """One 0.72 s dropout logged three times read as "x3", which invites
+        exactly the wrong conclusion about how often it happened."""
+        finding = Finding("error", "Alert reported as error",
+                          "camera BCL connected to NT but not publishing frames")
+        finding.durations = [0.725]
+        finding.occurrences = 3
+        finding.timestamp = 392.977
+        page = render_html(report_with([finding]))
+        self.assertIn("1 spell, 0.72 s", page)
+        self.assertNotIn("x3", page)
+        self.assertIn("@ 392.977 s", page)
+        self.assertNotIn("first @", page)
+
+    def test_several_spells_are_located_at_the_first(self):
+        finding = Finding("error", "Camera frames", "is False, expected True")
+        finding.durations = [0.6, 0.7]
+        finding.occurrences = 5
+        finding.timestamp = 100.0
+        page = render_html(report_with([finding]))
+        self.assertIn("first @ 100.000 s", page)
+        self.assertNotIn("x5", page)
+
+    def test_durations_survive_json(self):
+        """The real dataclass, so this pins the serialised shape."""
+        finding = CheckFinding("Camera frames", "error", "/cam",
+                               "is False, expected True", "q1.wpilog",
+                               durations=[0.5, 9.9], unresolved=True)
+        data = json.loads(render_json(report_with([finding])))
+        got = data["aggregate_findings"][0]
+        self.assertEqual(got["durations"], [0.5, 9.9])
+        self.assertTrue(got["unresolved"])
 
 
 class ErrorBandTest(unittest.TestCase):

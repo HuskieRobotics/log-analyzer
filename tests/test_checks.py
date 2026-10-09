@@ -16,10 +16,13 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from Log import Log  # noqa: E402
 from analysis import (  # noqa: E402
+    CheckFinding,
+    CheckReport,
     compute_checks,
     format_check_findings,
     merge_check_findings,
 )
+from report_output import describe_durations  # noqa: E402
 
 
 def log_with_enabled(enabled_at):
@@ -319,6 +322,35 @@ class AlwaysOneOfTest(unittest.TestCase):
         self.assertEqual({f.occurrences for f in findings}, {1, 2})
 
 
+class AlwaysStartsWithTest(unittest.TestCase):
+    """For a name that follows a convention, such as an event branch."""
+
+    def rule(self):
+        return [{"name": "Branch", "entry": "/RealMetadata/GitBranch",
+                 "expect": {"alwaysStartsWith": "event-"},
+                 "severity": "error"}]
+
+    def log_with(self, value):
+        log = log_with_enabled([(0.0, True)])
+        log.put_string("/RealMetadata/GitBranch", 1.0, value)
+        return log
+
+    def test_an_event_branch_reports_nothing(self):
+        log = self.log_with("event-worlds")
+        self.assertEqual(compute_checks(log, "a.wpilog", self.rule()).findings, [])
+
+    def test_another_branch_is_reported(self):
+        log = self.log_with("main")
+        findings = compute_checks(log, "a.wpilog", self.rule()).findings
+        self.assertEqual(len(findings), 1)
+        self.assertIn("'main'", findings[0].detail)
+        self.assertIn("expected to start with 'event-'", findings[0].detail)
+
+    def test_the_prefix_must_be_at_the_start(self):
+        log = self.log_with("fix-event-worlds")
+        self.assertEqual(len(compute_checks(log, "a.wpilog", self.rule()).findings), 1)
+
+
 class ExpectEntriesTest(unittest.TestCase):
     """One rule covering both halves: the expected set, and the value expectation."""
 
@@ -373,6 +405,273 @@ class ExpectEntriesTest(unittest.TestCase):
         findings = compute_checks(log, "a.wpilog", self.rule()).findings
         self.assertEqual(len(findings), 4)
         self.assertTrue(all(f.detail == "entry not present in this log" for f in findings))
+
+
+class ExcludeMessageTest(unittest.TestCase):
+    """Dropping alert messages a more precise rule already covers.
+
+    The Alerts stream is a catch-all, so a precise rule for something it also
+    mentions reports one fact twice. Measured on the 2026 logs, the camera
+    messages were pure duplication: 650 samples carried one and not one of them
+    had "sending frames" still true, while the alerts split a single 178.68 s
+    BCL outage into 34 spells as the camera flapped between two messages.
+    """
+
+    def log_with_alerts(self):
+        log = log_with_enabled([(0.0, True)])
+        for timestamp, alerts in [
+            (1.0, []),
+            (2.0, ["camera BL connected to NT but not publishing frames",
+                   "CANivore error detected"]),
+            (4.0, ["camera BR disconnected from NT", "CANivore error detected"]),
+            (6.0, []),
+        ]:
+            log.put_string_array("/alerts", timestamp, alerts)
+        return log
+
+    def details(self, **extra):
+        rule = {"name": "Alert", "entry": "/alerts", "expect": "empty",
+                "severity": "error"}
+        rule.update(extra)
+        return {f.detail for f
+                in compute_checks(self.log_with_alerts(), "a.wpilog", [rule]).findings}
+
+    def test_without_it_every_message_is_reported(self):
+        self.assertEqual(self.details(), {
+            "CANivore error detected",
+            "camera BL connected to NT but not publishing frames",
+            "camera BR disconnected from NT"})
+
+    def test_a_pattern_drops_matching_messages_and_keeps_the_rest(self):
+        self.assertEqual(
+            self.details(excludeMessage=[
+                "camera * connected to NT but not publishing frames",
+                "camera * disconnected from NT"]),
+            {"CANivore error detected"})
+
+    def test_one_pattern_covers_every_camera(self):
+        """Four cameras, one line of config."""
+        log = log_with_enabled([(0.0, True)])
+        log.put_string_array("/alerts", 1.0, [
+            f"camera {name} connected to NT but not publishing frames"
+            for name in ("BCH", "BCL", "BL", "BR")])
+        log.put_string_array("/alerts", 2.0, [])
+        rule = {"name": "Alert", "entry": "/alerts", "expect": "empty",
+                "severity": "error",
+                "excludeMessage": "camera * connected to NT but not publishing frames"}
+        self.assertEqual(compute_checks(log, "a.wpilog", [rule]).findings, [])
+
+    def test_a_bare_string_is_accepted_like_excludeEntry(self):
+        self.assertNotIn("CANivore error detected",
+                         self.details(excludeMessage="CANivore error detected"))
+
+    def test_a_pattern_matching_nothing_changes_nothing(self):
+        self.assertEqual(self.details(excludeMessage=["no such alert"]),
+                         self.details())
+
+    def test_matching_is_case_sensitive(self):
+        """fnmatch folds case by platform; a config must not mean one thing on
+        Windows and another on Linux, so fnmatchcase is used."""
+        self.assertIn("CANivore error detected",
+                      self.details(excludeMessage="canivore error detected"))
+
+    def test_an_excluded_message_leaves_no_trace_in_the_durations(self):
+        """It must not open a spell either, or it would still shape the report."""
+        rule = {"name": "Alert", "entry": "/alerts", "expect": "empty",
+                "severity": "error", "excludeMessage": "camera *"}
+        found = compute_checks(self.log_with_alerts(), "a.wpilog", [rule]).findings
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0].detail, "CANivore error detected")
+        self.assertEqual(found[0].durations, [4.0])      # 2.0 -> 6.0
+
+    def test_the_shipped_config_suppresses_only_the_camera_messages(self):
+        """Pins what checks2026.json actually excludes."""
+        config = json.loads((REPO_ROOT / "checks2026.json").read_text())
+        rule = next(c for c in config["checks"]
+                    if c["entry"] == "/RealOutputs/Alerts/errors"
+                    and c["severity"] == "error")
+        self.assertEqual(rule["excludeMessage"], [
+            "camera * connected to NT but not publishing frames",
+            "camera * disconnected from NT"])
+        # the precise rule that replaces them must still be present
+        names = {c["name"] for c in config["checks"]}
+        self.assertIn("Camera frames", names)
+
+
+class DurationDescriptionTest(unittest.TestCase):
+    """Wording of the duration summary."""
+
+    def test_nothing_to_say_about_no_spells(self):
+        self.assertEqual(describe_durations([]), "")
+
+    def test_one_spell_still_states_its_count(self):
+        """min, median and max of one number are the same number, so they are
+        left out - but the count stays, so every finding reads the same shape."""
+        self.assertEqual(describe_durations([0.75]), "1 spell, 0.75 s")
+
+    def test_several_spells_get_the_spread(self):
+        text = describe_durations([0.5, 0.75, 2.0, 61.4])
+        self.assertIn("4 spells, 64.65 s total", text)
+        self.assertIn("min 0.50 s", text)
+        self.assertIn("median 1.38 s", text)
+        self.assertIn("max 61.40 s", text)
+
+    def test_an_unfinished_spell_says_so(self):
+        self.assertIn("still in that state when the log ended",
+                      describe_durations([12.0], True))
+
+
+class FindingDurationTest(unittest.TestCase):
+    """How long a finding's state actually held.
+
+    "is False, expected True, x2" cannot distinguish a camera dark for 0.7 s
+    from one dark for a minute. Both appear in the same real match - measured on
+    ilnap_e12, three cameras blipped under 0.75 s while BR was dark for 9.97 s.
+    """
+
+    def rule(self, **extra):
+        rule = {"name": "Camera frames", "entry": "/cam",
+                "expect": {"always": True}, "severity": "error"}
+        rule.update(extra)
+        return [rule]
+
+    def findings(self, log, **extra):
+        return compute_checks(log, "a.wpilog", self.rule(**extra)).findings
+
+    def test_a_spell_runs_until_the_value_comes_back(self):
+        """A sample holds until the next one, as find_excursions documents."""
+        log = log_with_enabled([(0.0, True)])
+        for timestamp, value in [(0.0, True), (5.0, False), (6.5, True)]:
+            log.put_boolean("/cam", timestamp, value)
+        found = self.findings(log)
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0].durations, [1.5])
+        self.assertFalse(found[0].unresolved)
+
+    def test_several_spells_are_kept_separately(self):
+        log = log_with_enabled([(0.0, True)])
+        for timestamp, value in [(0.0, True), (1.0, False), (2.0, True),
+                                 (10.0, False), (20.0, True), (30.0, False),
+                                 (30.5, True)]:
+            log.put_boolean("/cam", timestamp, value)
+        found = self.findings(log)
+        self.assertEqual(sorted(found[0].durations), [0.5, 1.0, 10.0])
+        self.assertEqual(found[0].occurrences, 3)
+
+    def test_a_spell_still_open_at_the_end_is_marked(self):
+        """Its duration is a lower bound, so the reader must be told."""
+        log = log_with_enabled([(0.0, True)])
+        log.put_boolean("/cam", 0.0, True)
+        log.put_boolean("/cam", 5.0, False)
+        log.put_number("/filler", 40.0, 1.0)      # carries the log to 40 s
+        found = self.findings(log)
+        self.assertTrue(found[0].unresolved)
+        self.assertEqual(found[0].durations, [35.0])
+
+    def test_time_the_gate_excludes_is_not_counted(self):
+        """A spell straddling a brief disable stays one spell, shorter."""
+        log = log_with_enabled([(0.0, True), (10.0, False), (20.0, True),
+                                (30.0, False)])
+        for timestamp, value in [(0.0, True), (5.0, False), (25.0, True)]:
+            log.put_boolean("/cam", timestamp, value)
+        found = self.findings(log, **{"while": "enabled"})
+        # raw spell is 5..25; the gate admits 5..10 and 20..25
+        self.assertEqual(found[0].durations, [10.0])
+
+    def test_a_spell_wholly_outside_the_gate_is_dropped(self):
+        log = log_with_enabled([(0.0, False), (20.0, True)])
+        for timestamp, value in [(0.0, True), (5.0, False), (10.0, True),
+                                 (25.0, False), (30.0, True)]:
+            log.put_boolean("/cam", timestamp, value)
+        found = self.findings(log, **{"while": "enabled"})
+        self.assertEqual(found[0].durations, [5.0])
+        self.assertEqual(found[0].timestamp, 25.0)
+
+    def test_each_alert_message_is_timed_separately(self):
+        """expect "empty" makes one finding per message, so one span each."""
+        log = log_with_enabled([(0.0, True)])
+        for timestamp, alerts in [(0.0, []), (1.0, ["brownout"]),
+                                  (2.0, ["brownout", "camera down"]),
+                                  (5.0, ["camera down"]), (9.0, [])]:
+            log.put_string_array("/alerts", timestamp, alerts)
+        rule = [{"name": "Alert", "entry": "/alerts", "expect": "empty",
+                 "severity": "error"}]
+        by_detail = {f.detail: f for f in compute_checks(log, "a.wpilog", rule).findings}
+        self.assertEqual(by_detail["brownout"].durations, [4.0])      # 1 -> 5
+        self.assertEqual(by_detail["camera down"].durations, [7.0])   # 2 -> 9
+
+    def test_a_threshold_rule_keeps_its_own_wording(self):
+        """Excursions already report total and longest; do not double up."""
+        log = log_with_enabled([(0.0, True)])
+        for timestamp, value in [(0.0, 1.0), (1.0, 9.0), (3.0, 1.0)]:
+            log.put_number("/temp", timestamp, value)
+        rule = [{"name": "Hot", "entry": "/temp", "expect": {"above": 5},
+                 "severity": "warning"}]
+        found = compute_checks(log, "a.wpilog", rule).findings
+        self.assertEqual(found[0].durations, [])
+        self.assertIn("above 5", found[0].detail)
+
+    def test_merging_pools_the_spells_rather_than_the_medians(self):
+        """A median of medians is not a median."""
+        def report(durations):
+            finding = CheckFinding("R", "error", "/cam", "is False, expected True",
+                                   "q1.wpilog", 1.0, durations=list(durations))
+            return CheckReport(findings=[finding])
+        merged = merge_check_findings([report([1.0, 1.0, 10.0]), report([2.0])])
+        self.assertEqual(len(merged), 1)
+        self.assertEqual(sorted(merged[0].durations), [1.0, 1.0, 2.0, 10.0])
+
+    def test_merging_does_not_mutate_the_per_file_finding(self):
+        first = CheckFinding("R", "error", "/cam", "d", "q1.wpilog", 1.0,
+                             durations=[1.0])
+        second = CheckFinding("R", "error", "/cam", "d", "q2.wpilog", 2.0,
+                              durations=[2.0])
+        merge_check_findings([CheckReport(findings=[first]),
+                              CheckReport(findings=[second])])
+        self.assertEqual(first.durations, [1.0])
+
+    def test_the_duration_reaches_the_text_report(self):
+        log = log_with_enabled([(0.0, True)])
+        for timestamp, value in [(0.0, True), (1.0, False), (3.5, True)]:
+            log.put_boolean("/cam", timestamp, value)
+        lines = format_check_findings(self.findings(log), False)
+        self.assertTrue(any("1 spell, 2.50 s" in line for line in lines), lines)
+
+    def test_the_sample_count_gives_way_to_the_spell_count(self):
+        """occurrences counts samples carrying the condition, so it tracks
+        logging rate, not events: one real 0.72 s camera dropout was logged
+        three times and read as "x3". The spell count replaces it."""
+        log = log_with_enabled([(0.0, True)])
+        for timestamp, value in [(0.0, True), (1.0, False), (1.2, False),
+                                 (1.5, False), (1.72, True)]:
+            log.put_boolean("/cam", timestamp, value)
+        found = self.findings(log)
+        self.assertEqual(found[0].occurrences, 3)       # three samples
+        self.assertEqual(found[0].durations, [0.72])    # one spell
+        lines = format_check_findings(found, False)
+        joined = "\n".join(lines)
+        self.assertIn("1 spell, 0.72 s", joined)
+        self.assertNotIn("x3", joined)
+
+    def test_a_sample_at_exactly_zero_is_not_seen(self):
+        """Pins a pre-existing edge, so a future change to it is deliberate.
+
+        A range read is half-open, so get_field_values(field, 0.0, last) skips a
+        sample at exactly 0.0; a spell already underway there is measured from
+        the next sample instead. AdvantageKit timestamps start around 1.7 s, so
+        this does not arise in a real log.
+        """
+        log = log_with_enabled([(0.0, True)])
+        for timestamp, value in [(0.0, False), (1.0, False), (2.0, True)]:
+            log.put_boolean("/cam", timestamp, value)
+        found = self.findings(log)
+        self.assertEqual(found[0].durations, [1.0])   # 1.0 -> 2.0, not 0.0 -> 2.0
+
+    def test_a_spell_from_the_first_visible_sample_is_measured_whole(self):
+        log = log_with_enabled([(0.0, True)])
+        for timestamp, value in [(0.5, False), (3.0, True)]:
+            log.put_boolean("/cam", timestamp, value)
+        self.assertEqual(self.findings(log)[0].durations, [2.5])
 
 
 class PoseOffFieldTest(unittest.TestCase):
