@@ -8,6 +8,7 @@ running either - and without needing a robot.
 import io
 import sys
 import tempfile
+import threading
 import unittest
 import unittest.mock
 from contextlib import redirect_stdout
@@ -22,6 +23,7 @@ from pit_monitor import (  # noqa: E402
     find_target,
     list_logs,
     run_analysis,
+    run_sync,
 )
 
 REAL_LOGS = Path(__file__).resolve().parent.parent / "test" / "2026"
@@ -224,6 +226,115 @@ class CycleTest(MonitorBase):
         self.assertEqual(self.analyser.calls, 2)
 
 
+class SyncProgressTest(MonitorBase):
+    """The pit crew should see the robot noticed and the download moving."""
+
+    def test_detail_lines_are_relayed_while_the_summary_is_returned(self):
+        robot = self.folder / "robot"
+        robot.mkdir()
+        (robot / "match1.wpilog").write_bytes(b"a" * 100)
+        relayed = []
+        status, last = run_sync(self.folder / "logs", "unused",
+                                ["--from-local", str(robot)], relayed.append)
+        self.assertEqual(status, "ok")
+        self.assertTrue(last.startswith("copied 1"), last)
+        self.assertTrue(any(l.startswith("reached") for l in relayed), relayed)
+        self.assertTrue(any(l.startswith("fetching 1/1") for l in relayed), relayed)
+        self.assertNotIn(last, relayed)
+
+    def test_an_absent_robot_relays_nothing(self):
+        relayed = []
+        status, _ = run_sync(self.folder / "logs", "unused",
+                             ["--from-local", "/no/such/robot"], relayed.append)
+        self.assertEqual(status, "unreachable")
+        self.assertEqual(relayed, [])
+
+    def test_a_line_repeated_from_last_cycle_is_not_shown_again(self):
+        lines = ["reached robot: 3 log(s) found"]
+
+        def syncer(folder, host, extra, progress=None):
+            for line in lines:
+                progress(line)
+            return "ok", ""
+
+        shown = []
+        monitor = Monitor(self.folder, Path("c.json"), self.folder / "r.html",
+                          settle_seconds=0, sync_host="h", syncer=syncer,
+                          analyser=self.analyser, announce=shown.append)
+        monitor.cycle()
+        monitor.cycle()
+        self.assertEqual(shown.count("sync: reached robot: 3 log(s) found"), 1)
+
+        lines = ["reached robot: 4 log(s) found", "fetching 1/1: new.wpilog"]
+        monitor.cycle()
+        self.assertIn("sync: reached robot: 4 log(s) found", shown)
+        self.assertIn("sync: fetching 1/1: new.wpilog", shown)
+
+        # Robot gone for a cycle, then back: seeing it again is news.
+        lines = []
+        monitor.cycle()
+        lines = ["reached robot: 4 log(s) found"]
+        monitor.cycle()
+        self.assertEqual(shown.count("sync: reached robot: 4 log(s) found"), 2)
+
+
+class AnalyseAsLogsLandTest(MonitorBase):
+    """Logs arrive newest first, so the match that just ended should reach the
+    report without waiting for older logs to finish copying."""
+
+    NEW = "akit_26-05-01_11-00-00_e_q3.wpilog"
+    OLD = "akit_26-05-01_09-00-00_e_q1.wpilog"
+
+    def test_a_landed_match_is_analysed_before_the_sync_finishes(self):
+        ran = threading.Event()
+        seen_during_sync = []
+
+        def analyser(*args):
+            ran.set()
+            return True, "Wrote HTML report"
+
+        def syncer(folder, host, extra, progress=None):
+            self.add_match(self.NEW)
+            progress(f"copied {self.NEW} (4,000,000 bytes) in 1.0s")
+            seen_during_sync.append(ran.wait(timeout=10))
+            self.add_match(self.OLD)
+            progress(f"copied {self.OLD} (4,000,000 bytes) in 1.0s")
+            return "ok", "copied 2, already present 0, still being written 0, failed 0"
+
+        calls = []
+        monitor = Monitor(self.folder, Path("c.json"), self.folder / "r.html",
+                          settle_seconds=0, sync_host="h", syncer=syncer,
+                          analyser=lambda *a: calls.append(a) or analyser(*a))
+        result = monitor.cycle()
+        self.assertEqual(seen_during_sync, [True])
+        self.assertEqual(len(calls), 1, "an older log landing is not news")
+        self.assertTrue(result.analysed)
+        self.assertEqual(result.sync_status, "ok")
+        self.assertIn(f"report updated from {self.NEW}", describe(result))
+
+    def test_a_failed_analysis_is_not_retried_within_the_cycle(self):
+        self.analyser = Recorder(ok=False, message="bad config")
+
+        def syncer(folder, host, extra, progress=None):
+            self.add_match(self.NEW)
+            progress(f"copied {self.NEW} (4,000,000 bytes) in 1.0s")
+            return "ok", ""
+
+        self.syncer = syncer
+        result = self.monitor(sync_host="h").cycle()
+        self.assertEqual(self.analyser.calls, 1)
+        self.assertFalse(result.analysed)
+
+    def test_waiting_is_only_reported_once_the_sync_is_done(self):
+        def syncer(folder, host, extra, progress=None):
+            progress("copied akit_0a1b2c3d.wpilog (10 bytes) in 0.0s")
+            return "ok", ""
+
+        self.syncer = syncer
+        result = self.monitor(sync_host="h").cycle()
+        self.assertEqual(result.messages.count("no finished match log yet"), 1)
+
+
 class ResilienceTest(MonitorBase):
     """A pit display that dies at the wrong moment is worse than a stale one."""
 
@@ -278,7 +389,7 @@ class SyncArgumentTest(MonitorBase):
     def test_the_selection_reaches_the_syncer(self):
         recorded = {}
 
-        def syncer(folder, host, extra):
+        def syncer(folder, host, extra, progress=None):
             recorded["extra"] = list(extra)
             return "ok", ""
 
@@ -294,7 +405,7 @@ class SyncArgumentTest(MonitorBase):
         """Monitor itself stays neutral; the CLI supplies the default."""
         recorded = {}
 
-        def syncer(folder, host, extra):
+        def syncer(folder, host, extra, progress=None):
             recorded["extra"] = list(extra)
             return "ok", ""
 

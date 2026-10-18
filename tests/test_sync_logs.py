@@ -12,13 +12,16 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
+import unittest.mock
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import sync_logs  # noqa: E402
 from sync_logs import (  # noqa: E402
     LISTING_SCRIPT,
     apply_selection,
@@ -30,6 +33,8 @@ from sync_logs import (  # noqa: E402
     RemoteFile,
     local_index,
     parse_listing,
+    progress_line,
+    reporting_progress,
     select_new_files,
     sync,
 )
@@ -527,6 +532,124 @@ class EndToEndTest(unittest.TestCase):
         self.assertFalse(result.reachable)
         self.assertEqual(result.downloaded, [])
         self.assertEqual(result.failed, [])
+
+
+class DownloadOrderTest(unittest.TestCase):
+    """When time is tight the match that just ended must arrive first."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        root = Path(self._tmp.name)
+        self.robot = root / "robot"
+        self.dest = root / "dest"
+        self.robot.mkdir()
+        for name in ("akit_26-05-01_09-00-00_e_q1.wpilog",
+                     "akit_26-05-01_11-00-00_e_q3.wpilog",
+                     "akit_26-05-01_10-00-00_e_q2.wpilog",
+                     "akit_0a1b2c3d.wpilog"):
+            (self.robot / name).write_bytes(b"x" * 10)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def fetched_order(self, source_class=LocalSource):
+        order = []
+
+        class Recording(source_class):
+            def fetch(inner, remote, target):
+                order.append(remote.name)
+                super().fetch(remote, target)
+
+        with redirect_stdout(io.StringIO()):
+            sync(Recording(self.robot), self.dest, [], settle_seconds=0)
+        return order
+
+    def test_the_newest_log_is_fetched_first(self):
+        self.assertEqual(self.fetched_order(), [
+            "akit_26-05-01_11-00-00_e_q3.wpilog",
+            "akit_26-05-01_10-00-00_e_q2.wpilog",
+            "akit_26-05-01_09-00-00_e_q1.wpilog",
+            "akit_0a1b2c3d.wpilog",  # undated, so it cannot be placed: last
+        ])
+
+    def test_only_unsynced_logs_are_ordered(self):
+        self.fetched_order()
+        (self.robot / "akit_26-05-01_12-00-00_e_q4.wpilog").write_bytes(b"y" * 10)
+        self.assertEqual(self.fetched_order(),
+                         ["akit_26-05-01_12-00-00_e_q4.wpilog"])
+
+
+class ProgressTest(unittest.TestCase):
+    """A match log takes long enough to fetch that silence looks like a hang."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        root = Path(self._tmp.name)
+        self.robot = root / "robot"
+        self.dest = root / "dest"
+        self.robot.mkdir()
+        (self.robot / "match1.wpilog").write_bytes(b"a" * 100)
+        (self.robot / "match2.wpilog").write_bytes(b"b" * 200)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_progress_line_gives_amount_share_and_rate(self):
+        line = progress_line("m.wpilog", 12_000_000, 48_000_000, 4.0)
+        self.assertIn("m.wpilog: 12.0 of 48.0 MB (25%, 3.0 MB/s)", line)
+
+    def test_progress_line_survives_an_empty_file_and_no_elapsed_time(self):
+        self.assertIn("(100%)", progress_line("m.wpilog", 0, 0, 0))
+
+    def test_reaching_the_robot_and_each_fetch_are_announced(self):
+        out = io.StringIO()
+        with redirect_stdout(out):
+            sync(LocalSource(self.robot), self.dest, [], settle_seconds=0)
+        lines = out.getvalue().splitlines()
+        self.assertIn("reached", lines[0])
+        self.assertIn("2 log(s) found", lines[0])
+        self.assertIn("2 new log(s)", lines[1])
+        self.assertTrue(any("fetching 1/2: match2.wpilog" in l for l in lines))
+        self.assertTrue(any("fetching 2/2: match1.wpilog" in l for l in lines))
+
+    def test_every_detail_line_is_indented(self):
+        """pit_monitor relays indented lines live and treats the rest as summary."""
+        out = io.StringIO()
+        with redirect_stdout(out):
+            sync(LocalSource(self.robot), self.dest, [], settle_seconds=0)
+        for line in out.getvalue().splitlines():
+            self.assertTrue(line.startswith("  "), line)
+
+    def test_nothing_is_announced_when_the_robot_is_absent(self):
+        out = io.StringIO()
+        with redirect_stdout(out):
+            sync(LocalSource(Path("/no/such/robot")), self.dest, [])
+        self.assertEqual(out.getvalue(), "")
+
+    def test_a_slow_transfer_reports_its_progress(self):
+        partial = self.dest / "slow.wpilog.part"
+        self.dest.mkdir()
+        out = io.StringIO()
+        with unittest.mock.patch.object(sync_logs, "PROGRESS_REFRESH_PIPE", 0.05), \
+                redirect_stdout(out):
+            with reporting_progress(partial, 300, "slow.wpilog"):
+                partial.write_bytes(b"x" * 100)
+                time.sleep(0.2)
+                partial.write_bytes(b"x" * 200)
+                time.sleep(0.2)
+        lines = out.getvalue().splitlines()
+        self.assertTrue(any("(33%" in l for l in lines), lines)
+        self.assertTrue(any("(67%" in l for l in lines), lines)
+        self.assertEqual(len(lines), len(set(lines)), "an unchanged size repeats")
+
+    def test_a_quick_transfer_reports_nothing(self):
+        partial = self.dest / "quick.wpilog.part"
+        self.dest.mkdir()
+        out = io.StringIO()
+        with redirect_stdout(out):
+            with reporting_progress(partial, 10, "quick.wpilog"):
+                partial.write_bytes(b"x" * 10)
+        self.assertEqual(out.getvalue(), "")
 
 
 if __name__ == "__main__":

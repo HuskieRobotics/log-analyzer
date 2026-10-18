@@ -18,7 +18,10 @@ retried next run. Nothing to corrupt, and a restart mid-event neither redoes the
 day nor skips a match.
 
 The robot is usually absent. That is not an error: an unreachable host exits 0 so
-a polling loop stays quiet.
+a polling loop stays quiet. Once it is reached, everything after is narrated - the
+robot being seen, each file as it starts, and its progress while it copies - since
+a match log takes long enough to fetch that silence looks like a hang. Detail lines
+are indented and the summary is not; pit_monitor relays the indented ones live.
 
 Windows (the pit laptop)
 ------------------------
@@ -53,7 +56,9 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -73,11 +78,22 @@ LOG_SUFFIX = ".wpilog"
 # on this rather than on the exit code; it is shared so the two do not drift.
 UNREACHABLE_NOTICE = "Robot not reachable; nothing to do."
 
+# Starts the detail line printed once a log is in place under its final name.
+# pit_monitor watches for it to analyse a new match while older logs are still
+# copying, so it is shared for the same reason.
+COPIED_PREFIX = "copied "
+
 # Win32-OpenSSH does not understand /dev/null as a path; it wants NUL. The robot
 # is a link-local device that is reimaged regularly, so its host key changes and
 # is not worth recording either way.
 NULL_DEVICE = "NUL" if os.name == "nt" else "/dev/null"
 PARTIAL_SUFFIX = ".part"
+
+# How often a transfer reports its progress. On a terminal the line is rewritten
+# in place, so it can be frequent; anywhere else - pit_monitor's pipe, a log file
+# - each report is a new line, so it is sparser.
+PROGRESS_REFRESH_TTY = 0.5
+PROGRESS_REFRESH_PIPE = 5.0
 
 # One `find` over several starting points, formatted by `ls -l`. Deliberately
 # free of pipes, `while read` loops and command substitution: a version using all
@@ -176,6 +192,12 @@ def recorded_at(name: str) -> Optional[datetime]:
     return None
 
 
+def newest_first(files: Sequence[RemoteFile]) -> List[RemoteFile]:
+    """Order by recording time, most recent first; undated logs sort oldest."""
+    return sorted(files, key=lambda f: (recorded_at(f.name) or datetime.min, f.name),
+                  reverse=True)
+
+
 def apply_selection(files: List[RemoteFile], since: Optional[datetime] = None,
                     newest: Optional[int] = None, min_size: int = 0,
                     until: Optional[datetime] = None
@@ -234,8 +256,7 @@ def apply_selection(files: List[RemoteFile], since: Optional[datetime] = None,
                 if recorded_at(f.name) is not None and recorded_at(f.name) <= end]
 
     if newest is not None and newest > 0 and len(kept) > newest:
-        kept.sort(key=lambda f: (recorded_at(f.name) or datetime.min, f.name),
-                  reverse=True)
+        kept = newest_first(kept)
         reasons.append(f"{len(kept) - newest} beyond the newest {newest}")
         kept = kept[:newest]
 
@@ -284,6 +305,67 @@ def select_new_files(remote_files: Sequence[RemoteFile],
 
     return [candidate for _, candidate in sorted(best.items())
             if local.get(candidate.name) != candidate.size]
+
+
+def megabytes(size: int) -> str:
+    return f"{size / 1e6:.1f} MB"
+
+
+def progress_line(name: str, done: int, total: int, elapsed: float) -> str:
+    """One progress report for a transfer, e.g. `x.wpilog 12.0 of 45.0 MB (27%)`."""
+    percent = 100 * done / total if total > 0 else 100
+    rate = f", {done / elapsed / 1e6:.1f} MB/s" if elapsed > 0 else ""
+    return (f"    {name}: {done / 1e6:.1f} of {megabytes(total)} "
+            f"({percent:.0f}%{rate})")
+
+
+@contextmanager
+def reporting_progress(partial: Path, total: int, name: str):
+    """Report a download's growth while the body of the `with` fetches it.
+
+    The size is read off the partial file rather than from the transport, so it
+    works the same for scp (whose own meter is suppressed without a tty) and for
+    a local copy, on any platform. A transfer quicker than one refresh reports
+    nothing, which keeps small files and the tests quiet.
+    """
+    out = sys.stdout
+    live = out.isatty()
+    interval = PROGRESS_REFRESH_TTY if live else PROGRESS_REFRESH_PIPE
+    stop = threading.Event()
+    start = time.monotonic()
+    width = 0
+
+    def report() -> None:
+        nonlocal width
+        last = -1
+        while not stop.wait(interval):
+            try:
+                done = partial.stat().st_size
+            except OSError:
+                continue  # not created yet
+            if done == last:
+                continue
+            last = done
+            line = progress_line(name, done, total, time.monotonic() - start)
+            if live:
+                # Padding rather than an ANSI erase, which legacy Windows
+                # consoles print literally.
+                out.write("\r" + line.ljust(width))
+                width = max(width, len(line))
+            else:
+                out.write(line + "\n")
+            out.flush()
+
+    watcher = threading.Thread(target=report, daemon=True)
+    watcher.start()
+    try:
+        yield
+    finally:
+        stop.set()
+        watcher.join()
+        if live and width:
+            out.write("\r" + " " * width + "\r")
+            out.flush()
 
 
 # === Transports ==============================================================
@@ -491,6 +573,10 @@ def sync(source, destination: Path, remote_dirs: Sequence[str],
     if listing is None:
         result.reachable = False
         return result
+    # The first sign the robot has been seen; everything before this is silent
+    # because an absent robot is the normal case.
+    print(f"  reached {source.describe()}: {len(listing)} log(s) found",
+          flush=True)
 
     if settle_seconds > 0 and listing:
         # The robot is logging the whole time it is powered, including in the
@@ -512,19 +598,30 @@ def sync(source, destination: Path, remote_dirs: Sequence[str],
         print(f"  skipping {reason}")
 
     local = local_index(destination)
-    wanted = select_new_files(listing, local)
+    # Newest first: in the pit that is the match that just ended, so it is the
+    # one wanted soonest, and anything older can follow - or wait for the next
+    # sync if the robot is pulled away mid-transfer.
+    wanted = newest_first(select_new_files(listing, local))
     result.skipped = [f for f in listing if f not in wanted and f.name in local]
+
+    if wanted:
+        print(f"  {len(wanted)} new log(s), "
+              f"{megabytes(sum(f.size for f in wanted))} in all", flush=True)
 
     if dry_run:
         result.downloaded = wanted
         return result
 
     destination.mkdir(parents=True, exist_ok=True)
-    for remote in wanted:
+    for number, remote in enumerate(wanted, 1):
         target = destination / remote.name
         partial = destination / (remote.name + PARTIAL_SUFFIX)
+        print(f"  fetching {number}/{len(wanted)}: {remote.name} "
+              f"({megabytes(remote.size)})", flush=True)
+        started = time.monotonic()
         try:
-            source.fetch(remote, partial)
+            with reporting_progress(partial, remote.size, remote.name):
+                source.fetch(remote, partial)
             actual = partial.stat().st_size
             if actual != remote.size:
                 raise RuntimeError(
@@ -533,7 +630,8 @@ def sync(source, destination: Path, remote_dirs: Sequence[str],
             # a watcher never sees a half-written log.
             os.replace(partial, target)
             result.downloaded.append(remote)
-            print(f"  copied {remote.name} ({remote.size:,} bytes)")
+            print(f"  {COPIED_PREFIX}{remote.name} ({remote.size:,} bytes) in "
+                  f"{time.monotonic() - started:.1f}s", flush=True)
         except Exception as error:  # noqa: BLE001 - reported, never fatal
             partial.unlink(missing_ok=True)
             result.failed.append(f"{remote.name}: {error}")

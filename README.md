@@ -395,6 +395,15 @@ is never left where the analyzer would read it. The robot's open log is detected
 comparing two listings and left alone. An unreachable robot is reported and exits
 cleanly, which is what lets the monitor loop survive a dropped network.
 
+New logs are fetched newest first, so the match that just ended lands before
+anything older; a log whose name carries no date cannot be placed and comes
+last. Once the robot is reached the sync narrates: a `reached ...: N log(s) found` line
+confirms it has been seen, then each file is announced as it starts
+(`fetching 2/3: ...`) with its progress every few seconds while it copies. On a
+terminal the progress line updates in place. `pit_monitor.py` relays these lines
+as they happen, prefixed `sync:`, and leaves out any that only repeat the
+previous cycle.
+
 First-time setup needs the host key accepted once:
 
 ```bash
@@ -422,7 +431,9 @@ python pit_monitor.py ./logs checks2026.json --html report.html \
 | `--once` | Run a single cycle and exit |
 
 Each cycle syncs, works out which log *would* be analyzed, and re-runs the
-analyzer only if that has changed. Nothing in a cycle is allowed to kill the loop:
+analyzer only if that has changed. That check also runs each time the sync lands
+a log, and logs are fetched newest first, so the match that just ended is
+analyzed while older logs are still copying. Nothing in a cycle is allowed to kill the loop:
 an absent robot, an unreachable host, a bad config or a failed analysis are all
 reported and the loop continues, because a pit display that dies at the wrong
 moment is worse than a stale one.
