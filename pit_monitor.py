@@ -7,7 +7,9 @@ fetches, analysis.py analyses, and this loops.
     ./pit_monitor.py ./logs checks2026.json --sync-from 10.30.61.2
 
 Each cycle it optionally syncs, works out which log *would* be analysed, and
-re-runs the analyser only if that has changed. Paired with the report's meta
+re-runs the analyser only if that has changed - not just once the sync is done
+but each time it lands a log, so the match that just ended (fetched first) is
+analysed while older logs are still copying. Paired with the report's meta
 refresh, a browser left open on the report tracks the newest match with nothing
 typed between matches.
 
@@ -25,8 +27,11 @@ continues; a pit display that dies at the wrong moment is worse than a stale one
 
 import argparse
 import os
+import queue
 import subprocess
 import sys
+import tempfile
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -34,7 +39,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 from analysis import (MatchCache, classify_match_log, load_match_cache,
                       log_recorded_at, save_match_cache)
-from sync_logs import UNREACHABLE_NOTICE
+from sync_logs import COPIED_PREFIX, UNREACHABLE_NOTICE
 
 HERE = Path(__file__).resolve().parent
 ANALYSIS = HERE / "analysis.py"
@@ -129,17 +134,53 @@ def find_target(folder: Path, settle_seconds: float,
     return None, growing
 
 
-def run_sync(folder: Path, host: str, extra: List[str]) -> Tuple[str, str]:
-    """Fetch new logs. Returns (status, last line of output)."""
-    command = [sys.executable, str(SYNC), str(folder), "--host", host] + extra
+def run_sync(folder: Path, host: str, extra: List[str],
+             progress: Optional[Callable[[str], None]] = None) -> Tuple[str, str]:
+    """Fetch new logs. Returns (status, last line of output).
+
+    Args:
+        progress: Given each indented stdout line as it is printed - the robot
+            being reached, each file starting, its progress - so a sync that
+            takes minutes is visibly doing something. The summary line is not
+            relayed; it is the return value. stderr is not streamed, since an
+            absent robot complains there every cycle.
+    """
+    command = [sys.executable, "-u", str(SYNC), str(folder), "--host", host] + extra
+    lines: List[str] = []
+
+    def pump(stream) -> None:
+        for raw in stream:
+            line = raw.rstrip("\n")
+            lines.append(line)
+            if progress is not None and line[:1].isspace() and line.strip():
+                progress(line.strip())
+
     try:
-        done = subprocess.run(command, capture_output=True, text=True, timeout=600)
-    except (subprocess.TimeoutExpired, OSError) as error:
+        # stderr to a file rather than a second pipe, so a chatty failure cannot
+        # fill a pipe nobody is reading and stall the child.
+        with tempfile.TemporaryFile(mode="w+") as errors:
+            child = subprocess.Popen(command, stdout=subprocess.PIPE,
+                                     stderr=errors, text=True)
+            reader = threading.Thread(target=pump, args=(child.stdout,),
+                                      daemon=True)
+            reader.start()
+            try:
+                returncode = child.wait(timeout=600)
+            except subprocess.TimeoutExpired as error:
+                child.kill()
+                child.wait()
+                return "failed", f"sync failed: {error}"
+            finally:
+                reader.join()
+                child.stdout.close()
+            errors.seek(0)
+            stderr = errors.read()
+    except OSError as error:
         return "failed", f"sync failed: {error}"
-    combined = done.stdout + done.stderr
+    combined = "\n".join(lines) + "\n" + stderr
     output = combined.strip().splitlines()
     last = output[-1] if output else ""
-    if done.returncode != 0:
+    if returncode != 0:
         return "failed", last
     if UNREACHABLE_NOTICE in combined:
         return "unreachable", last
@@ -174,7 +215,7 @@ def run_analysis(folder: Path, config: Path, html: Path,
 
 
 class Monitor:
-    """One cycle of sync, decide, analyse - kept separable so it can be tested."""
+    """One cycle of sync and analyse - kept separable so it can be tested."""
 
     def __init__(self, folder: Path, config: Path, html: Path,
                  settle_seconds: float = 1.0,
@@ -195,6 +236,14 @@ class Monitor:
         self.analyser = analyser
         self.announce = announce
         self.last_analysed: Optional[str] = None
+        # Sync detail lines relayed last cycle and this one. While the robot
+        # stays connected most of them ("reached ...: 198 log(s) found") repeat
+        # every cycle; only a change is news.
+        self._sync_lines_before: set = set()
+        self._sync_lines_now: set = set()
+        # Set while a sync runs; each completed copy is posted to it so the
+        # cycle can analyse a new match without waiting for older logs.
+        self._landed: Optional[queue.Queue] = None
         # Seeded from disk so a restart, or a laptop that has already run once
         # today, does not re-read every pit session it has ever synced.
         self.match_cache: MatchCache = load_match_cache(str(folder))
@@ -209,20 +258,74 @@ class Monitor:
         if self.announce is not None:
             self.announce(message)
 
+    def relay_sync(self, line: str) -> None:
+        """Show a sync detail line live, unless it only repeats last cycle."""
+        self._sync_lines_now.add(line)
+        if self.announce is not None and line not in self._sync_lines_before:
+            self.announce(f"sync: {line}")
+        landed = self._landed
+        if landed is not None and line.startswith(COPIED_PREFIX):
+            landed.put("copied")
+
     def cycle(self) -> CycleResult:
-        """Run one pass. Never raises; failures are reported and survived."""
+        """Run one pass. Never raises; failures are reported and survived.
+
+        The sync runs on a worker thread and the report is brought up to date
+        each time it lands a log, not only once it finishes. Logs are fetched
+        newest first, so the match that just ended is usually the first to land
+        and is analysed while older logs are still copying.
+        """
         result = CycleResult()
+        attempted: set = set()
 
         if self.sync_host:
+            self._sync_lines_now = set()
+            events: queue.Queue = queue.Queue()
+            outcome: List[Tuple[str, str]] = []
+
+            def work() -> None:
+                try:
+                    outcome.append(self.syncer(self.folder, self.sync_host,
+                                               self.sync_extra, self.relay_sync))
+                except Exception as error:  # noqa: BLE001 - must not be fatal
+                    outcome.append(("failed", f"sync raised: {error}"))
+                finally:
+                    events.put("done")
+
+            self._landed = events
+            worker = threading.Thread(target=work, daemon=True)
+            worker.start()
             try:
-                status, message = self.syncer(self.folder, self.sync_host,
-                                              self.sync_extra)
-            except Exception as error:  # noqa: BLE001 - a cycle must not be fatal
-                status, message = "failed", f"sync raised: {error}"
+                while True:
+                    try:
+                        # A timeout rather than a bare get(): on Windows an
+                        # untimed wait cannot be interrupted by Ctrl+C.
+                        event = events.get(timeout=0.5)
+                    except queue.Empty:
+                        continue
+                    if event == "done":
+                        break
+                    self.update_report(result, attempted, final=False)
+            finally:
+                self._landed = None
+            worker.join()
+            self._sync_lines_before = self._sync_lines_now
+            status, message = outcome[0]
             result.sync_status = status
             if message:
                 self.say(result, message)
 
+        self.update_report(result, attempted, final=True)
+        return result
+
+    def update_report(self, result: CycleResult, attempted: set,
+                      final: bool) -> None:
+        """Analyse the newest settled match if the report does not show it yet.
+
+        Runs after each log lands mid-sync and once more at the end of the
+        cycle. Mid-sync passes stay quiet when there is nothing to do, and a
+        target whose analysis failed is not retried within the same cycle.
+        """
         cached_before = dict(self.match_cache)
         try:
             target, growing = find_target(
@@ -230,7 +333,7 @@ class Monitor:
                 announce=None if self.announce is None else self.announce)
         except Exception as error:  # noqa: BLE001
             self.say(result, f"could not inspect {self.folder}: {error}")
-            return result
+            return
         if self.match_cache != cached_before:
             save_match_cache(str(self.folder), self.match_cache)
 
@@ -238,11 +341,13 @@ class Monitor:
         result.still_writing = growing
 
         if target is None:
-            self.say(result, "no finished match log yet")
-            return result
+            if final:
+                self.say(result, "no finished match log yet")
+            return
 
-        if target == self.last_analysed:
-            return result  # nothing new; leave the page alone
+        if target == self.last_analysed or target in attempted:
+            return  # nothing new; leave the page alone
+        attempted.add(target)
 
         try:
             ok, message = self.analyser(self.folder, self.config, self.html,
@@ -254,7 +359,6 @@ class Monitor:
         if ok:
             self.last_analysed = target
             result.analysed = True
-        return result
 
 
 def describe(result: CycleResult) -> str:
