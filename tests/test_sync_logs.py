@@ -23,6 +23,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import sync_logs  # noqa: E402
 from sync_logs import (  # noqa: E402
+    FAILURES_NAME,
+    GIVE_UP_AFTER,
     LISTING_SCRIPT,
     apply_selection,
     recorded_at,
@@ -31,13 +33,18 @@ from sync_logs import (  # noqa: E402
     LocalSource,
     SshSource,
     RemoteFile,
+    given_up,
+    load_failures,
     local_index,
     parse_listing,
     progress_line,
+    record_failure,
     reporting_progress,
     select_new_files,
     sync,
+    truncated_name,
 )
+from datalog import DataLogReader  # noqa: E402
 
 
 def parse_windows_command_line(command_line):
@@ -650,6 +657,190 @@ class ProgressTest(unittest.TestCase):
             with reporting_progress(partial, 10, "quick.wpilog"):
                 partial.write_bytes(b"x" * 10)
         self.assertEqual(out.getvalue(), "")
+
+
+class FailureRecordTest(unittest.TestCase):
+
+    def test_failures_at_one_size_accumulate(self):
+        failures = {}
+        log = RemoteFile("/u/a.wpilog", 100)
+        self.assertEqual([record_failure(failures, log, "x") for _ in range(3)],
+                         [1, 2, 3])
+        self.assertTrue(given_up(failures, log))
+
+    def test_a_new_size_starts_the_count_again(self):
+        failures = {}
+        for _ in range(GIVE_UP_AFTER):
+            record_failure(failures, RemoteFile("/u/a.wpilog", 100), "x")
+        grown = RemoteFile("/u/a.wpilog", 200)
+        self.assertFalse(given_up(failures, grown))
+        self.assertEqual(record_failure(failures, grown, "x"), 1)
+
+    def test_it_takes_three(self):
+        failures = {}
+        log = RemoteFile("/u/a.wpilog", 100)
+        for _ in range(GIVE_UP_AFTER - 1):
+            record_failure(failures, log, "x")
+        self.assertFalse(given_up(failures, log))
+        self.assertEqual(GIVE_UP_AFTER, 3)
+
+    def test_unreadable_state_means_no_failures(self):
+        with tempfile.TemporaryDirectory() as folder:
+            (Path(folder) / FAILURES_NAME).write_text("{not json")
+            self.assertEqual(load_failures(Path(folder)), {})
+            (Path(folder) / FAILURES_NAME).write_text('{"a.wpilog": {"size": "x"}}')
+            self.assertEqual(load_failures(Path(folder)), {})
+
+    def test_the_truncated_copy_is_still_a_log_with_its_date(self):
+        name = truncated_name("akit_26-10-20_00-57-11_wimil.wpilog")
+        self.assertEqual(name, "akit_26-10-20_00-57-11_wimil.truncated.wpilog")
+        self.assertIsNotNone(recorded_at(name))
+
+
+class GiveUpOnUnreadableLogTest(unittest.TestCase):
+    """A finished log whose tail the robot cannot read failed every cycle,
+    re-downloading 77 MB each time to throw it away."""
+
+    BAD = "akit_26-10-20_00-57-11_wimil.wpilog"
+    GOOD = "akit_26-10-20_09-00-00_wimil_q1.wpilog"
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        root = Path(self._tmp.name)
+        self.robot = root / "robot"
+        self.dest = root / "dest"
+        self.robot.mkdir()
+        (self.robot / self.BAD).write_bytes(bytes(range(256)) * 40)
+        (self.robot / self.GOOD).write_bytes(b"g" * 500)
+        self.attempts = []
+        self.readable = 4000  # the robot fails past this many bytes
+        test = self
+
+        class DamagedStick(LocalSource):
+            def fetch(inner, remote, target):
+                test.attempts.append(remote.name)
+                if remote.name != test.BAD or test.readable is None:
+                    return super().fetch(remote, target)
+                # What scp leaves: the contiguous part it did read.
+                target.write_bytes(Path(remote.path).read_bytes()[:test.readable])
+                raise RuntimeError("read error on the robot")
+
+        self.source = DamagedStick(self.robot)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def run_sync(self, **kwargs):
+        self.attempts.clear()
+        out = io.StringIO()
+        with redirect_stdout(out), redirect_stderr(out):
+            result = sync(self.source, self.dest, [], settle_seconds=0, **kwargs)
+        self.output = out.getvalue()
+        return result
+
+    def kept(self):
+        return self.dest / truncated_name(self.BAD)
+
+    def test_the_first_failures_are_retried_and_leave_nothing(self):
+        for attempt in range(1, GIVE_UP_AFTER):
+            result = self.run_sync()
+            self.assertIn(self.BAD, self.attempts)
+            self.assertEqual(len(result.failed), 1)
+            self.assertIn(f"attempt {attempt} of {GIVE_UP_AFTER}", self.output)
+            self.assertFalse(self.kept().exists())
+        self.assertEqual(list(self.dest.glob("*.part")), [])
+
+    def test_the_third_failure_keeps_the_readable_part(self):
+        for _ in range(GIVE_UP_AFTER):
+            result = self.run_sync()
+        self.assertEqual(len(result.failed), 1, "that run still failed")
+        self.assertEqual(self.kept().read_bytes(),
+                         (self.robot / self.BAD).read_bytes()[:4000])
+        self.assertFalse((self.dest / self.BAD).exists())
+        self.assertIn("giving up", self.output)
+        self.assertEqual(list(self.dest.glob("*.part")), [])
+
+    def test_after_giving_up_it_is_not_attempted_or_a_failure(self):
+        for _ in range(GIVE_UP_AFTER):
+            self.run_sync()
+        result = self.run_sync()
+        self.assertNotIn(self.BAD, self.attempts)
+        self.assertEqual(result.failed, [])
+        self.assertEqual(result.abandoned, [self.BAD])
+        self.assertIn("--retry-failed", self.output)
+        self.assertIn(self.kept().name, self.output)
+
+    def test_other_logs_still_arrive(self):
+        result = self.run_sync()
+        self.assertEqual([f.name for f in result.downloaded], [self.GOOD])
+
+    def test_a_change_in_size_tries_again(self):
+        for _ in range(GIVE_UP_AFTER):
+            self.run_sync()
+        with open(self.robot / self.BAD, "ab") as handle:
+            handle.write(b"more")
+        self.run_sync()
+        self.assertIn(self.BAD, self.attempts)
+
+    def test_retry_failed_tries_again_and_success_clears_up(self):
+        for _ in range(GIVE_UP_AFTER):
+            self.run_sync()
+        self.readable = None  # the stick has been repaired
+        result = self.run_sync(retry_failed=True)
+        self.assertIn(self.BAD, [f.name for f in result.downloaded])
+        self.assertFalse(self.kept().exists())
+        self.assertFalse((self.dest / FAILURES_NAME).exists())
+
+    def test_a_transient_failure_is_forgotten_once_it_copies(self):
+        self.run_sync()
+        self.readable = None
+        self.run_sync()
+        self.assertTrue((self.dest / self.BAD).exists())
+        self.assertEqual(load_failures(self.dest), {})
+
+    def test_a_log_gone_from_the_robot_is_forgotten(self):
+        self.run_sync()
+        (self.robot / self.BAD).unlink()
+        self.run_sync()
+        self.assertEqual(load_failures(self.dest), {})
+
+    def test_dry_run_records_nothing(self):
+        for _ in range(GIVE_UP_AFTER):
+            self.run_sync()
+        before = (self.dest / FAILURES_NAME).read_text()
+        result = self.run_sync(dry_run=True)
+        self.assertNotIn(self.BAD, [f.name for f in result.downloaded])
+        self.assertEqual((self.dest / FAILURES_NAME).read_text(), before)
+
+
+class TruncatedCopyIsReadableTest(unittest.TestCase):
+    """The point of keeping it: a wpilog cut off mid-record still reads."""
+
+    LOG = (Path(__file__).resolve().parent.parent / "test" / "2026"
+           / "akit_26-04-29_19-26-56.wpilog")
+
+    @unittest.skipUnless(LOG.exists(), "2026 logs not present")
+    def test_a_log_cut_mid_record_reads_up_to_the_cut(self):
+        with open(self.LOG, "rb") as handle:
+            head = handle.read(3_000_001)  # an arbitrary, unaligned cut
+        reader = iter(DataLogReader(head))
+        records = list(reader)
+        self.assertGreater(len(records), 1000)
+        # It stopped at the cut-off record, not somewhere earlier.
+        self.assertLess(len(head) - reader.pos, 64 * 1024)
+
+
+class ReadErrorMessageTest(unittest.TestCase):
+
+    def test_scps_end_of_file_is_reported_as_a_read_error(self):
+        failed = subprocess.CompletedProcess(
+            [], 1, "", 'scp: read remote "/media/sda1/x.wpilog" : End of file\n')
+        source = SshSource("h", "admin")
+        with unittest.mock.patch.object(subprocess, "run", return_value=failed):
+            with self.assertRaises(RuntimeError) as raised:
+                source.fetch(RemoteFile("/media/sda1/x.wpilog", 10), Path("x.part"))
+        self.assertIn("read error on the robot", str(raised.exception))
+        self.assertIn("End of file", str(raised.exception))
 
 
 if __name__ == "__main__":
