@@ -23,6 +23,15 @@ robot being seen, each file as it starts, and its progress while it copies - sin
 a match log takes long enough to fetch that silence looks like a hang. Detail lines
 are indented and the summary is not; pit_monitor relays the indented ones live.
 
+A log that will not copy is not retried forever. A finished log can be damaged
+partway - the robot losing power mid-write, or a bad spot on the stick - so that
+the robot cannot read its tail, and every attempt then fails at the same place.
+Failures are remembered in the destination folder, and after GIVE_UP_AFTER at
+the same remote size the readable part is kept as `<name>.truncated.wpilog`
+(the reader stops cleanly at a cut-off record, so it analyses and opens in
+AdvantageScope) and the log is skipped from then on. A change in its size, or
+--retry-failed, tries it again.
+
 Windows (the pit laptop)
 ------------------------
 Run it as `python sync_logs.py ...`; the shebang and the executable bit do
@@ -51,7 +60,9 @@ After that every sync is non-interactive on any platform.
 """
 
 import argparse
+import json
 import os
+import tempfile
 import re
 import shutil
 import subprocess
@@ -88,6 +99,17 @@ COPIED_PREFIX = "copied "
 # is not worth recording either way.
 NULL_DEVICE = "NUL" if os.name == "nt" else "/dev/null"
 PARTIAL_SUFFIX = ".part"
+
+# Failed fetches, by log name, kept beside the logs like analysis.py's
+# .match-cache.json. Hidden, and not a .wpilog, so nothing mistakes it for a log.
+FAILURES_NAME = ".sync-failures.json"
+
+# Attempts at one remote size before giving up. More than one, because a single
+# failure is often transient - the robot unplugged mid-copy - and giving up on
+# that would lose a match log; a log that is merely still growing never reaches
+# it, since its size differs on every attempt.
+GIVE_UP_AFTER = 3
+TRUNCATED_SUFFIX = ".truncated" + LOG_SUFFIX
 
 # How often a transfer reports its progress. On a terminal the line is rewritten
 # in place, so it can be frequent; anywhere else - pit_monitor's pipe, a log file
@@ -138,6 +160,9 @@ class SyncResult:
     skipped: List[RemoteFile] = field(default_factory=list)
     active: List[str] = field(default_factory=list)
     failed: List[str] = field(default_factory=list)
+    # Logs that failed GIVE_UP_AFTER times at their current size and were not
+    # attempted; a failure that reaches the limit is in `failed` for that run.
+    abandoned: List[str] = field(default_factory=list)
     reachable: bool = True
 
 
@@ -368,6 +393,65 @@ def reporting_progress(partial: Path, total: int, name: str):
             out.flush()
 
 
+def truncated_name(name: str) -> str:
+    """Where the readable part of a log that could not be copied is kept."""
+    return name[:-len(LOG_SUFFIX)] + TRUNCATED_SUFFIX
+
+
+def load_failures(destination: Path) -> Dict[str, dict]:
+    """Name -> {"size", "count", "error"} for logs whose fetch has failed.
+
+    Unreadable or malformed state is treated as empty: the worst outcome is a
+    few more attempts, never a skipped log.
+    """
+    try:
+        with open(destination / FAILURES_NAME, encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {name: record for name, record in data.items()
+            if isinstance(record, dict) and isinstance(record.get("size"), int)
+            and isinstance(record.get("count"), int)}
+
+
+def save_failures(destination: Path, failures: Dict[str, dict]) -> None:
+    """Write the failure record atomically, or remove it once it is empty."""
+    path = destination / FAILURES_NAME
+    if not failures:
+        path.unlink(missing_ok=True)
+        return
+    descriptor, temporary = tempfile.mkstemp(dir=destination,
+                                             prefix=".sync-failures-")
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump(failures, handle, indent=1, sort_keys=True)
+        os.replace(temporary, path)
+    except OSError:
+        Path(temporary).unlink(missing_ok=True)
+
+
+def record_failure(failures: Dict[str, dict], remote: RemoteFile,
+                   error: str) -> int:
+    """Count a failed fetch and return how many in a row at this size.
+
+    A different size starts the count again: the log has changed, so earlier
+    failures say nothing about it.
+    """
+    previous = failures.get(remote.name)
+    count = previous["count"] + 1 if previous and previous["size"] == remote.size else 1
+    failures[remote.name] = {"size": remote.size, "count": count, "error": error}
+    return count
+
+
+def given_up(failures: Dict[str, dict], remote: RemoteFile) -> bool:
+    """Whether this log has already failed too often at its current size."""
+    record = failures.get(remote.name)
+    return (record is not None and record["size"] == remote.size
+            and record["count"] >= GIVE_UP_AFTER)
+
+
 # === Transports ==============================================================
 
 class LocalSource:
@@ -523,7 +607,13 @@ class SshSource:
         done = subprocess.run(command, capture_output=True, text=True,
                                stdin=subprocess.DEVNULL)
         if done.returncode != 0:
-            raise RuntimeError(done.stderr.strip() or f"scp exited {done.returncode}")
+            message = done.stderr.strip() or f"scp exited {done.returncode}"
+            if "read remote" in message:
+                # OpenSSH reports the last status it received rather than the
+                # one that failed the read, so a read error on the robot reads
+                # as "End of file". Say what it is.
+                message = "read error on the robot (scp reports it as 'End of file')"
+            raise RuntimeError(message)
 
 
 # === Orchestration ===========================================================
@@ -553,7 +643,8 @@ def probe(source, remote_dirs: Sequence[str], timeout: int = 12) -> bool:
 def sync(source, destination: Path, remote_dirs: Sequence[str],
          dry_run: bool = False, settle_seconds: float = 2.0,
          since: Optional[datetime] = None, newest: Optional[int] = None,
-         min_size: int = 0, until: Optional[datetime] = None) -> SyncResult:
+         min_size: int = 0, until: Optional[datetime] = None,
+         retry_failed: bool = False) -> SyncResult:
     """Copy every finished log not already present in the destination folder.
 
     Args:
@@ -563,6 +654,8 @@ def sync(source, destination: Path, remote_dirs: Sequence[str],
         dry_run: List what would be copied without copying it
         settle_seconds: Gap between two listings used to spot a log that is still
             being written; 0 disables the check
+        retry_failed: Attempt logs that have already failed GIVE_UP_AFTER
+            times at their current size
 
     Returns:
         A SyncResult naming what was downloaded, skipped, still active and failed
@@ -577,6 +670,7 @@ def sync(source, destination: Path, remote_dirs: Sequence[str],
     # because an absent robot is the normal case.
     print(f"  reached {source.describe()}: {len(listing)} log(s) found",
           flush=True)
+    on_robot = {entry.name for entry in listing}
 
     if settle_seconds > 0 and listing:
         # The robot is logging the whole time it is powered, including in the
@@ -603,6 +697,20 @@ def sync(source, destination: Path, remote_dirs: Sequence[str],
     # sync if the robot is pulled away mid-transfer.
     wanted = newest_first(select_new_files(listing, local))
     result.skipped = [f for f in listing if f not in wanted and f.name in local]
+
+    recorded = load_failures(destination)
+    # A record outlives its log only until the robot no longer has it.
+    failures = {name: record for name, record in recorded.items()
+                if name in on_robot}
+    if not retry_failed:
+        for remote in [f for f in wanted if given_up(failures, f)]:
+            wanted.remove(remote)
+            result.abandoned.append(remote.name)
+            kept = destination / truncated_name(remote.name)
+            print(f"  skipping {remote.name}: failed {GIVE_UP_AFTER} times at "
+                  f"this size ({failures[remote.name].get('error', 'unknown')})"
+                  + (f"; readable part kept as {kept.name}" if kept.exists() else "")
+                  + "; --retry-failed to try again")
 
     if wanted:
         print(f"  {len(wanted)} new log(s), "
@@ -632,12 +740,45 @@ def sync(source, destination: Path, remote_dirs: Sequence[str],
             result.downloaded.append(remote)
             print(f"  {COPIED_PREFIX}{remote.name} ({remote.size:,} bytes) in "
                   f"{time.monotonic() - started:.1f}s", flush=True)
+            if failures.pop(remote.name, None) is not None:
+                # The whole log is here now, so a partial copy is only clutter.
+                (destination / truncated_name(remote.name)).unlink(missing_ok=True)
         except Exception as error:  # noqa: BLE001 - reported, never fatal
-            partial.unlink(missing_ok=True)
+            attempt = record_failure(failures, remote, str(error))
             result.failed.append(f"{remote.name}: {error}")
-            print(f"  FAILED {remote.name}: {error}", file=sys.stderr)
+            print(f"  FAILED {remote.name} (attempt {attempt} of "
+                  f"{GIVE_UP_AFTER}): {error}", file=sys.stderr)
+            if attempt >= GIVE_UP_AFTER:
+                give_up(partial, destination, remote)
+            else:
+                partial.unlink(missing_ok=True)
 
+    if failures != recorded:
+        save_failures(destination, failures)
     return result
+
+
+def give_up(partial: Path, destination: Path, remote: RemoteFile) -> None:
+    """Keep what did copy of a log that keeps failing, and say so.
+
+    Whatever arrived before the failure is a contiguous prefix - scp truncates a
+    failed download at its last contiguous byte - and a wpilog cut off anywhere
+    still reads up to its last whole record.
+    """
+    kept = destination / truncated_name(remote.name)
+    try:
+        size = partial.stat().st_size
+    except OSError:
+        size = 0
+    if size > 0:
+        os.replace(partial, kept)
+        print(f"  giving up on {remote.name} after {GIVE_UP_AFTER} failed "
+              f"attempts; kept the readable {megabytes(size)} of "
+              f"{megabytes(remote.size)} as {kept.name}", flush=True)
+    else:
+        partial.unlink(missing_ok=True)
+        print(f"  giving up on {remote.name} after {GIVE_UP_AFTER} failed "
+              f"attempts; nothing was readable", flush=True)
 
 
 def main() -> None:
@@ -684,6 +825,10 @@ def main() -> None:
                         metavar="SECONDS",
                         help="gap between two listings used to detect the log "
                              "the robot still has open; 0 disables (default 2)")
+    parser.add_argument("--retry-failed", action="store_true",
+                        help=f"attempt logs that have failed {GIVE_UP_AFTER} "
+                             f"times at their current size, which are otherwise "
+                             f"skipped")
     parser.add_argument("--dry-run", action="store_true",
                         help="list what would be copied, copy nothing")
     args = parser.parse_args()
@@ -729,7 +874,8 @@ def main() -> None:
 
     result = sync(source, destination, remote_dirs, args.dry_run,
                   settle_seconds=args.settle_seconds, since=since,
-                  newest=args.newest, min_size=args.min_size, until=until)
+                  newest=args.newest, min_size=args.min_size, until=until,
+                  retry_failed=args.retry_failed)
 
     if not result.reachable:
         # The robot is absent most of the time; that is the normal case, so a
@@ -745,7 +891,8 @@ def main() -> None:
     print(f"{verb} {len(result.downloaded)}, "
           f"already present {len(result.skipped)}, "
           f"still being written {len(result.active)}, "
-          f"failed {len(result.failed)}")
+          f"failed {len(result.failed)}"
+          + (f", given up on {len(result.abandoned)}" if result.abandoned else ""))
     sys.exit(1 if result.failed else 0)
 
 

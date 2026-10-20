@@ -385,6 +385,7 @@ python sync_logs.py ./logs --host 10.30.61.2 --newest 5
 | `--settle-seconds SECONDS` | Gap between two listings, used to detect the log the robot still has open; `0` disables (default 2) |
 | `--probe` | Run increasingly demanding remote commands and report the first that fails; changes nothing |
 | `--debug` | Print the exact `ssh`/`scp` commands being run |
+| `--retry-failed` | Attempt logs that have failed three times at their current size, which are otherwise skipped |
 | `--dry-run` | List what would be copied, copy nothing |
 
 Date filters are applied **before** `--newest`, so `--since` with `--newest` can
@@ -394,6 +395,16 @@ Transfers are atomic — copied to a temporary name and renamed — so a partial
 is never left where the analyzer would read it. The robot's open log is detected by
 comparing two listings and left alone. An unreachable robot is reported and exits
 cleanly, which is what lets the monitor loop survive a dropped network.
+
+A log that will not copy is not retried forever. A finished log can be damaged
+so the robot cannot read its tail (power lost mid-write, or a bad spot on the
+stick), and then every attempt fails at the same place. Failures are recorded in
+`.sync-failures.json` in the destination folder. After three at the same remote
+size, the part that did copy is kept as `<name>.truncated.wpilog` and the log is
+skipped from then on, with a line saying so. A truncated log still opens in
+AdvantageScope and analyzes up to where it stops. If the log's size changes it is
+tried again; `--retry-failed` forces a retry. scp reports a read error on the
+robot as "End of file"; the sync says what it actually is.
 
 New logs are fetched newest first, so the match that just ended lands before
 anything older; a log whose name carries no date cannot be placed and comes
