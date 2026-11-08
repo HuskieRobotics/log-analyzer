@@ -7,6 +7,12 @@ features, what measuring the logs revealed, and the order to build in.
 Written 2026-09-07, against the post-optimization tree (analyzer runs both sample
 logs in ~7 s; golden suite in [tests/](../tests/) is green).
 
+**Status, 2026-11-08:** Milestone A (pit mode) is complete and has been used at
+two events, where it worked as expected. The second event ran the current code,
+including the sync and monitor changes made after the first (A5 and A7 notes in
+§11). §10 has no open items. Milestone B is
+next and not yet started; §13 lists two cross-cutting defects still open.
+
 ## 1. Requested Features
 
 1. **Auto-download logs** when the roboRIO is reachable on the local network.
@@ -829,14 +835,20 @@ That must report "no baseline yet" rather than nothing — a silent pass is
 indistinguishable from a clean result, the same trap as §7.1. `minimumBaseline`
 guards it.
 
-## 10. Open Verification
+## 10. Field Verification (closed)
 
-One test remains: **`pit_monitor` across a robot network that drops and
+The last open test was **`pit_monitor` across a robot network that drops and
 reconnects repeatedly.** Radio power-cycles, the robot being carried between pit
 and field, and a DHCP server that comes and goes all make this the normal state
 rather than an edge case.
 
-What the code should do, and what was confirmed in isolation:
+**Closed 2026-11-08:** the pit monitor has now been used at two events, where
+that is the normal state, and worked as expected. The first event ran the code
+as it stood before progress narration, newest-first fetching and giving up on an
+unreadable log, all of which were added afterwards. The second event ran the
+code with those included. Nothing further is outstanding for Milestone A.
+
+What the code was designed to do, first confirmed in isolation:
 
 | Event | Expected |
 |---|---|
@@ -847,22 +859,22 @@ What the code should do, and what was confirmed in isolation:
 | Repeated flapping | no state accumulates — the destination folder is the state |
 
 Simulated with a source failing its first two fetches: `downloaded=0 failed=1`
-twice with an empty destination, then `downloaded=1` on the third cycle. That is
-the intended behaviour, but simulated rather than observed on real hardware.
+twice with an empty destination, then `downloaded=1` on the third cycle.
 
-**The known limitation to watch for: `scp` cannot resume.** A transfer that drops
-part-way restarts from zero next cycle. Most logs are 30–50 MB and fine, but the
-stick also held files of 180–320 MB; one of those on a link dropping every 30 s
-may never complete, retrying forever without progress. `rsync` would resume but
-is not on the roboRIO image. If this bites, the fix is to bound it — skip files
-above a size, or keep a per-file failure count and stop retrying — rather than to
-add a resume protocol.
+**`scp` cannot resume — bounded, as planned.** A transfer that drops part-way
+restarts from zero next cycle, and `rsync` is not on the roboRIO image. It did
+bite, though not from a flapping link. On 2026-10-20 a finished log failed at 98%
+on every cycle because the robot could not read the file's tail (power lost
+mid-write, or a bad spot on the stick). The fix was the bound proposed here, not a
+resume protocol: a per-file failure count (see A5's notes in §11).
 
 ## 11. Sequence
 
 ### Milestone A — Pit mode
 
 The post-match checklist, end to end. Nothing here needs the index.
+
+**Complete, and used at two events (as of 2026-11-08).**
 
 | # | Step | Why | Depends on |
 |---|---|---|---|
@@ -871,9 +883,9 @@ The post-match checklist, end to end. Nothing here needs the index.
 | A2 | ~~**Split computation from formatting**~~ — **done** | Prerequisite for HTML and JSON output | — |
 | A3 | ~~**Entry patterns / wildcards**~~ (§6) — **done** | Detector rules are unwritable without it; shortens every config | A1 |
 | A4 | ~~**Checks as a third analysis kind**~~, incl. absence checks (§7) — **done** | Replaces the manual post-match pass | A2, A3 |
-| A5 | ~~**roboRIO sync**~~ — **done, verified on the robot** (`sync_logs.py`) | First link in the pit chain (§2.2) | — |
+| A5 | ~~**roboRIO sync**~~ — **done, used at two events** (`sync_logs.py`) | First link in the pit chain (§2.2) | — |
 | A6 | ~~**HTML + JSON emitters**~~ — **done** (`report_output.py`) | The pit screen itself (§5.1) | A2, A4 |
-| A7 | ~~**Watch mode**~~ — **done, verified on the robot** (`pit_monitor.py`) | Closes the pit chain: no commands typed between matches | A5, A6 |
+| A7 | ~~**Watch mode**~~ — **done, used at two events** (`pit_monitor.py`) | Closes the pit chain: no commands typed between matches | A5, A6 |
 | A8 | ~~**Threshold / duration checks**~~ (§8) — **done** | Motor temperature exposure; the one concern class checks cannot yet express | A4 |
 | A9 | ~~**Sibling comparison**~~ (§9.1) — **done** | "hotter than its peers" — 2.3x tighter than history and needs none | A3, A8 |
 | A10 | ~~**Absolute thresholds for singletons**~~ (§9.8) — **done** | The dependable option for motors with no peer (§9.7); §8 provided the mechanism, so this was choosing the limits | A8 |
@@ -883,7 +895,7 @@ The post-match checklist, end to end. Nothing here needs the index.
 
 | # | Step | Why | Depends on |
 |---|---|---|---|
-| B1 | **Extract / index layer** (SQLite) | Makes search viable, checks instant across a season | A2 |
+| B1 | **Extract / index layer** (SQLite) — **next** | Makes search viable, checks instant across a season | A2 |
 | B2 | **Event search** (feature 3) | The reason the index exists | B1 |
 | B3 | **Historical comparison and trends** (§9.2–9.3, §9.6) | Catches what sibling comparison cannot: wear affecting every peer equally, and slow trends | B1, A9 |
 
@@ -952,11 +964,17 @@ Expectations, covering both halves of §7:
 | `{"never": V}` | any sample equals V |
 | `{"atLeastOnce": V}` | no sample ever equals V |
 | `{"alwaysOneOf": [...]}` | any sample outside the set |
+| `{"alwaysStartsWith": "P"}` | any sample is not a string beginning with P |
 | `{"minIncrease": N}` | a counter advanced by less than N across the window |
 
 `alwaysOneOf` exists because a status string can have a legitimate "not yet
 reported" state alongside a good one: a camera's `ThermalPressure` reads `''`
 until its coprocessor answers, so `{"always": "Nominal"}` would fire every match.
+
+`alwaysStartsWith` exists for `/RealMetadata/GitBranch`. Deploying from an
+`event-*` branch is what triggers the deploy-time commit, so at a competition the
+logged branch should always carry that prefix. The prefix is `event-`, not
+`event_`; all ten 2026 logs record `event-worlds`.
 
 `minIncrease` answers a question no single sample can: "did this camera see any
 AprilTag during the match" is a *difference* across the window, not a value.
@@ -1014,10 +1032,31 @@ Two modifiers:
   `/**/*Connected*` otherwise reaches `/SystemStats/NTClients/**`, whose paths
   carry a per-connection session id (`northstar_BCL@5`) and so are unbounded in
   number and useless as a per-device signal.
+- **`excludeMessage`** drops alert messages (fnmatch patterns, case-sensitive on
+  every platform) that a more precise rule already covers. `Alerts/*` is a
+  catch-all, so every precise rule added for something it also mentions reports
+  one fact twice, and the generic copy is often worse. The camera alerts split one
+  178.68 s `sending frames` outage into 34 spells, because the camera flaps
+  between connected-but-silent and disconnected and the two messages hand off.
+  Across the ten 2026 logs, no camera-alert sample had `sending frames` still
+  true, so suppressing them loses nothing.
 
-Findings collapse on `(rule, entry, detail)` with an occurrence count and the
-first timestamp, so an alert logged every cycle reads as one line. `merge_check_findings`
-does the same across files, adding a file count. Output sorts most severe first.
+Findings collapse on `(rule, entry, detail)` with the first timestamp, so an alert
+logged every cycle reads as one line. `merge_check_findings` does the same across
+files, adding a file count. Output sorts most severe first.
+
+**Each finding reports how long its state held**, not how many samples carried
+it. `is False, expected True, x2` could not say whether a camera was dark for
+0.7 s or a minute. The sample count also tracked logging rate rather than events:
+one 0.72 s dropout logged three times read as `x3`. Each finding now keeps every
+unbroken *spell* in the reported state. One spell states its duration; several
+add min, median and max. Spells are kept individually rather than reduced, so
+merging across files pools them and the median stays honest. A spell is tracked
+across every sample and then clipped to the rule's gate, so a dropout spanning a
+brief disable is not split in two. A spell still open when logging stops is
+marked as a lower bound. The raw sample count stays in the JSON as `occurrences`.
+The change surfaced one problem a count had hidden:
+`Intake/RollerConnectedLead` was off the bus for 24.79 s across 4 spells.
 
 `checks2026.json` at the repo root is a ready-to-run pit config — no config
 writing needed between matches. Checks were **not** made to run automatically on
@@ -1142,8 +1181,8 @@ not an error), so a polling loop does not fill the terminal with failures.
 
 *Windows.* Confirmed running on the pit laptop (Python freshly installed, robot
 not yet present): it reaches the "Syncing from admin@10.30.61.2" stage, so
-argument handling, path rendering and the ssh invocation all work. Only the
-authentication step remains unverified, which needs the robot.
+argument handling, path rendering and the ssh invocation all work. The
+authentication step was later confirmed against the robot (see above).
 
 That first run did surface a real defect. The module docstring documents a
 Windows key-install command containing `$env:USERPROFILE\.ssh\...`, and in a
@@ -1169,13 +1208,35 @@ either, so the key has to be appended manually the first time. `ssh`/`scp` come
 from the OpenSSH Client optional feature; the tool checks for them up front and
 says so rather than failing obscurely.
 
-**Built as `sync_logs.py`**, all of the above implemented. One thing could not be
-verified from here and needs a real robot: **non-interactive auth**. `ssh` reads a
-password from the tty rather than stdin, so an empty password cannot be supplied
-on its own — `BatchMode=yes` makes it fail fast instead of hanging. If plain
-`scp` is refused, the fix is `ssh-copy-id admin@10.30.61.2` once, or `--sshpass`;
-the tool detects the auth failure and prints both. Everything else is exercised
-by `tests/test_sync_logs.py` through a local directory standing in for the robot.
+**Built as `sync_logs.py`**, all of the above implemented. Non-interactive auth,
+the one thing that needed a real robot, turned out to be a non-issue (the roboRIO
+accepts `none`). If plain `scp` is ever refused, the fix is
+`ssh-copy-id admin@10.30.61.2` once, or `--sshpass`; the tool detects the auth
+failure and prints both. Everything else is exercised by `tests/test_sync_logs.py`
+through a local directory standing in for the robot.
+
+*Narration and order.* A sync that found the robot and started pulling a 40 MB
+log used to look exactly like one that found nothing, because nothing printed
+until a copy finished. Sync now says when it reaches the robot, announces each
+fetch (`fetching 2/3: ... (45.2 MB)`), and reports progress read off the growing
+`.part` file. That file is used because `scp`'s meter is suppressed without a
+tty; reading `.part` works the same over ssh, with `--from-local`, and on Windows.
+An absent robot is still silent. New logs are fetched **newest first**, since the
+match that just ended is the one wanted soonest. Undated (hex-id) logs come last.
+
+*Giving up on an unreadable log.* The scp-cannot-resume limitation (§10) did
+bite, from an unexpected cause. On 2026-10-20 a finished 78 MB log failed at 98%
+on every cycle because the robot could not read its tail. Each cycle reported
+`sync FAILED`, which would also have hidden a real failure. OpenSSH reports such
+a read error as "End of file", so the tool now says "read error on the robot"
+instead. Failures are recorded in `.sync-failures.json` in the destination. After
+**three at the same remote size** the sync gives up. The readable part is kept as
+`<name>.truncated.wpilog`, which analyses and opens in AdvantageScope. Later runs
+skip that log with a line saying why, and it counts as "given up on", not
+"failed", so the monitor goes quiet. Why three and not one: a single failure is
+often transient (the robot unplugged mid-copy), and giving up on that would lose a
+match log. A log that is still growing never reaches the limit, because any change
+in size restarts the count. `--retry-failed` forces another attempt.
 
 **A6 — emitters.** Done, in `report_output.py`. `analysis.py --html PATH
 --json PATH` writes both alongside the usual terminal output; neither changes
@@ -1363,6 +1424,21 @@ fetched. Sync now exports an `UNREACHABLE_NOTICE` sentinel and the monitor
 reports three states — synced, robot not reachable, sync FAILED — rather than
 two.
 
+*Analyse a match as soon as it lands.* Fetching newest first (A5) only helps if
+the monitor does not then wait for the older logs. The monitor runs the sync on a
+worker thread and re-checks for the newest settled match each time a log lands,
+so the match is analysed while older logs are still copying. An older log landing
+later triggers nothing. The sync's indented detail lines are streamed live with a
+`sync:` prefix. A line identical to the previous cycle's is suppressed, so a
+connected robot does not repeat its log count every 20 s.
+
+**Used at two events** (as of 2026-11-08), and worked as expected at both. That
+closes the flapping-network test in §10. The first event ran the monitor before
+the changes above and A5's narration, newest-first fetching and give-up rule were
+added. The second ran it with all of them. That covers what had only been
+unit-tested and run with `--from-local`: `scp`'s progressive writes to the
+`.part` file, and analysis overlapping a slow transfer from a real roboRIO.
+
 **B1 — index.** Store the state tier in full plus a numeric manifest. Key on file
 identity (content hash, not name) so re-imports from A4 are idempotent. Keep the
 schema versioned so a format change can rebuild rather than migrate — extraction
@@ -1434,15 +1510,18 @@ distinguished from ones that never fire.
 
 Fix these along the way — each will otherwise distort a feature above:
 
-- **Entry matching is reversed substring** (`entry.name in configured_name`, see
-  [DESIGN.md §3.4](DESIGN.md#34-ingest-and-filtering-analysispy-process_log_file)).
-  Superseded by A3; §6.4 covers how to keep the struct-leaf case working without it.
-- **Analyses are keyed by list position** (`analysis_idx`). Reports and JSON output
-  need stable named ids — and wildcard fan-out (§6.3) makes this a prerequisite of
-  A3, not a nicety.
-- **`.schema` handling assumes `struct:`** (defect #4) and will `IndexError` on a
-  protobuf schema entry.
-- **No config validation.** Every failure mode in §12.1 produced a clean run with
+- ~~**Entry matching is reversed substring**~~ — **resolved by A3.**
+  (`entry.name in configured_name`, see
+  [DESIGN.md §3.4](DESIGN.md#34-ingest-and-filtering-analysispy-process_log_file).)
+  §6.4 covers how the struct-leaf case keeps working without it.
+- ~~**Analyses are keyed by list position**~~ — **resolved by A3.** Results are
+  keyed by `(config position, matched entry)` from `expand_analyses`, which is
+  stable across log files and across wildcard fan-out (§6.3). `analysis_idx`
+  survives only in the skip messages.
+- **Still open: `.schema` handling assumes `struct:`** (defect #4).
+  `analysis.py` flags any entry containing `.schema` and then takes
+  `split("struct:")[1]`, which raises `IndexError` on a protobuf schema entry.
+- **Still open: no config validation.** Every failure mode in §12.1 produced a clean run with
   empty results rather than an error, which is the worst possible feedback. A
   linter — check each referenced entry exists in the target logs, that the
   configured value's type matches the entry's, and that the entry is actually
