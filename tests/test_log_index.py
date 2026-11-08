@@ -283,7 +283,8 @@ class CoverageTest(Workspace):
         self.build()
         config_path = self.config_file(CHECKS_CONFIG)
         expected = run(ANALYSIS, self.logs, config_path).stdout
-        result = run(ANALYSIS, self.logs, config_path, "--index", self.db)
+        result = run(ANALYSIS, self.logs, config_path, "--index", self.db,
+                     "--index-read-only")
         self.assertEqual(result.stdout, expected)
         self.assertIn("Index: 0 of 2 logs read", result.stderr)
         self.assertIn("needs entries not stored: /Intake/Motor, /Intake/RollerTemp",
@@ -305,12 +306,14 @@ class CoverageTest(Workspace):
         self.assertIn("2 unchanged", output)
         self.assertNotIn("indexed", output.replace("2 unchanged", ""))
 
-    def test_a_missing_index_is_reported_and_every_file_read(self):
+    def test_read_only_never_creates_an_index(self):
         config_path = self.config_file(STATE_CONFIG)
         expected = run(ANALYSIS, self.logs, config_path).stdout
-        result = run(ANALYSIS, self.logs, config_path, "--index", self.db)
+        result = run(ANALYSIS, self.logs, config_path, "--index", self.db,
+                     "--index-read-only")
         self.assertEqual(result.stdout, expected)
         self.assertIn(f"No index at {self.db}; reading every .wpilog", result.stderr)
+        self.assertFalse(self.db.exists())
 
     def test_the_default_index_lives_in_the_log_folder(self):
         run(LOG_INDEX, "build", self.logs)
@@ -318,15 +321,67 @@ class CoverageTest(Workspace):
         result = run(ANALYSIS, self.logs, self.config_file(STATE_CONFIG), "--index")
         self.assertIn("Index: 2 of 2 logs read", result.stderr)
 
-    def test_an_unindexed_log_is_read_from_its_file(self):
+    def test_an_unindexed_log_is_read_from_its_file_then_indexed(self):
         self.build()
         # Different contents: an identical copy would be recognised as indexed.
         write_match_log(self.logs / "akit_26-05-01_10-00-00_johnson_q40.wpilog",
                         roller_offset=3.0)
-        result = run(ANALYSIS, self.logs, self.config_file(STATE_CONFIG), "--index", self.db)
+        config_path = self.config_file(STATE_CONFIG)
+        result = run(ANALYSIS, self.logs, config_path, "--index", self.db)
         self.assertIn("Index: 2 of 3 logs read", result.stderr)
         self.assertIn("akit_26-05-01_10-00-00_johnson_q40.wpilog (not indexed)",
                       result.stderr)
+        self.assertIn("Stored for next time: 1 indexed", result.stderr)
+        again = run(ANALYSIS, self.logs, config_path, "--index", self.db)
+        self.assertIn("Index: 3 of 3 logs read", again.stderr)
+        self.assertEqual(again.stdout, result.stdout)
+
+
+class AutoExtendTest(Workspace):
+    """--index adds what it could not serve, so the next run is served."""
+
+    def test_a_config_reading_unstored_entries_is_served_the_second_time(self):
+        self.build()
+        config_path = self.config_file(CHECKS_CONFIG)
+        expected = run(ANALYSIS, self.logs, config_path).stdout
+        first = run(ANALYSIS, self.logs, config_path, "--index", self.db)
+        self.assertEqual(first.stdout, expected)
+        self.assertIn("Index: 0 of 2 logs read", first.stderr)
+        self.assertIn("Stored for next time: 2 extended", first.stderr)
+        self.assertNotIn("--config", first.stderr)
+        second = run(ANALYSIS, self.logs, config_path, "--index", self.db)
+        self.assertEqual(second.stdout, expected)
+        self.assertIn("Index: 2 of 2 logs read", second.stderr)
+        self.assertNotIn("Stored", second.stderr)
+
+    def test_a_missing_index_is_created_and_filled(self):
+        config_path = self.config_file(FILTERED_CONFIG)
+        expected = run(ANALYSIS, self.logs, config_path).stdout
+        first = run(ANALYSIS, self.logs, config_path, "--index", self.db)
+        self.assertEqual(first.stdout, expected)
+        self.assertIn("Stored for next time: 2 indexed", first.stderr)
+        second = run(ANALYSIS, self.logs, config_path, "--index", self.db)
+        self.assertEqual(second.stdout, expected)
+        self.assertIn("Index: 2 of 2 logs read", second.stderr)
+
+    def test_read_only_leaves_the_index_as_it_was(self):
+        self.build()
+        before = self.db.read_bytes()
+        run(ANALYSIS, self.logs, self.config_file(CHECKS_CONFIG), "--index", self.db,
+            "--index-read-only")
+        self.assertEqual(self.db.read_bytes(), before)
+
+    def test_an_index_that_cannot_be_written_still_serves(self):
+        self.build()
+        os.chmod(self.db, 0o444)
+        self.addCleanup(os.chmod, self.db, 0o644)
+        state = run(ANALYSIS, self.logs, self.config_file(STATE_CONFIG), "--index", self.db)
+        self.assertIn("Index: 2 of 2 logs read", state.stderr)
+        config_path = self.config_file(CHECKS_CONFIG, "checks.json")
+        expected = run(ANALYSIS, self.logs, config_path).stdout
+        result = run(ANALYSIS, self.logs, config_path, "--index", self.db)
+        self.assertEqual(result.stdout, expected)
+        self.assertIn("Could not add to the index", result.stderr)
 
     def test_conflicting_types_for_one_name_are_read_from_the_file(self):
         w = WpilogWriter()

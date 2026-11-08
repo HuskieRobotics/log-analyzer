@@ -321,6 +321,16 @@ gets for free have to be supplied:
   records) are printed by `process_log_file`. Extraction records them as `notes`
   and the replay prints them.
 
+**Auto-extend.** `analysis.py --index` goes through `IndexedRun`. After a log is
+read from its file, it calls `LogIndex.add` with the config's entry names, which
+indexes a new log or stores the entries that were missing. The index therefore
+grows from the questions actually asked, and `build --config` is only a way to
+pay that cost ahead of time. The write happens after the analysis has its `Log`,
+as a separate pass. Building the index rows during the same read would save that
+pass, but it would merge the capture path with extraction, which this design
+keeps apart so that a replay can be checked against a read. `--index-read-only`
+turns it off. A write error stops the extending but not the serving.
+
 **When it declines.** In each case `analysis.py` reads the `.wpilog` and says why
 on stderr:
 - the file is not indexed;

@@ -63,7 +63,7 @@ from entry_patterns import EntryPattern
 from Log import Log
 from StructDecoder import StructDecoder
 
-__all__ = ["SCHEMA_VERSION", "DEFAULT_INDEX_NAME", "STATE_TYPES", "LogIndex",
+__all__ = ["SCHEMA_VERSION", "DEFAULT_INDEX_NAME", "STATE_TYPES", "LogIndex", "IndexedRun",
            "IndexVersionError", "NotAnIndexError", "LoadResult", "index_version",
            "default_index_path", "parse_log_name", "main"]
 
@@ -932,6 +932,114 @@ class LogIndex:
             "(SELECT COUNT(*) FROM entries WHERE file_id = files.id AND stored) "
             "FROM files ORDER BY recorded_at, name")
         return [dict(zip(columns + ("entries", "stored"), row)) for row in rows]
+
+
+class IndexedRun:
+    """`analysis.py --index` for one run.
+
+    Serves each log from the index when it can. Unless read-only, it then
+    stores whatever it could not serve - a log not yet indexed, or the samples
+    of entries this config reads that were not stored - once the log has been
+    read from its file. The next run of this config, or of any config reading
+    the same entries, is served from the index. That is auto-extend: the index
+    grows from the questions actually asked, so building it never needs to
+    know the configs in advance.
+
+    Every message goes to stderr; stdout is the report, and must not change.
+    """
+
+    def __init__(self, path: str, log_folder: str, config: Dict[str, Any],
+                 config_path: str, read_only: bool = False):
+        self.path = path or default_index_path(log_folder)
+        self.log_folder = log_folder
+        self.config = config
+        self.config_path = config_path
+        self.read_only = read_only
+        self.patterns = sorted(config_entry_names(config))
+        self.served: List[str] = []
+        self.from_file: List[Tuple[str, Optional[str]]] = []
+        self.stored: List[BuildResult] = []
+        self.store_seconds = 0.0
+        self.write_problem: Optional[str] = None
+        self.index: Optional[LogIndex] = None
+
+        problem = None
+        try:
+            if read_only:
+                self.index = LogIndex(self.path)
+            else:
+                self.index, rebuilt = LogIndex.open_for_build(self.path)
+                if rebuilt:
+                    print(rebuilt, file=sys.stderr)
+        except FileNotFoundError:
+            problem = f"No index at {self.path}"
+        except (IndexVersionError, NotAnIndexError) as error:
+            problem = str(error)
+        except (sqlite3.Error, OSError) as error:
+            problem = f"Cannot open {self.path} ({error})"
+        if problem:
+            print(f"{problem}; reading every .wpilog instead. Build it with: "
+                  f"log_index.py build {log_folder}", file=sys.stderr)
+
+    def load(self, log_file: str) -> Optional[LoadResult]:
+        """The log replayed from the index, or None to read its file."""
+        if self.index is None:
+            return None
+        result = self.index.load_log(log_file, self.config)
+        if result.log is not None:
+            self.served.append(os.path.basename(log_file))
+            return result
+        self.from_file.append((os.path.basename(log_file), result.reason))
+        return None
+
+    def learn(self, log_file: str) -> None:
+        """After a log was read from its file, store what would have served it."""
+        if self.index is None or self.read_only or self.write_problem:
+            return
+        started = time.monotonic()
+        try:
+            result = self.index.add(log_file, self.patterns)
+        except sqlite3.Error as error:
+            # A read-only or locked index still serves; it just stops growing.
+            self.write_problem = str(error)
+            return
+        except OSError:
+            return  # the log went away; the analysis already has it
+        self.store_seconds += time.monotonic() - started
+        if result.action != "unchanged":
+            self.stored.append(result)
+
+    def close(self) -> None:
+        if self.index is not None:
+            self.index.close()
+
+    def report(self) -> None:
+        """Which logs came from where, and what was stored for next time."""
+        if self.index is None:
+            return
+        total = len(self.served) + len(self.from_file)
+        print(f"Index: {len(self.served)} of {total} logs read from {self.path}",
+              file=sys.stderr)
+        for name, reason in self.from_file:
+            print(f"  read from .wpilog: {name} ({reason})", file=sys.stderr)
+
+        done = [result for result in self.stored if result.action != "skipped"]
+        if done:
+            counts: Dict[str, int] = {}
+            for result in done:
+                counts[result.action] = counts.get(result.action, 0) + 1
+            summary = ", ".join(f"{count} {action}" for action, count in sorted(counts.items()))
+            print(f"Stored for next time: {summary} ({self.store_seconds:.1f} s)",
+                  file=sys.stderr)
+        for result in self.stored:
+            if result.action == "skipped":
+                print(f"  not stored: {result.name} ({result.detail})", file=sys.stderr)
+        if self.write_problem:
+            print(f"Could not add to the index ({self.write_problem}); those logs will "
+                  f"be read from their files again next time", file=sys.stderr)
+        elif self.read_only and self.from_file:
+            print(f"To serve them from the index: log_index.py build {self.log_folder} "
+                  f"--config {self.config_path}", file=sys.stderr)
 
 
 @dataclass

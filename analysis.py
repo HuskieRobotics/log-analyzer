@@ -1478,42 +1478,6 @@ def process_log_file(log_file_path: str, mandatory_entries: Set[str], target_ent
         return capture.log
 
 
-def open_index(path: str, log_folder: str):
-    """Open the log index for --index, or say why not and return None.
-
-    A missing or outdated index is not an error: every log is then read from
-    its .wpilog, which is slower but gives the same output.
-    """
-    from log_index import (IndexVersionError, LogIndex, NotAnIndexError,
-                           default_index_path)
-    path = path or default_index_path(log_folder)
-    try:
-        return LogIndex(path)
-    except FileNotFoundError:
-        problem = f"No index at {path}"
-    except (IndexVersionError, NotAnIndexError) as error:
-        problem = str(error)
-    print(f"{problem}; reading every .wpilog instead. Build it with: "
-          f"log_index.py build {log_folder}", file=sys.stderr)
-    return None
-
-
-def report_index_use(path: str, from_index: List[str],
-                     from_file: List[Tuple[str, Optional[str]]],
-                     log_folder: str, config_path: str) -> None:
-    """Say on stderr which logs came from the index and why others did not.
-
-    stderr, because stdout is the report and must be the same either way.
-    """
-    total = len(from_index) + len(from_file)
-    print(f"Index: {len(from_index)} of {total} logs read from {path}", file=sys.stderr)
-    for name, reason in from_file:
-        print(f"  read from .wpilog: {name} ({reason})", file=sys.stderr)
-    if from_file:
-        print(f"To serve them from the index: log_index.py build {log_folder} "
-              f"--config {config_path}", file=sys.stderr)
-
-
 def main() -> None:
     """Main analysis function."""
     global VERBOSE
@@ -1543,10 +1507,13 @@ def main() -> None:
                              "chosen log is not still growing; 0 skips the check "
                              "(default 1)")
     parser.add_argument("--index", nargs="?", const="", metavar="PATH",
-                        help="read each log from the index built by log_index.py "
-                             "when it holds everything this config needs, and from "
-                             "the .wpilog otherwise; output is identical either way "
-                             "(default index: .log-index.sqlite in the log folder)")
+                        help="read each log from the index (see log_index.py) when it "
+                             "holds everything this config needs, and from the .wpilog "
+                             "otherwise, then add what was missing so the next run is "
+                             "served; output is identical either way (default index: "
+                             ".log-index.sqlite in the log folder, created if absent)")
+    parser.add_argument("--index-read-only", action="store_true",
+                        help="with --index, never add to the index")
     parser.add_argument("--verbose", action="store_true",
                         help="include captured values and a record summary")
     args = parser.parse_args()
@@ -1662,27 +1629,26 @@ def main() -> None:
     time_analysis_expansions = {}  # key -> concrete config, in first-seen order
     value_analysis_expansions = {}  # key -> concrete config, in first-seen order
 
-    index = open_index(args.index, log_folder) if args.index is not None else None
-    from_index = []  # Base names replayed from the index
-    from_file = []   # (base name, why the index could not serve it)
+    indexed = None
+    if args.index is not None:
+        from log_index import IndexedRun
+        indexed = IndexedRun(args.index, log_folder, config, args.config_json_file,
+                             read_only=args.index_read_only)
 
     # Process all log files
     for log_file in sorted(log_files):
-        log = None
-        if index is not None:
-            loaded = index.load_log(log_file, config)
-            if loaded.log is not None:
-                # Print exactly what reading the file would have printed.
-                print(f"\nProcessing: {os.path.basename(log_file)}")
-                for note in loaded.notes:
-                    print(note)
-                log = loaded.log
-                from_index.append(os.path.basename(log_file))
-            else:
-                from_file.append((os.path.basename(log_file), loaded.reason))
-        if log is None:
+        loaded = indexed.load(log_file) if indexed is not None else None
+        if loaded is not None:
+            # Print exactly what reading the file would have printed.
+            print(f"\nProcessing: {os.path.basename(log_file)}")
+            for note in loaded.notes:
+                print(note)
+            log = loaded.log
+        else:
             log = process_log_file(log_file, mandatory_entries, target_entry_names,
                                    filter_on_enabled, filter_on_fms_attached, filter_on_robot_mode)
+            if indexed is not None:
+                indexed.learn(log_file)
         all_logs.append(log)
         processed_files.append(os.path.basename(log_file))
         file_report = FileReport(name=os.path.basename(log_file))
@@ -1764,10 +1730,9 @@ def main() -> None:
                 for line in format_analysis(computed):
                     print(line)
 
-    if index is not None:
-        index.close()
-        report_index_use(index.path, from_index, from_file, log_folder,
-                         args.config_json_file)
+    if indexed is not None:
+        indexed.close()
+        indexed.report()
 
     # Aggregate the checks across all files
     if check_configs and check_reports:

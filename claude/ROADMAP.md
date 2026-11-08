@@ -1533,6 +1533,15 @@ How logs are grouped for that (settled 2026-11-08):
 - **Logs with no timestamp in their name** (hex ids) are rare and are ignored:
   they have no `recorded_at` and simply do not appear in a trend.
 
+**Auto-extend.** `analysis.py --index` stores whatever it could not serve, once
+the log has been read from its file, so the next run is served. Building the
+index therefore never needs to know the configs in advance: a season index grows
+from the questions actually asked. `build --config` remains for paying the cost
+ahead of time, and `--index-read-only` turns it off. Measured with `checks2026.json`
+over the 10 logs, starting from an index built with no config: the first run took
+258 s (the usual 227 s plus 29 s to store 11 entries per log), the second 17 s,
+and both printed exactly what reading the files does.
+
 Not done in B1:
 
 - **`--matches-only` does not use the index.** The index records whether the robot
