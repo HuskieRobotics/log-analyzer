@@ -220,3 +220,6 @@ report.json
 # The log index (derived from the logs; see log_index.py)
 .log-index.sqlite
 .log-index.sqlite-journal
+
+# Local season logs for testing the index (large; not checked in)
+logs/

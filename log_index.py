@@ -94,6 +94,24 @@ _DS_WEIGHTS = (9, 3, 1)
 # counts as disabled.
 MODES = ("disabled", "auto", "teleop")
 
+# AdvantageKit's replay writes the outputs it recomputes under this root, into a
+# log named after the original plus "_sim". A replay is a re-run of another log,
+# not something the robot recorded: it would count that match twice in a trend,
+# so it is never indexed. The name is checked first, since it costs nothing; the
+# contents catch a replay that has been renamed.
+REPLAY_PREFIX = "/ReplayOutputs/"
+
+# The largest step forward the statistics clock takes on one record. A record now
+# and then carries a corrupt timestamp: in the 2026 season, a vision entry stamped
+# 179,995,251 s in a log that ends at 423 s. Taken at face value it ends the log
+# years later, and every held value is credited with that time. Legitimate gaps
+# between consecutive records reach about 23 s, at boot while robot code starts.
+# So a record may move the clock forward at most this far: a lone wild timestamp
+# costs at most this much, and a genuine long pause catches up within a few
+# records. Raw timestamps are kept wherever a replay depends on them.
+MAX_CLOCK_STEP_US = 60 * 1_000_000
+REPLAY_SUFFIX = "_sim.wpilog"
+
 
 def _mode_of(state: List[int]) -> int:
     """Index into MODES for a DriverStation state (digits as in _DS_WEIGHTS)."""
@@ -130,7 +148,8 @@ CREATE TABLE files (
     teleop_seconds  REAL NOT NULL,
     disabled_seconds REAL NOT NULL,    -- including before the robot first reports
     first_us        INTEGER,
-    last_us         INTEGER,
+    last_us         INTEGER,           -- on the statistics clock (MAX_CLOCK_STEP_US)
+    timestamp_faults INTEGER NOT NULL, -- records whose timestamp leapt and was held back
     records         INTEGER NOT NULL,
     replay_safe     INTEGER NOT NULL,  -- 0 if a replay could differ from a read
     notes           TEXT NOT NULL,     -- JSON: what a read prints while ingesting
@@ -176,7 +195,7 @@ CREATE TABLE entry_stats (
 -- value is untyped on purpose: no column affinity, so a string that looks
 -- like a number stays a string.
 CREATE TABLE samples (
-    entry_id INTEGER NOT NULL,
+    entry_id INTEGER NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
     seq      INTEGER NOT NULL,   -- position of the record in the file
     ts_us    INTEGER NOT NULL,
     raw      BLOB,               -- the record's bytes, unless value rebuilds them
@@ -223,8 +242,11 @@ def index_version(path: str) -> int:
 # AdvantageKit: akit_26-05-01_22-45-20_johnson_q121. DataLogManager:
 # FRC_20260501_133809_<event>_<match>. Either can lack the event, the match, or
 # both, so neither is ever used as an identity.
+# A log written before the robot had the time is named by a hex id instead
+# (akit_ae9a5e7922d96b24_ilch); it can still carry the event.
 _LOG_NAME = re.compile(
-    r"^(?:akit_\d{2}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}|FRC_\d{8}_\d{6})(?P<rest>(?:_[^_]+)*)$",
+    r"^(?:akit_\d{2}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}|akit_[0-9a-f]{16}|FRC_\d{8}_\d{6})"
+    r"(?P<rest>(?:_[^_]+)*)$",
     re.IGNORECASE)
 _MATCH_TOKEN = re.compile(r"^(?:p|q|e|sf|f|qf)\d+$", re.IGNORECASE)
 
@@ -235,6 +257,9 @@ def parse_log_name(name: str) -> Tuple[Optional[str], Optional[str]]:
     # sync_logs.py keeps the readable part of a log it gave up on this way.
     if stem.endswith(".truncated"):
         stem = stem[:-len(".truncated")]
+    # AdvantageKit names a replay of a log after it, plus "_sim".
+    if stem.endswith("_sim"):
+        stem = stem[:-len("_sim")]
     found = _LOG_NAME.match(stem)
     if not found:
         return None, None
@@ -396,8 +421,10 @@ class _Scan:
     first_us: Optional[int]
     last_us: Optional[int]
     fms_attached: bool
+    replay: bool
     mode_seconds: List[float]  # indexed like MODES
     notes: List[str]
+    timestamp_faults: int = 0
 
 
 def _scan(buffer: Any, keep: Optional[Set[int]] = None) -> Optional[_Scan]:
@@ -424,10 +451,13 @@ def _scan(buffer: Any, keep: Optional[Set[int]] = None) -> Optional[_Scan]:
     records = 0
     first_us = last_us = None
     fms_attached = False
+    replay = False
     mode = 0                           # index into MODES
     mode_since: Optional[int] = None
     mode_us = [0, 0, 0]
     holding: Dict[int, _Entry] = {}    # entries holding a numeric value
+    clock: Optional[int] = None        # see MAX_CLOCK_STEP_US
+    timestamp_faults = 0
 
     for seq, record in enumerate(reader):
         if record.entry == 0:
@@ -445,6 +475,8 @@ def _scan(buffer: Any, keep: Optional[Set[int]] = None) -> Optional[_Scan]:
                 stored = (data.type in STATE_TYPES or data.name.startswith("/.schema/")
                           if full else seq in keep)  # type: ignore[operator]
                 entries.append(_Entry(seq, data.name, data.type, data.metadata, stored))
+                if data.name.startswith(REPLAY_PREFIX):
+                    replay = True
                 stored_flags.append(stored)
                 active[data.entry] = index
                 if data.type == "boolean" and data.name in _DS_SLOT:
@@ -487,10 +519,19 @@ def _scan(buffer: Any, keep: Optional[Set[int]] = None) -> Optional[_Scan]:
         records += 1
         if first_us is None or ts < first_us:
             first_us = ts
-        if last_us is None or ts > last_us:
-            last_us = ts
+        # The statistics clock: the record's time, unless that leaps more than
+        # MAX_CLOCK_STEP_US past every record before it (see there).
+        if clock is None:
+            clock = ts
+        if ts > clock + MAX_CLOCK_STEP_US:
+            now = clock + MAX_CLOCK_STEP_US
+            timestamp_faults += 1
+        else:
+            now = ts
+        if now > clock:
+            clock = now
         if mode_since is None:
-            mode_since = ts
+            mode_since = now
 
         slot = ds_slots.get(index)
         if slot is not None:
@@ -506,10 +547,10 @@ def _scan(buffer: Any, keep: Optional[Set[int]] = None) -> Optional[_Scan]:
                 if new_mode != mode:
                     # Every value held so far was held in the old mode.
                     for holder in holding.values():
-                        _release(holder, mode, ts)
-                    if ts > mode_since:
-                        mode_us[mode] += ts - mode_since
-                        mode_since = ts
+                        _release(holder, mode, now)
+                    if now > mode_since:
+                        mode_us[mode] += now - mode_since
+                        mode_since = now
                     mode = new_mode
 
         encoded = state[0] * 9 + state[1] * 3 + state[2]
@@ -538,12 +579,12 @@ def _scan(buffer: Any, keep: Optional[Set[int]] = None) -> Optional[_Scan]:
             if entry.modes is None:
                 entry.modes = [_ModeStats(), _ModeStats(), _ModeStats()]
             if entry.held is not None:
-                _release(entry, mode, ts)
+                _release(entry, mode, now)
             if number is not None and number == number:  # NaN holds nothing
                 entry.modes[mode].samples += 1
                 entry.modes[mode].see(number)
                 entry.held = number
-                entry.held_since = ts
+                entry.held_since = now
                 holding[index] = entry
             else:
                 entry.held = None
@@ -556,6 +597,7 @@ def _scan(buffer: Any, keep: Optional[Set[int]] = None) -> Optional[_Scan]:
         if entry.stored:
             samples.append((index, seq, ts, bytes(record.data)))
 
+    last_us = clock
     if last_us is not None and full:
         # A value holds until the log ends.
         for holder in holding.values():
@@ -564,8 +606,9 @@ def _scan(buffer: Any, keep: Optional[Set[int]] = None) -> Optional[_Scan]:
             mode_us[mode] += last_us - mode_since
 
     return _Scan(entries=entries, samples=samples, records=records, first_us=first_us,
-                 last_us=last_us, fms_attached=fms_attached,
-                 mode_seconds=[us / 1e6 for us in mode_us], notes=notes)
+                 last_us=last_us, fms_attached=fms_attached, replay=replay,
+                 mode_seconds=[us / 1e6 for us in mode_us], notes=notes,
+                 timestamp_faults=timestamp_faults)
 
 
 def _produced_fields(scan: _Scan) -> None:
@@ -738,6 +781,8 @@ class LogIndex:
         patterns read an entry not yet stored.
         """
         name = os.path.basename(path)
+        if name.endswith(REPLAY_SUFFIX):
+            return BuildResult(name, "skipped", "AdvantageKit replay")
         started = time.monotonic()
         before = os.stat(path)
         file_id, digest = self._lookup(path)
@@ -757,6 +802,8 @@ class LogIndex:
                 buffer.close()
         if scan is None:
             return BuildResult(name, "skipped", "not a valid log file")
+        if scan.replay:
+            return BuildResult(name, "skipped", "AdvantageKit replay")
 
         after = os.stat(path)
         if (after.st_size, after.st_mtime_ns) != (before.st_size, before.st_mtime_ns):
@@ -768,14 +815,15 @@ class LogIndex:
             file_id = self.conn.execute(
                 "INSERT INTO files (sha256, name, size, recorded_at, event, match, "
                 "fms_attached, enabled_seconds, auto_seconds, teleop_seconds, "
-                "disabled_seconds, first_us, last_us, records, "
+                "disabled_seconds, first_us, last_us, timestamp_faults, records, "
                 "replay_safe, notes, indexed_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (digest, name, after.st_size, _recorded_at(name), event, match,
                  int(scan.fms_attached), scan.mode_seconds[1] + scan.mode_seconds[2],
                  scan.mode_seconds[1], scan.mode_seconds[2], scan.mode_seconds[0],
                  scan.first_us,
-                 scan.last_us, scan.records, int(_replay_safe(scan.entries)),
+                 scan.last_us, scan.timestamp_faults, scan.records,
+                 int(_replay_safe(scan.entries)),
                  json.dumps(scan.notes),
                  datetime.now(timezone.utc).isoformat(timespec="seconds"))).lastrowid
             ids = self._insert_entries(file_id, scan.entries)

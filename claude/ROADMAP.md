@@ -1530,6 +1530,10 @@ How logs are grouped for that (settled 2026-11-08):
   parses it: `files.event` is NULL for a home log. Within an event,
   `fms_attached` separates matches from pit sessions.
 - **Pit sessions need not be told apart from home practice.** Not a goal.
+- **Replays are not indexed.** AdvantageKit replay output
+  (`..._q89_sim.wpilog`) reports FMS attached and holds the same match a second
+  time; the season set has two. Both `build` and auto-extend skip a log named
+  `_sim.wpilog` or carrying entries under `/ReplayOutputs/`.
 - **Logs with no timestamp in their name** (hex ids) are rare and are ignored:
   they have no `recorded_at` and simply do not appear in a trend.
 
@@ -1541,6 +1545,18 @@ ahead of time, and `--index-read-only` turns it off. Measured with `checks2026.j
 over the 10 logs, starting from an index built with no config: the first run took
 258 s (the usual 227 s plus 29 s to store 11 entries per log), the second 17 s,
 and both printed exactly what reading the files does.
+
+**Indexing the whole 2026 season.** All 280 logs in `logs/`, 8.3 GB in one folder
+per event, took 21 minutes to index from scratch. The 2 replays were skipped, and
+the index is about 700 MB. Two things surfaced only at that scale:
+
+- **Replays.** These are AdvantageKit `_sim` logs (see "How logs are grouped"
+  above).
+- **Corrupt timestamps.** Three logs each hold one record stamped far ahead (the
+  worst, years). They inflated those logs' disabled time, to years in two of them,
+  and skewed every disabled-mode statistic. The statistics now run on a clock that one record can move forward
+  by at most 60 s ([DESIGN.md §3.7](DESIGN.md#37-the-index-log_indexpy)). Replay
+  parity is unaffected, because the analyzer itself sees the raw timestamp.
 
 Not done in B1:
 

@@ -299,6 +299,15 @@ to prove it.
   there are a handful per log, so that loop over held values is cheap.
 - per file, seconds in each mode.
 
+The statistics run on a clock that a single record can move forward by at most
+60 s (`MAX_CLOCK_STEP_US`). Three of the 278 logs in the 2026 season carry one
+record stamped far ahead; the worst, 179,995,251 s in a 423 s log. At face value that
+ends the log there and credits every held value with the time. Legitimate gaps
+between records reach about 23 s, at boot. The number of records held back is
+`files.timestamp_faults`. Raw timestamps stay in `entries`, `spans` and `samples`,
+because a full read of the `.wpilog` does see the wild timestamp, and a replay
+has to match it.
+
 `--config` adds a second pass (`_extend`) that stores the numeric-tier entries a
 config reads. Samples keep their position in the file (`seq`). Their raw bytes are
 dropped where the decoded value rebuilds them exactly (booleans, integers,

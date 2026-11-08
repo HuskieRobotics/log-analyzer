@@ -394,8 +394,9 @@ Measured on the 2026 set (10 logs):
 
 **What is stored.**
 - **Every log:** when it was recorded, event and match (from the name, when
-  present), whether it was a match (FMS attached), and seconds disabled, in auto
-  and in teleop.
+  present), whether it was a match (FMS attached), and seconds disabled, in auto and in
+  teleop. AdvantageKit replays (`..._sim.wpilog`) are not indexed: they repeat a
+  match the robot already logged.
 - **Every entry:** its type, record count and time range.
 - **Every numeric value, per robot mode** (disabled, auto, teleop): seconds held,
   min, max, and time-weighted mean and RMS. These exist for every double, stored

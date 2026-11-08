@@ -444,6 +444,25 @@ class IdentityTest(Workspace):
         self.assertAlmostEqual(teleop, 10.0)
         self.assertAlmostEqual(disabled, 19.98 - 13.0)
 
+    def test_a_replay_is_not_indexed(self):
+        w = WpilogWriter()
+        flag = w.start("/ReplayOutputs/Intake/RollerStalled", "boolean")
+        w.boolean(flag, 1, False)
+        named = w.save(self.tmp / "akit_26-05-01_17-57-36_johnson_q89_sim.wpilog")
+        renamed = w.save(self.tmp / "renamed-replay.wpilog")
+        for path in (named, renamed):
+            with self.subTest(path=path.name):
+                result = self.index.add(str(path))
+                self.assertEqual((result.action, result.detail),
+                                 ("skipped", "AdvantageKit replay"))
+        self.assertEqual(len(self.index.files()), 1)
+
+    def test_removing_a_file_removes_its_samples(self):
+        with self.index.conn:
+            self.index.conn.execute("DELETE FROM files")
+        self.assertEqual(self.index.conn.execute(
+            "SELECT COUNT(*) FROM samples").fetchone()[0], 0)
+
     def test_state_samples_are_searchable(self):
         found = self.index.conn.execute(
             "SELECT s.ts_us FROM samples s JOIN entries e ON e.id = s.entry_id "
@@ -514,6 +533,62 @@ class ModeStatisticsTest(unittest.TestCase):
         names = {name for (name,) in self.index.conn.execute(
             "SELECT DISTINCT e.name FROM entry_stats s JOIN entries e ON e.id = s.entry_id")}
         self.assertEqual(names, {"/Intake/RollerCurrent", "/Clock"})
+
+
+class CorruptTimestampTest(unittest.TestCase):
+    """One record stamped years in the future must not end the log there."""
+
+    def test_a_wild_timestamp_is_held_back(self):
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp)
+        w = WpilogWriter()
+        enabled = w.start("/DriverStation/Enabled", "boolean")
+        current = w.start("/Intake/RollerCurrent", "double")
+        frames = w.start("/Vision/BR/Frames", "int64")
+        w.boolean(enabled, 0, False)
+        w.double(current, 0, 5.0)
+        # A legitimate 20 s gap at boot, as robot code starts.
+        w.boolean(enabled, 20 * SECOND, True)
+        w.double(current, 20 * SECOND, 10.0)
+        w.int64(frames, 179_995_251 * SECOND, 1)  # corrupt
+        w.double(current, 30 * SECOND, 20.0)
+        w.boolean(enabled, 40 * SECOND, False)
+        path = w.save(tmp / "akit_26-03-26_20-47-50_ilch_p21.wpilog")
+        index = LogIndex.open_for_build(str(tmp / "index.sqlite"))[0]
+        self.addCleanup(index.close)
+        index.add(str(path))
+
+        faults, last, enabled_s, disabled_s = index.conn.execute(
+            "SELECT timestamp_faults, last_us, enabled_seconds, disabled_seconds "
+            "FROM files").fetchone()
+        self.assertEqual(faults, 1)
+        # The bad record holds the clock at most a minute past the last good
+        # one (20 s), so the log ends at 80 s, not 5.7 years on.
+        self.assertEqual(last, 80 * SECOND)
+        self.assertAlmostEqual(enabled_s, 20.0)
+        self.assertAlmostEqual(disabled_s, 20.0 + 40.0)
+
+    def test_the_replay_still_sees_the_raw_timestamp(self):
+        # Parity: a full read of the .wpilog ends at the corrupt timestamp, so a
+        # replay must too, whatever the statistics clock says.
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp)
+        w = WpilogWriter()
+        flag = w.start("/Shooter/FlywheelConnected", "boolean")
+        frames = w.start("/Vision/BR/Frames", "int64")
+        w.boolean(flag, SECOND, True)
+        w.int64(frames, 1000 * SECOND, 1)
+        w.boolean(flag, 2 * SECOND, False)
+        path = w.save(tmp / "a.wpilog")
+        index = LogIndex.open_for_build(str(tmp / "index.sqlite"))[0]
+        self.addCleanup(index.close)
+        index.add(str(path))
+        config = {"checks": [{"entry": "/**", "expect": "present"}]}
+        with mock.patch("builtins.print"):
+            full = process_log_file(str(path), set(MANDATORY_ENTRIES),
+                                    config_entry_names(config))
+        self.assertEqual(index.load_log(str(path), config).log.get_last_timestamp(),
+                         full.get_last_timestamp())
 
 
 class SeasonLibraryTest(unittest.TestCase):
@@ -623,6 +698,8 @@ class LogNameTest(unittest.TestCase):
             "akit_25-04-19_09-36-19_curie_e6.wpilog": ("curie", "e6"),
             "FRC_20260501_133809_WIMIL_Q12.wpilog": ("WIMIL", "Q12"),
             "akit_26-10-20_00-57-11_wimil.truncated.wpilog": ("wimil", None),
+            "akit_ae9a5e7922d96b24_ilch.wpilog": ("ilch", None),
+            "akit_26-05-01_17-57-36_johnson_q89_sim.wpilog": ("johnson", "q89"),
             "akit_3f9a2c.wpilog": (None, None),
         }
         for name, expected in cases.items():
