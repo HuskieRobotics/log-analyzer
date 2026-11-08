@@ -22,7 +22,7 @@ class RecordedAtTest(unittest.TestCase):
 
     def test_advantagekit_name(self):
         self.assertEqual(
-            log_recorded_at("test/2026/akit_26-05-01_13-38-09_johnson_q67.wpilog"),
+            log_recorded_at("tests/fixtures/2026/logs/akit_26-05-01_13-38-09_johnson_q67.wpilog"),
             datetime(2026, 5, 1, 13, 38, 9))
 
     def test_two_digit_year_expands_to_this_century(self):
@@ -104,16 +104,16 @@ class NamingVariantTest(unittest.TestCase):
 class SelectLatestTest(unittest.TestCase):
 
     NAMES = [
-        "test/2026/akit_26-04-30_14-46-03_johnson_q12.wpilog",
-        "test/2026/akit_26-05-01_22-45-20_johnson_q121.wpilog",
-        "test/2026/akit_26-05-01_13-38-09_johnson_q67.wpilog",
+        "tests/fixtures/2026/logs/akit_26-04-30_14-46-03_johnson_q12.wpilog",
+        "tests/fixtures/2026/logs/akit_26-05-01_22-45-20_johnson_q121.wpilog",
+        "tests/fixtures/2026/logs/akit_26-05-01_13-38-09_johnson_q67.wpilog",
     ]
 
     def test_picks_the_newest_regardless_of_input_order(self):
         for order in (self.NAMES, list(reversed(self.NAMES)), sorted(self.NAMES)):
             self.assertEqual(
                 select_latest_log(order).path,
-                "test/2026/akit_26-05-01_22-45-20_johnson_q121.wpilog")
+                "tests/fixtures/2026/logs/akit_26-05-01_22-45-20_johnson_q121.wpilog")
 
     def test_empty_input_gives_no_path(self):
         chosen = select_latest_log([])

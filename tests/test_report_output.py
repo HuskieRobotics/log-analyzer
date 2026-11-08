@@ -52,7 +52,7 @@ def sample_report(**overrides):
         result=compute_analysis(results, calcs, "s"),
         counts=compute_per_file_counts(results, calcs))
     report = Report(
-        log_folder="test/2026", config_path="checks2026.json",
+        log_folder="tests/fixtures/2026/logs", config_path="checks2026.json",
         filters={"enabled": True, "robotMode": "both"},
         files=[FileReport("q1.wpilog", findings, [section])],
         aggregate_findings=findings, aggregate_sections=[section],
@@ -66,7 +66,7 @@ class RenderJsonTest(unittest.TestCase):
 
     def test_round_trips_and_keeps_structure(self):
         data = json.loads(render_json(sample_report()))
-        self.assertEqual(data["log_folder"], "test/2026")
+        self.assertEqual(data["log_folder"], "tests/fixtures/2026/logs")
         self.assertEqual(data["files"][0]["name"], "q1.wpilog")
         self.assertEqual(data["generated_at"], "2026-09-08 12:00:00")
 

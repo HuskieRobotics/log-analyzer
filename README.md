@@ -25,7 +25,7 @@ It is used two ways:
 pip install msgpack
 
 # Practice review: every log in a folder
-python analysis.py ./test/2025 config2025.json
+python analysis.py ./tests/fixtures/2025/logs config2025.json
 
 # Pit checks on the newest match, as an HTML page
 python analysis.py ./logs checks2026.json --matches-only --latest --html report.html
@@ -513,7 +513,7 @@ quiet, verify the entry name against the log.
 
 ## Example output
 
-`python analysis.py ./test/2025 config2025.json`, which is what
+`python analysis.py ./tests/fixtures/2025/logs config2025.json`, which is what
 `tests/fixtures/2025/golden/shipped_config.txt` pins verbatim:
 
 ```
