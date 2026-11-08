@@ -11,11 +11,12 @@ It is used two ways:
   set of automated checks over it, and rewrite an HTML page on a second screen —
   with nothing typed between matches.
 
-## The three tools
+## The tools
 
 | Tool | What it does |
 |------|--------------|
 | `analysis.py` | Reads logs and produces analyses, checks and reports. Everything else composes this. |
+| `log_index.py` | Extracts each log once into a SQLite index, so analyses across a season stop re-reading every file. |
 | `sync_logs.py` | Copies new logs off the roboRIO over SSH. Standalone; needs no config. |
 | `pit_monitor.py` | Loops: sync, pick the newest finished match, re-run the analysis, rewrite the report. |
 
@@ -26,6 +27,10 @@ pip install msgpack
 
 # Practice review: every log in a folder
 python analysis.py ./test/2025 config2025.json
+
+# A season library: extract once, then each analysis takes seconds
+python log_index.py build ./logs --config config2026.json --config checks2026.json
+python analysis.py ./logs checks2026.json --index
 
 # Pit checks on the newest match, as an HTML page
 python analysis.py ./logs checks2026.json --matches-only --latest --html report.html
@@ -48,6 +53,7 @@ python analysis.py <log_folder> <config_json_file> [options]
 | `--matches-only` | Skip logs recorded outside a match (pit sessions), which otherwise dilute every per-file average |
 | `--latest` | Analyze only the most recent finished log, so a page left open always shows the newest match |
 | `--settle-seconds SECONDS` | With `--latest`, the gap over which the chosen log must not grow; `0` skips the check (default 1) |
+| `--index [PATH]` | Read each log from the index where it holds everything the config needs, and from the `.wpilog` otherwise; output is identical (default index: `.log-index.sqlite` in the log folder). See [The log index](#the-log-index) |
 | `--verbose` | Include captured values and a record summary |
 
 ### Choosing which logs to analyze
@@ -358,6 +364,90 @@ section per log file.
 
 `--json` writes the same run as JSON for anything downstream.
 
+## The log index
+
+Every analysis reads every record of every log, so a question across a season of
+logs costs minutes. `log_index.py` extracts each log once into a SQLite file. After
+that, `analysis.py --index` answers from it in seconds, with output identical to
+reading the logs. The index is meant to hold a whole season — home practice and
+matches alike — so that trends over time can be asked of it.
+
+```bash
+# Extract every new log in the folder; already-indexed logs are skipped
+python log_index.py build ./logs --config config2026.json --config checks2026.json
+
+# A season library: one index fed from many folders, subfolders included
+python log_index.py build ~/practice ~/events --index ~/season2026.sqlite
+
+# Same command and same output as without --index, just faster
+python analysis.py ./logs checks2026.json --index
+
+# What the index holds
+python log_index.py list ./logs
+```
+
+Measured on the 2026 set (10 logs):
+
+| Config | From the logs | From the index |
+|---|---:|---:|
+| `config2026.json` | 40 s | 0.7 s |
+| `checks2026.json` | 227 s | 16.5 s |
+
+**What is stored.**
+- **Every log:** when it was recorded, event and match (from the name, when
+  present), whether it was a match (FMS attached), and seconds disabled, in auto
+  and in teleop.
+- **Every entry:** its type, record count and time range.
+- **Every numeric value, per robot mode** (disabled, auto, teleop): seconds held,
+  min, max, and time-weighted mean and RMS. These exist for every double, stored
+  or not, and are what season trends compare — peak or RMS current per match,
+  for instance.
+- **Booleans, integers, strings and arrays:** every sample. These are the state
+  changes, counters and fault text that checks, cycle times, error counts and
+  vision dropouts come from.
+- **Doubles and structs:** most of a log, so their samples are stored only for
+  the ones a config passed with `--config` reads.
+
+The statistics are weighted by time because AdvantageKit writes a value only when
+it changes: a current sitting at 0 A for three minutes while disabled is one
+sample, and a plain average would count it once.
+
+Adding a config to an existing index reads only what is missing. Expect about
+5 MB per log, and 5–10 s per log to extract.
+
+**When the index cannot answer**, `analysis.py` reads that log's `.wpilog`
+instead, and says why on stderr:
+- the log is not indexed yet;
+- the config reads an entry that was not stored.
+
+The report on stdout is the same either way. The message names the
+`log_index.py build ... --config` command that would cover it.
+
+**Identity is content, not name.** A renamed or re-copied log is recognised, and
+rebuilding is idempotent. A log still being written is skipped. The index lives
+beside the logs as `.log-index.sqlite` (or `--index PATH`). An index written by an
+older version is rebuilt from the logs, never migrated.
+
+**Searching.** Stored samples carry a decoded `value` column, and statistics are
+in `entry_stats`, so a season-wide question is one query until event search and
+trends (roadmap B2, B3) give it a front end. Teleop RMS current per log, oldest
+first:
+
+```sql
+SELECT f.recorded_at, f.name, s.rms, s.max
+FROM entry_stats s JOIN entries e ON e.id = s.entry_id JOIN files f ON f.id = e.file_id
+WHERE e.name = '/Drivetrain/BL/DriveSupplyCurrent' AND s.mode = 'teleop'
+ORDER BY f.recorded_at;
+```
+
+Every CANivore error in the alert stream:
+
+```sql
+SELECT f.name, s.ts_us / 1e6 AS seconds, s.value
+FROM samples s JOIN entries e ON e.id = s.entry_id JOIN files f ON f.id = e.file_id
+WHERE e.name = '/RealOutputs/Alerts/errors' AND s.value LIKE '%CANivore%';
+```
+
 ## Pit workflow
 
 ### sync_logs.py
@@ -466,6 +556,7 @@ announces itself per file and is cached, so every later run is immediate.
 - `json`
 - `msgpack`
 - structs whose schema is encoded in the log file, flattened into child entries
+- protobuf-encoded entries are kept as raw bytes; their schemas are not decoded
 
 ## Requirements
 

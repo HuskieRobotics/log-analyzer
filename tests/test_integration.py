@@ -24,6 +24,7 @@ After an intentional output change, re-record and review the diff:
 import difflib
 import json
 import os
+import shutil
 import tempfile
 import subprocess
 import sys
@@ -35,6 +36,7 @@ TESTS_DIR = Path(__file__).resolve().parent
 REPO_ROOT = TESTS_DIR.parent
 
 ANALYSIS = REPO_ROOT / "analysis.py"
+LOG_INDEX = REPO_ROOT / "log_index.py"
 FIXTURES_DIR = TESTS_DIR / "fixtures"
 
 # Root holding the per-season log folders. Override to keep the (large) logs
@@ -187,6 +189,87 @@ def _build_season_cases():
 
 
 _build_season_cases()
+
+
+class IndexedGoldenTest(unittest.TestCase):
+    """The same goldens, with every log replayed from the index (B1).
+
+    The index must reproduce exactly what reading the .wpilog produces, so it is
+    held to the same recorded output. The index is built once per season with
+    every scenario's config, which stores each numeric entry those configs read;
+    the run then has to say it served every log from the index, or the
+    comparison would be quietly testing the .wpilog path again.
+    """
+
+    season = None  # set on each generated subclass
+
+    @classmethod
+    def setUpClass(cls):
+        problems = cls.season.log_problems()
+        if problems:
+            raise unittest.SkipTest(
+                f"season {cls.season.name}: {'; '.join(problems)}. "
+                f"See tests/README.md."
+            )
+        if UPDATE_GOLDEN:
+            raise unittest.SkipTest("goldens are recorded from the .wpilog path")
+        cls.tmp = Path(tempfile.mkdtemp())
+        cls.index = cls.tmp / "index.sqlite"
+        args = [sys.executable, str(LOG_INDEX), "build", str(cls.season.log_dir),
+                "--index", str(cls.index)]
+        for _name, config in cls.season.scenarios():
+            args += ["--config", str(config)]
+        completed = subprocess.run(args, cwd=str(REPO_ROOT), capture_output=True,
+                                   text=True, timeout=RUN_TIMEOUT_SECONDS)
+        if completed.returncode != 0:
+            raise AssertionError(f"log_index.py build failed:\n{completed.stdout}\n"
+                                 f"{completed.stderr}")
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def assert_index_matches_golden(self, scenario_name, config_path):
+        golden_path = self.season.golden_dir / f"{scenario_name}.txt"
+        if not golden_path.is_file():
+            self.skipTest(f"no golden recorded at {golden_path.relative_to(REPO_ROOT)}")
+
+        completed = subprocess.run(
+            [sys.executable, str(ANALYSIS), str(self.season.log_dir), str(config_path),
+             "--index", str(self.index)],
+            cwd=str(REPO_ROOT), capture_output=True, text=True,
+            timeout=RUN_TIMEOUT_SECONDS)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        count = len(self.season.expected_logs)
+        self.assertIn(f"Index: {count} of {count} logs read", completed.stderr)
+
+        expected = golden_path.read_text()
+        if completed.stdout != expected:
+            diff = "".join(difflib.unified_diff(
+                expected.splitlines(keepends=True),
+                completed.stdout.splitlines(keepends=True),
+                fromfile=str(golden_path.relative_to(REPO_ROOT)),
+                tofile=f"from index ({config_path.name})"))
+            self.fail(f"output from the index differs for {config_path.name}:\n{diff}")
+
+
+def _build_indexed_cases():
+    """One indexed TestCase class per season, one test method per scenario."""
+    for season in discover_seasons():
+        methods = {"season": season}
+        for scenario_name, config_path in season.scenarios():
+            def test(self, _name=scenario_name, _config=config_path):
+                self.assert_index_matches_golden(_name, _config)
+
+            test.__name__ = f"test_{scenario_name}"
+            test.__doc__ = f"{season.name}: {scenario_name} from the index"
+            methods[test.__name__] = test
+
+        cls_name = f"Season{season.name}IndexedGoldenTest"
+        globals()[cls_name] = type(cls_name, (IndexedGoldenTest,), methods)
+
+
+_build_indexed_cases()
 
 
 class ArgumentHandlingTest(unittest.TestCase):
