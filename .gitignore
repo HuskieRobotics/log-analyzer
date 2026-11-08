@@ -222,4 +222,4 @@ report.json
 .log-index.sqlite-journal
 
 # Local season logs for testing the index (large; not checked in)
-logs/
+/logs/
