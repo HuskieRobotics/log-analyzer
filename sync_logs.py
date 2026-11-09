@@ -5,8 +5,8 @@ A standalone tool. It shares nothing with analysis.py but the destination folder
 which is deliberate: the two have different failure modes, different lifetimes,
 and are joined only by files appearing in a directory.
 
-    ./sync_logs.py ./test/2026                     # fetch from 10.30.61.2
-    ./sync_logs.py ./test/2026 --dry-run           # show what would be fetched
+    ./sync_logs.py ./logs                          # fetch from 10.30.61.2
+    ./sync_logs.py ./logs --dry-run                # show what would be fetched
     ./sync_logs.py ./dest --from-local ./fake_bot  # exercise it without a robot
 
 What counts as "new" is derived from the destination folder rather than a state

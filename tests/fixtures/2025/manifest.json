@@ -1,6 +1,6 @@
 {
     "season": "2025",
-    "logDir": "test/2025",
+    "logDir": "tests/fixtures/2025/logs",
     "shippedConfig": "config2025.json",
     "logs": [
         "akit_25-04-17_14-51-30_curie_q40.wpilog",

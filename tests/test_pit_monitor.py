@@ -26,7 +26,7 @@ from pit_monitor import (  # noqa: E402
     run_sync,
 )
 
-REAL_LOGS = Path(__file__).resolve().parent.parent / "test" / "2026"
+REAL_LOGS = Path(__file__).resolve().parent / "fixtures" / "2026" / "logs"
 PIT_LOG = "akit_26-04-29_19-26-56.wpilog"
 MATCH_LOG = "akit_26-05-01_22-45-20_johnson_q121.wpilog"
 

@@ -36,11 +36,12 @@ python3 -m unittest tests.test_integration.ArgumentHandlingTest -v
 
 ## Fixture layout
 
-Each season is a directory under `fixtures/` with a manifest, optional extra
-configs, and its recorded goldens:
+Each season is a directory under `fixtures/` with a manifest, its log files,
+optional extra configs, and its recorded goldens:
 
 ```
 fixtures/2025/manifest.json      logs, log folder, shipped config
+fixtures/2025/logs/*.wpilog      the logs the goldens were recorded from (not in git)
 fixtures/2025/configs/*.json     extra scenarios beyond the shipped config
 fixtures/2025/golden/*.txt       recorded stdout, one per scenario
 ```
@@ -50,7 +51,7 @@ The manifest points at a log folder relative to the repo root:
 ```json
 {
     "season": "2025",
-    "logDir": "test/2025",
+    "logDir": "tests/fixtures/2025/logs",
     "shippedConfig": "config2025.json",
     "logs": ["akit_25-04-17_...wpilog", "akit_25-04-19_...wpilog"]
 }
@@ -68,6 +69,9 @@ means dropping in a config and recording its golden.
 
 ## Log fixtures
 
+**Don't delete `fixtures/<season>/logs/`.** Most of the suite needs these exact
+files, and they can't be recreated from the repository.
+
 The `.wpilog` files are large and **not checked in** (`*.wpilog` is gitignored) —
 ~108 MB for 2025, ~433 MB for 2026. Place them in the `logDir` each manifest
 names, or relocate all seasons at once:
@@ -76,8 +80,9 @@ names, or relocate all seasons at once:
 LOG_ANALYZER_TEST_LOGS=/path/to/logs python3 -m unittest discover -s tests
 ```
 
-`LOG_ANALYZER_TEST_LOGS` replaces the repo root, so the per-season subfolders
-(`test/2025`, `test/2026`) are still appended beneath it.
+`LOG_ANALYZER_TEST_LOGS` replaces the repo root, so each manifest's `logDir`
+(`tests/fixtures/2025/logs`, `tests/fixtures/2026/logs`) is still appended
+beneath it.
 
 A season whose logs are missing skips with an explanatory message;
 `ArgumentHandlingTest` still runs. Each manifest lists the exact filenames its
