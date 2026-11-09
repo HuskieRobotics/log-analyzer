@@ -816,7 +816,7 @@ class GiveUpOnUnreadableLogTest(unittest.TestCase):
 class TruncatedCopyIsReadableTest(unittest.TestCase):
     """The point of keeping it: a wpilog cut off mid-record still reads."""
 
-    LOG = (Path(__file__).resolve().parent.parent / "test" / "2026"
+    LOG = (Path(__file__).resolve().parent / "fixtures" / "2026" / "logs"
            / "akit_26-04-29_19-26-56.wpilog")
 
     @unittest.skipUnless(LOG.exists(), "2026 logs not present")

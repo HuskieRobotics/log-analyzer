@@ -27,7 +27,7 @@ from analysis import (  # noqa: E402
 )
 from datalog import DataLogReader  # noqa: E402
 
-LOG_DIR = Path(__file__).resolve().parent.parent / "test" / "2026"
+LOG_DIR = Path(__file__).resolve().parent / "fixtures" / "2026" / "logs"
 PIT_LOG = "akit_26-04-29_19-26-56.wpilog"
 MATCH_LOG = "akit_26-05-01_22-45-20_johnson_q121.wpilog"
 
