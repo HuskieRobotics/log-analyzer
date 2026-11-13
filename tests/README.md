@@ -174,6 +174,9 @@ Two more suites use the same synthetic match, whose timeline is known exactly:
   chosen and combined per match.
 - `tests/test_config_lint.py` makes each config mistake the linter exists for on
   purpose, and checks that correct configs raise nothing but notes.
+- `tests/test_questions.py` gives `questions.py check` one entry of each kind it
+  must tell apart: logged and working, not logged, logged but never set, and a
+  boolean that never fired.
 
 ## Updating goldens
 

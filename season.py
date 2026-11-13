@@ -42,7 +42,8 @@ from log_index import (DEFAULT_INDEX_NAME, NUMERIC_SCALAR_TYPES, IndexVersionErr
                        Manifest, NotAnIndexError, default_index_path)
 from Log import Log
 
-__all__ = ["LogInfo", "select_logs", "Timeline", "MEASURES", "measure", "find", "main"]
+__all__ = ["LogInfo", "select_logs", "Timeline", "MEASURES", "measure", "find",
+           "build_parser", "run", "main"]
 
 GATES = {"enabled": {"auto", "teleop"}, "auto": {"auto"}, "teleop": {"teleop"},
          "disabled": {"disabled"}, "always": {"disabled", "auto", "teleop"}}
@@ -713,7 +714,8 @@ def _parse_value(text: str) -> Any:
         return text
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def build_parser() -> argparse.ArgumentParser:
+    """The command line, also used to read the questions in a questions file."""
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--index", metavar="PATH",
                         help=f"index file (default: {DEFAULT_INDEX_NAME} in the log folder)")
@@ -773,48 +775,68 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "entries", parents=[common], help="which entries match a pattern, their types, "
                                           "and in how many logs")
     entries_parser.add_argument("entry", help="entry name or pattern")
+    return parser
 
-    args = parser.parse_args(argv)
-    path = args.index or default_index_path(args.log_folder)
+
+def default_scope(args: argparse.Namespace) -> str:
+    return args.logs or ("official" if args.command == "measure" else "all")
+
+
+def condition_from(args: argparse.Namespace) -> Callable[[Any], Any]:
+    return make_condition(_parse_value(args.equals) if args.equals is not None else None,
+                          args.contains, args.above, args.below)
+
+
+def run(args: argparse.Namespace, index: LogIndex) -> int:
+    """Answer one parsed command from an open index, printing the answer."""
+    scope = default_scope(args)
+    logs = select_logs(index, scope, args.event)
+    selection = describe_selection(logs, scope)
+    if not logs:
+        print(f"No {selection.split(' ', 1)[1]} in the index"
+              + (f" for {', '.join(args.event)}" if args.event else ""))
+        return 1
+    if args.command == "entries":
+        return print_entries(Manifest(index, [log.file_id for log in logs]),
+                             args.entry, selection)
+
+    test = condition_from(args)
+    reader = Reader(index, read_only=args.read_only)
+    if args.command == "find":
+        episodes = find(index, logs, args.entry, test, args.gate or "always", reader)
+        print_find(episodes, args.entry, selection, args.limit)
+        return 0
+
+    result = measure(index, logs, args.kind, args.entry, args.gate or "enabled",
+                     test, reader, selection, combined=args.combine)
+    if args.json:
+        print(json.dumps({"measure": result.kind, "entry": result.pattern,
+                          "while": result.gate, "selection": result.selection,
+                          "rows": summary_rows(result, args.by)}, indent=1))
+    else:
+        print_measure(result, args.by)
+    return 0
+
+
+def open_index(path: str, log_folder: str) -> Optional[LogIndex]:
+    """The index, or None after saying why it cannot be opened."""
     try:
-        index = LogIndex(path)
+        return LogIndex(path)
     except FileNotFoundError:
-        print(f"No index at {path}; build one with: log_index.py build {args.log_folder}",
+        print(f"No index at {path}; build one with: log_index.py build {log_folder}",
               file=sys.stderr)
-        return 2
     except (IndexVersionError, NotAnIndexError) as error:
         print(f"Error: {error}", file=sys.stderr)
+    return None
+
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    args = build_parser().parse_args(argv)
+    index = open_index(args.index or default_index_path(args.log_folder), args.log_folder)
+    if index is None:
         return 2
-
-    scope = args.logs or ("official" if args.command == "measure" else "all")
     try:
-        logs = select_logs(index, scope, args.event)
-        selection = describe_selection(logs, scope)
-        if not logs:
-            print(f"No {selection.split(' ', 1)[1]} in the index"
-                  + (f" for {', '.join(args.event)}" if args.event else ""))
-            return 1
-        if args.command == "entries":
-            return print_entries(Manifest(index, [log.file_id for log in logs]),
-                                 args.entry, selection)
-
-        test = make_condition(_parse_value(args.equals) if args.equals is not None else None,
-                              args.contains, args.above, args.below)
-        reader = Reader(index, read_only=args.read_only)
-        if args.command == "find":
-            episodes = find(index, logs, args.entry, test, args.gate or "always", reader)
-            print_find(episodes, args.entry, selection, args.limit)
-            return 0
-
-        result = measure(index, logs, args.kind, args.entry, args.gate or "enabled",
-                         test, reader, selection, combined=args.combine)
-        if args.json:
-            print(json.dumps({"measure": result.kind, "entry": result.pattern,
-                              "while": result.gate, "selection": result.selection,
-                              "rows": summary_rows(result, args.by)}, indent=1))
-        else:
-            print_measure(result, args.by)
-        return 0
+        return run(args, index)
     finally:
         index.close()
 

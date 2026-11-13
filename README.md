@@ -19,6 +19,7 @@ It is used two ways:
 | `log_index.py` | Extracts each log once into a SQLite index, so analyses across a season stop re-reading every file. |
 | `season.py` | Asks the index questions: finds when something happened, and measures things per match across a season. |
 | `config_lint.py` | Checks a config against the logs it will run on, before a run that would otherwise silently match nothing. |
+| `questions.py` | Keeps the team's questions with the `season.py` command for each, checks early in a season that the logs can answer them, and answers them all. |
 | `sync_logs.py` | Copies new logs off the roboRIO over SSH. Standalone; needs no config. |
 | `pit_monitor.py` | Loops: sync, pick the newest finished match, re-run the analysis, rewrite the report. |
 
@@ -582,6 +583,76 @@ non-empty value.
 
 Struct fields are decoded sample by sample, so a question over a pose array
 takes about a minute for a season.
+
+## Keeping the team's questions
+
+Questions asked at the end of a season can only be answered if the robot logged
+the right things all season. In 2026, two questions could not be answered from
+the logs:
+- energy, because the power distribution panel's readings were never logged;
+- distance, because the drivetrain's speed entry was 0 all season.
+
+`questions.py` keeps the questions in a file, and checks them early, against the
+first practice logs, while the logging can still change.
+
+```bash
+# Which questions can the newest logs answer?
+python questions.py check questions2027.json ./logs
+python questions.py check questions2027.json ./logs --since 2027-01-10
+
+# Answer every question over the season, for a summary
+python questions.py answer questions2026.json ./logs
+```
+
+Each question is the question in words, who asked it, and the `season.py`
+command that answers it: what follows the log folder.
+
+```json
+{
+    "season": 2027,
+    "questions": [
+        {
+            "question": "How much energy does each subsystem use per match (J)?",
+            "askedBy": "Geoff",
+            "ask": "measure increase '/Energy/*/Joules'"
+        }
+    ]
+}
+```
+
+`check` runs every question against the 10 newest logs (`--latest N`, or
+`--since DATE`) and gives each one a status:
+
+| Status | Meaning |
+|---|---|
+| `ready` | The entry is logged, changes, and gives an answer |
+| `check` | It is logged, but a number never changed (one value per log: often something nothing sets), it was 0 in every log, or it held no value while the question counts (was the robot enabled?) |
+| `missing` | No entry matches: the robot code doesn't log it yet, or under another name. The nearest names are suggested |
+| `invalid` | The `ask` is not a `season.py` command |
+
+It exits with status 1 when a question is `missing` or `invalid`. A boolean that
+held one value all match is not flagged: no brownout is good news.
+
+Two files ship:
+- `questions2026.json` holds the 2026 season summary's questions. `check`
+  flags the two the 2026 logging could not answer.
+- `questions2027.json` is a start for 2027. Its new questions use entry names
+  proposed for the robot code, such as `/Drivetrain/DistanceMeters` and
+  `/Energy/<Subsystem>/Joules`, so they show as `missing` until the robot code
+  logs them.
+
+**Logging so a question is one command.**
+- **Anything to be added up** (distance, energy, game pieces) is easiest as a
+  running total, answered by `measure increase`. A restart mid-match is not
+  counted as a decrease. Integers are always stored in the index; doubles are
+  stored the first time a question needs them.
+- **A plain number** (speed in m/s, power in W), not only a struct field, gets
+  per-mode statistics at indexing, so `measure integral`, `mean`, `max` and
+  `rms` answer without reading any samples.
+- **Name entries so one segment varies** (`/Energy/<Subsystem>/Joules`), so one
+  pattern reaches every subsystem and `--combine` gives the total.
+- **Put the unit in the name, and keep names and units fixed all season.** In
+  2026, temperatures changed from kelvin to °C in March, which splits a trend.
 
 ## Pit workflow
 

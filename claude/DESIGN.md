@@ -29,6 +29,7 @@ driven by a JSON config; there is no CLI beyond `analysis.py <log_folder> <confi
 | [log_index.py](../log_index.py) | SQLite index: extract each log once, replay the records a config needs | — |
 | [season.py](../season.py) | Questions over the index: find events, measure per match | — |
 | [config_lint.py](../config_lint.py) | Checks a config against the index's manifest before a run | — |
+| [questions.py](../questions.py), [questions2026.json](../questions2026.json), [questions2027.json](../questions2027.json) | The team's questions, each a `season.py` command; checks recent logs can answer them | — |
 | [config2025.json](../config2025.json), [config2026.json](../config2026.json) | Per-season example/default analysis configs | — |
 | [entry_patterns.py](../entry_patterns.py) | Segment-scoped glob matching for entry names | — |
 | [report_output.py](../report_output.py) | JSON and self-contained HTML renderings of a run | — |
@@ -383,6 +384,16 @@ comes from the replayed DriverStation entries. Two paths:
 - **Samples.** Everything else replays the field's samples. Weighted measures
   hold each value until the next record, clipped to the gate's windows, the same
   convention the statistics use. Tests check that the two paths agree.
+
+**`questions.py`** parses each question's `ask` with `season.build_parser`, so
+a question is exactly a command someone has run, and answers through
+`season.run`. Its `check` judges recent logs with the manifest first (does an
+entry match; did a numeric one ever change), then answers the question over
+those logs to see whether it gives a value. "Never changed" is judged only for
+numbers and struct fields: AdvantageKit's write-on-change makes one record per
+log normal for a boolean that never fired, but for a number it usually means
+nothing sets it, which is how the 2026 power distribution totals and drivetrain
+speed failed.
 
 **Per match.** A match is the pair (event, match code), so a robot restart's two
 logs combine into one match: additive measures add, `max`/`min` take the

@@ -1,0 +1,56 @@
+{
+    "season": 2026,
+    "about": "Questions the team asked of the 2026 logs, each with the season.py command that answers it. Run 'questions.py check' against new logs to see which can be answered; 'questions.py answer' answers them all.",
+    "questions": [
+        {
+            "question": "How many pose updates does the back-right camera contribute per match?",
+            "askedBy": "season summary",
+            "ask": "measure increase /RealOutputs/Vision/BR/UpdatePoseCount"
+        },
+        {
+            "question": "How many vision pose estimates are accepted per match?",
+            "askedBy": "season summary",
+            "ask": "measure sum /RealOutputs/Vision/RobotPosesAccepted/length --by season"
+        },
+        {
+            "question": "How long is each camera not sending frames while enabled?",
+            "askedBy": "season summary",
+            "ask": "measure time '/RealOutputs/Vision/*/sending frames' --equals false"
+        },
+        {
+            "question": "How many times does the robot brown out per match?",
+            "askedBy": "season summary",
+            "ask": "measure rises /SystemStats/BrownedOut"
+        },
+        {
+            "question": "How much charge do all the motors draw per match (A x s)?",
+            "askedBy": "season summary",
+            "ask": "measure integral '/**/*SupplyCurrent*' --combine"
+        },
+        {
+            "question": "How hot does the hottest drive motor get per match?",
+            "askedBy": "season summary",
+            "ask": "measure max '/Drivetrain/*/DriveTemp' --combine"
+        },
+        {
+            "question": "Which auto routine ran in each match?",
+            "askedBy": "season summary",
+            "ask": "find '/NetworkInputs/SmartDashboard/Auto Routine' --while auto --logs official --limit 0"
+        },
+        {
+            "question": "When did the CANivore report errors?",
+            "askedBy": "season summary",
+            "ask": "find /RealOutputs/Alerts/errors --contains canivore"
+        },
+        {
+            "question": "How much energy does the robot use per match, from the power distribution panel?",
+            "askedBy": "season summary",
+            "ask": "measure increase /PowerDistribution/TotalEnergy"
+        },
+        {
+            "question": "How far does the robot drive per match (m)?",
+            "askedBy": "season summary",
+            "ask": "measure integral /Drivetrain/AverageSwerveMeasuredSpeed"
+        }
+    ]
+}

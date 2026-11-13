@@ -1608,7 +1608,9 @@ showed what the front end must do:
 It also found logging gaps in the robot code, worth fixing before next season:
 
 - `/PowerDistribution/TotalCurrent`, `TotalPower`, `TotalEnergy` and
-  `ChannelCurrent` were 0 in every log; the PDH was never polled.
+  `ChannelCurrent` were 0 in every log. The power distribution panel (a CTRE
+  PDP 2, used again in 2027) logs nothing on its own; the robot code must read
+  it and log what it reports.
 - `/SystemStats/BatteryCurrent` is the roboRIO's own input current (about
   0.4 A), not the robot's.
 - `/Drivetrain/AverageSwerveMeasuredSpeed` was 0 in every match. Had it worked,
@@ -1650,6 +1652,21 @@ What it does not do, deliberately for now:
   elements could read the record length instead of decoding it.
 - **Trends over time.** Rows are per match and per event, but not yet compared
   across dates. That is B3, and `measure --by match --json` is its input.
+
+**Questions first, logging second (2026-11-12).** The 2026 summary's energy and
+distance questions failed because the logging was not there, which nobody could
+see until the season was over. For 2027 the plan is to collect the team's
+questions before the season, decide what the robot code (3061-lib) must log to
+answer each in one command, and check early. `questions.py` holds that list:
+each question is a `season.py` command, `check` runs them all against the newest
+practice logs and reports `ready`, `check` (logged but a number never changes,
+or 0 throughout), `missing` or `invalid`, and `answer` answers them all for a
+summary. `questions2026.json` holds the 2026 questions and flags the two the
+2026 logging could not answer; `questions2027.json` starts the 2027 list with
+proposed entry names (`/Drivetrain/DistanceMeters`, `/Energy/<Subsystem>/Joules`)
+that show as `missing` until the robot code logs them. The power distribution
+panel is a CTRE PDP 2 in 2027 as in 2026; it logs nothing unless the robot code
+reads it.
 
 ## 12. Test Fixtures and Logging Conventions
 
