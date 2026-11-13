@@ -27,6 +27,8 @@ driven by a JSON config; there is no CLI beyond `analysis.py <log_folder> <confi
 | [analysis.py](../analysis.py) | Entry point: config, filtering, analysis, reporting | Original to this repo |
 | [capture.py](../capture.py) | Capture rules: which records of which entries a config keeps, and the type dispatch into `Log` | — |
 | [log_index.py](../log_index.py) | SQLite index: extract each log once, replay the records a config needs | — |
+| [season.py](../season.py) | Questions over the index: find events, measure per match | — |
+| [config_lint.py](../config_lint.py) | Checks a config against the index's manifest before a run | — |
 | [config2025.json](../config2025.json), [config2026.json](../config2026.json) | Per-season example/default analysis configs | — |
 | [entry_patterns.py](../entry_patterns.py) | Segment-scoped glob matching for entry names | — |
 | [report_output.py](../report_output.py) | JSON and self-contained HTML renderings of a run | — |
@@ -349,6 +351,46 @@ on stderr:
 
 Identity is the file's sha256, so a renamed or re-copied log is recognised. A
 `paths` table keyed by path, size and mtime avoids re-hashing on every lookup.
+
+### 3.8 Questions over the index (`season.py`, `config_lint.py`)
+
+Both read the index and never a `.wpilog` directly.
+
+**`config_lint.py`** reads only the manifest (`log_index.Manifest`): every field
+each log produces, with its entry's type, record count and the DriverStation
+states its entry was recorded in (the `spans` keys). That is enough to find the
+three silent failures of ROADMAP §12.1 without loading a sample:
+- a pattern that matches no field;
+- a value whose type can never equal the entry's;
+- an entry whose recorded states all fail the config's filters, judged with the
+  same `passes_filter` the capture uses.
+
+The last needs care with AdvantageKit's write-on-change. An entry written once
+per log, while disabled, held its boot value all match; that is a note, not an
+error. Struct leaves have no type in the manifest, so type checks skip them.
+`analysis.py --index` runs the same lint before a run, but only when every log
+is indexed: judged against some of them, an entry that exists only in the others
+would look missing.
+
+**`season.py`** answers through `LogIndex.load_log`, with a config that names one
+entry pattern and no filters. So a question gets struct decoding, the entry
+patterns and auto-extend from the same code the analyzer uses. The mode timeline
+comes from the replayed DriverStation entries. Two paths:
+- **Statistics.** `mean`, `rms`, `max`, `min` and `integral` of a pattern that
+  matches only numeric scalar entries come from `entry_stats`, combining the
+  modes the gate admits. No samples are read or stored. The choice is made once
+  per question, not per log, so one answer never mixes the two paths.
+- **Samples.** Everything else replays the field's samples. Weighted measures
+  hold each value until the next record, clipped to the gate's windows, the same
+  convention the statistics use. Tests check that the two paths agree.
+
+**Per match.** A match is the pair (event, match code), so a robot restart's two
+logs combine into one match: additive measures add, `max`/`min` take the
+extreme, and `mean`/`rms` combine by the seconds behind them. A log without an
+event code takes the most common code in its folder, the only place an event
+name survives for those logs. The end of a log is held back to the statistics
+clock's end (`files.last_us`), so a corrupt far-future timestamp cannot stretch
+the last window.
 
 ## 4. Config Model
 

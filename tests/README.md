@@ -168,6 +168,13 @@ small synthetic logs written by [`wpilog_writer.py`](wpilog_writer.py):
 - the cases where the index must decline and fall back;
 - the protobuf schema that used to fail a log.
 
+Two more suites use the same synthetic match, whose timeline is known exactly:
+- `tests/test_season.py` checks each `season.py` measure against a value worked
+  out by hand, that the statistics and samples paths agree, and how logs are
+  chosen and combined per match.
+- `tests/test_config_lint.py` makes each config mistake the linter exists for on
+  purpose, and checks that correct configs raise nothing but notes.
+
 ## Updating goldens
 
 When you change the output deliberately, re-record and **review the diff** before
