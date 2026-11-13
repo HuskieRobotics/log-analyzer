@@ -91,8 +91,11 @@ STATE_CONFIG = {
 }
 
 
-def write_match_log(path, seconds=20, roller_offset=0.0, duplicate_id=False):
+def write_match_log(path, seconds=20, roller_offset=0.0, duplicate_id=False, fms_attached=True):
     """A small but complete match: FMS, auto, teleop, then disabled.
+
+    With fms_attached False it is a pit session: the same, but the field never
+    attaches.
 
     Timeline (seconds): FMS attaches at 1, enabled 2-15 with auto until 5. The
     flywheel disconnects at 6 for half a second and again at 14 for good. A
@@ -126,7 +129,7 @@ def write_match_log(path, seconds=20, roller_offset=0.0, duplicate_id=False):
 
     for ts in range(0, seconds * SECOND, CYCLE):
         t = ts / SECOND
-        if ts == 1 * SECOND:
+        if ts == 1 * SECOND and fms_attached:
             w.boolean(fms, ts, True)
         if ts == 2 * SECOND:
             w.boolean(enabled, ts, True)

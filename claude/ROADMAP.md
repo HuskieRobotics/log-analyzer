@@ -7,11 +7,12 @@ features, what measuring the logs revealed, and the order to build in.
 Written 2026-09-07, against the post-optimization tree (analyzer runs both sample
 logs in ~7 s; golden suite in [tests/](../tests/) is green).
 
-**Status, 2026-11-08:** Milestone A (pit mode) is complete and has been used at
+**Status, 2026-11-12:** Milestone A (pit mode) is complete and has been used at
 two events, where it worked as expected. The second event ran the current code,
 including the sync and monitor changes made after the first (A5 and A7 notes in
-§11). §10 has no open items. In Milestone B, B1 (the index) is done and B2
-(event search) is next. §13 lists one cross-cutting defect still open.
+§11). §10 has no open items. In Milestone B, B1 (the index) and B2 (event search,
+with measures per match: `season.py`) are done, and B3 (trends) is next. The
+config linter (§13) is done, so §13 has nothing open.
 
 ## 1. Requested Features
 
@@ -896,8 +897,8 @@ The post-match checklist, end to end. Nothing here needs the index.
 | # | Step | Why | Depends on |
 |---|---|---|---|
 | B1 | ~~**Extract / index layer**~~ (SQLite) — **done** (`log_index.py`, `analysis.py --index`) | Makes search viable, checks instant across a season | A2 |
-| B2 | **Event search** (feature 3) — **next** | The reason the index exists | B1 |
-| B3 | **Historical comparison and trends** (§9.2–9.3, §9.6) — scope set 2026-11-08, see B1 notes | Catches what sibling comparison cannot: wear affecting every peer equally, and slow trends | B1, A9 |
+| B2 | ~~**Event search** (feature 3)~~ — **done** (`season.py find`), widened to measures per match (`season.py measure`) | The reason the index exists | B1 |
+| B3 | **Historical comparison and trends** (§9.2–9.3, §9.6) — **next**; scope set 2026-11-08 (B1 notes), building blocks in B2 notes | Catches what sibling comparison cannot: wear affecting every peer equally, and slow trends | B1, A9 |
 
 ### Milestone C — Optional
 
@@ -1580,6 +1581,93 @@ WHERE e.name = '/RealOutputs/Alerts/errors' AND s.value LIKE '%CANivore%';
 What B2 adds is the front end: a query a person can type, which names the event
 and the file without them writing SQL.
 
+**What a season summary asked of the index (2026-11-09).** The first real use
+was an end-of-season summary for the team: distance driven, minutes enabled,
+auto routines run, vision poses accepted, and battery energy, over official
+matches. Every answer came from the index, but each needed a script, and they
+showed what the front end must do:
+
+- **Choose the logs.** "Official matches" are FMS-attached qualification and
+  elimination logs, not practice matches. Four match logs have no event code in
+  their names; the folder they sit in was the only record of the event. A match
+  the robot restarted in (johnson q36) has two logs and is still one match.
+- **Normalize per match.** The natural unit for a team question is the match:
+  "BR accepted poses per match", not per log and not a season total alone.
+- **Count only while enabled.** Distance, energy, accepted poses and brownouts
+  were all wanted for enabled time only.
+- **Decode structs.** Distance came from `/Drivetrain/MeasuredChassisSpeeds`
+  (vx, vy), and accepted poses from `RobotPosesAccepted` (a `Pose3d[]`). SQL
+  cannot decode either, and the index kept neither's samples by default.
+- **Combine entries.** Energy is battery voltage × the sum of 19 motors' supply
+  currents at each moment. The amp-hours came straight from the statistics
+  (time-weighted mean × seconds is the integral, and integrals add), and agreed
+  with a full read to 0.1%. Watt-hours did not: a product of two signals needs
+  both signals' samples, and storing every motor current for a season would
+  add about a gigabyte. They were computed from the `.wpilog` files instead.
+
+It also found logging gaps in the robot code, worth fixing before next season:
+
+- `/PowerDistribution/TotalCurrent`, `TotalPower`, `TotalEnergy` and
+  `ChannelCurrent` were 0 in every log. The power distribution panel (a CTRE
+  PDP 2, used again in 2027) logs nothing on its own; the robot code must read
+  it and log what it reports.
+- `/SystemStats/BatteryCurrent` is the roboRIO's own input current (about
+  0.4 A), not the robot's.
+- `/Drivetrain/AverageSwerveMeasuredSpeed` was 0 in every match. Had it worked,
+  distance would have been one integral from the statistics.
+- Drive motor temperatures were logged in kelvin at Bluff Country (5–7 March)
+  and in °C from 23 March on, so a season trend in temperature needs the date.
+
+**B2 — `season.py` (2026-11-12).** Built from that list. Three commands over the
+index: `find` (event search: each spell an entry met a condition, with event,
+match, time, robot mode and seconds into it, and duration), `measure` (one of
+ten measures per match, rolled up by event and season), and `entries` (what
+exists to ask about). It answers through `load_log`, so struct leaves, entry
+patterns and auto-extend come from the same code the analyzer uses, and through
+`entry_stats` when only plain numeric entries are involved. On the 2026 season:
+
+| Question | Path | Time |
+|---|---|---:|
+| BR camera pose updates per match (`increase`, int64) | samples | 2 s |
+| CANivore errors, every log (`find --contains`) | samples | 2 s |
+| Drive motor charge per match (`integral`, 4 doubles) | statistics | 1 s |
+| All motors' charge together (`integral --combine`) | statistics | 1 s |
+| Accepted poses per match (`sum` of a `Pose3d[]` length) | samples | 60 s |
+
+The answers match the summary's scripts exactly (166,602 BR updates; 549,852
+accepted poses; 1,861 brownouts; 309.5 Ah). `measure time ... sending frames
+--equals false` gave a vision-dropout figure the summary did not have: camera
+BCL was not sending frames for 3,240 s of enabled time over 47 matches, about
+69 s per match.
+
+What it does not do, deliberately for now:
+
+- **Expressions across entries.** Distance (the integral of √(vx² + vy²)) and
+  energy (V × ΣI) combine signals sample by sample. `--combine` covers sums of
+  like entries; anything else still needs a script. A small set of derived
+  quantities, computed at extraction and stored per mode like the other
+  statistics, would make both one-line questions; worth weighing in B3.
+- **Fast struct decoding.** A struct field is decoded record by record in
+  Python, about 1 s per match log for a pose array. Counting an array's
+  elements could read the record length instead of decoding it.
+- **Trends over time.** Rows are per match and per event, but not yet compared
+  across dates. That is B3, and `measure --by match --json` is its input.
+
+**Questions first, logging second (2026-11-12).** The 2026 summary's energy and
+distance questions failed because the logging was not there, which nobody could
+see until the season was over. For 2027 the plan is to collect the team's
+questions before the season, decide what the robot code (3061-lib) must log to
+answer each in one command, and check early. `questions.py` holds that list:
+each question is a `season.py` command, `check` runs them all against the newest
+practice logs and reports `ready`, `check` (logged but a number never changes,
+or 0 throughout), `missing` or `invalid`, and `answer` answers them all for a
+summary. `questions2026.json` holds the 2026 questions and flags the two the
+2026 logging could not answer; `questions2027.json` starts the 2027 list with
+proposed entry names (`/Drivetrain/DistanceMeters`, `/Energy/<Subsystem>/Joules`)
+that show as `missing` until the robot code logs them. The power distribution
+panel is a CTRE PDP 2 in 2027 as in 2026; it logs nothing unless the robot code
+reads it.
+
 ## 12. Test Fixtures and Logging Conventions
 
 **Done.** The suite is season-parameterized; see
@@ -1658,12 +1746,20 @@ Fix these along the way — each will otherwise distort a feature above:
   Any entry containing `.schema` was split on `struct:`, which raised
   `IndexError` on a protobuf schema entry and failed the whole log. Only
   `/.schema/struct:` entries reach the struct decoder now (`capture.py`).
-- **Still open: no config validation.** Every failure mode in §12.1 produced a clean run with
-  empty results rather than an error, which is the worst possible feedback. A
-  linter — check each referenced entry exists in the target logs, that the
-  configured value's type matches the entry's, and that the entry is actually
-  recorded under the configured `robotMode` — would catch all three before a
-  multi-minute run. Cheap once B1's manifest exists; useful enough to do sooner.
+- ~~**No config validation**~~ — **done** (`config_lint.py`, 2026-11-12). Every
+  failure mode in §12.1 produced a clean run with empty results. The linter
+  checks a config against the index's manifest in a few seconds (3 s for
+  `checks2026.json` against all 278 logs of 2026), and `analysis.py --index`
+  runs it before each run once every log is indexed. It catches all three
+  §12.1 failures, plus misspelt keys, unknown calculations or gates, thresholds
+  on text, and `expectEntries` that never appear.
+  - **Its first run found something.** `config2026.json`'s "Roller Stalled"
+    analysis reads `/RealOutputs/Intake/RollerStalled`. In all ten 2026 logs
+    that entry was written once, `false`, at boot, and never changed. The
+    analysis is correct, and the intake simply never stalled in those matches.
+    That is why an entry written once while disabled is a note, not an error:
+    AdvantageKit writes only changes, so one boot record means the value held
+    all match.
 
 ## 13b. Pose Estimator Divergence (shipped)
 

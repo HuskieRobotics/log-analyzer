@@ -1634,6 +1634,13 @@ def main() -> None:
         from log_index import IndexedRun
         indexed = IndexedRun(args.index, log_folder, config, args.config_json_file,
                              read_only=args.index_read_only)
+        if indexed.index is not None:
+            # The manifest makes checking the config nearly free, and a wrong
+            # entry name otherwise costs a whole run of silence. stderr only:
+            # the report on stdout must not change.
+            from config_lint import config_warnings
+            for line in config_warnings(config, indexed.index, sorted(log_files)):
+                print(line, file=sys.stderr)
 
     # Process all log files
     for log_file in sorted(log_files):

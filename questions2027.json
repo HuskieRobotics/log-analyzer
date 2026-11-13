@@ -1,0 +1,56 @@
+{
+    "season": 2027,
+    "about": "Questions the team wants the 2027 logs to answer. Add yours, with the season.py command that would answer it; entry names for things not yet logged are proposals for the robot code (3061-lib). Run 'questions.py check questions2027.json ./logs' after each early practice session: 'missing' means the robot code does not log it yet.",
+    "questions": [
+        {
+            "question": "How far does the robot drive per match (m)?",
+            "askedBy": "Geoff",
+            "ask": "measure increase /Drivetrain/DistanceMeters"
+        },
+        {
+            "question": "How much energy does each subsystem use per match (J)?",
+            "askedBy": "Geoff",
+            "ask": "measure increase '/Energy/*/Joules'"
+        },
+        {
+            "question": "How much energy does the whole robot use per match (J)?",
+            "askedBy": "Geoff",
+            "ask": "measure increase '/Energy/*/Joules' --combine"
+        },
+        {
+            "question": "What is each subsystem's peak power per match (W)?",
+            "askedBy": "Geoff",
+            "ask": "measure max '/Energy/*/Watts'"
+        },
+        {
+            "question": "How much current does the power distribution panel report per match (A x s)?",
+            "askedBy": "Geoff",
+            "ask": "measure integral /PowerDistribution/TotalCurrent"
+        },
+        {
+            "question": "How many times does the robot brown out per match?",
+            "askedBy": "carried over from 2026",
+            "ask": "measure rises /SystemStats/BrownedOut"
+        },
+        {
+            "question": "How low does the battery voltage get per match?",
+            "askedBy": "carried over from 2026",
+            "ask": "measure min /SystemStats/BatteryVoltage"
+        },
+        {
+            "question": "How long is each camera not sending frames while enabled?",
+            "askedBy": "carried over from 2026",
+            "ask": "measure time '/RealOutputs/Vision/*/sending frames' --equals false"
+        },
+        {
+            "question": "How many pose updates does each camera contribute per match?",
+            "askedBy": "carried over from 2026",
+            "ask": "measure increase '/RealOutputs/Vision/*/UpdatePoseCount'"
+        },
+        {
+            "question": "When did the CANivore report errors?",
+            "askedBy": "carried over from 2026",
+            "ask": "find /RealOutputs/Alerts/errors --contains canivore"
+        }
+    ]
+}

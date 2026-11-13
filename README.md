@@ -17,6 +17,9 @@ It is used two ways:
 |------|--------------|
 | `analysis.py` | Reads logs and produces analyses, checks and reports. Everything else composes this. |
 | `log_index.py` | Extracts each log once into a SQLite index, so analyses across a season stop re-reading every file. |
+| `season.py` | Asks the index questions: finds when something happened, and measures things per match across a season. |
+| `config_lint.py` | Checks a config against the logs it will run on, before a run that would otherwise silently match nothing. |
+| `questions.py` | Keeps the team's questions with the `season.py` command for each, checks early in a season that the logs can answer them, and answers them all. |
 | `sync_logs.py` | Copies new logs off the roboRIO over SSH. Standalone; needs no config. |
 | `pit_monitor.py` | Loops: sync, pick the newest finished match, re-run the analysis, rewrite the report. |
 
@@ -30,6 +33,13 @@ python analysis.py ./tests/fixtures/2025/logs config2025.json
 
 # A season library: the first run stores what it reads, later runs take seconds
 python analysis.py ./logs checks2026.json --index
+
+# Questions about the season, per match
+python season.py ./logs measure increase '/RealOutputs/Vision/BR/UpdatePoseCount'
+python season.py ./logs find '/RealOutputs/Alerts/errors' --contains canivore
+
+# Check a config before running it
+python config_lint.py config2026.json ./logs
 
 # Pit checks on the newest match, as an HTML page
 python analysis.py ./logs checks2026.json --matches-only --latest --html report.html
@@ -94,6 +104,35 @@ One JSON file holds filtering, analyses and checks. Every section is optional.
 
 The repository ships three examples: `config2025.json` and `config2026.json`
 (analyses, for practice review) and `checks2026.json` (checks, for the pit).
+
+### Checking a config
+
+A config that names an entry wrongly does not fail. The run completes, matches
+nothing and reports nothing. `config_lint.py` checks a config against the logs it
+will run on, from the index's list of entries, in a few seconds:
+
+```bash
+python config_lint.py config2026.json ./logs
+```
+
+It reports:
+
+- **errors**, which guarantee that an analysis or check silently does nothing:
+  - an entry or pattern that matches no entry in any log, with the nearest real
+    names;
+  - a value that can never equal the entry's value, such as `"12"` against a
+    double;
+  - a threshold, sibling comparison or calculation pointed at text;
+  - an entry recorded only in robot modes the config's filters drop, such as an
+    auto-only entry under `"robotMode": "teleop"`.
+- **warnings**, for settings the tool doesn't read (usually a typo, such as
+  `startValeu`) and for unknown calculations, gates, statistics or severities.
+- **notes**, for an entry present in only some logs, which is often a rename
+  partway through a season, and for one that never changed.
+
+It exits with status 1 if there are errors. Logs not yet in the index are indexed
+first, once. `analysis.py --index` runs the same check before each run once
+every log is indexed, and prints any errors and warnings on stderr.
 
 ### Filtering options
 
@@ -432,10 +471,10 @@ rebuilding is idempotent. A log still being written is skipped. The index lives
 beside the logs as `.log-index.sqlite` (or `--index PATH`). An index written by an
 older version is rebuilt from the logs, never migrated.
 
-**Searching.** Stored samples carry a decoded `value` column, and statistics are
-in `entry_stats`, so a season-wide question is one query until event search and
-trends (roadmap B2, B3) give it a front end. Teleop RMS current per log, oldest
-first:
+**Asking it questions.** [`season.py`](#asking-the-season-questions) is the
+front end. The tables are plain SQLite too: stored samples carry a decoded
+`value` column, and statistics are in `entry_stats`. Teleop RMS current per log,
+oldest first:
 
 ```sql
 SELECT f.recorded_at, f.name, s.rms, s.max
@@ -451,6 +490,169 @@ SELECT f.name, s.ts_us / 1e6 AS seconds, s.value
 FROM samples s JOIN entries e ON e.id = s.entry_id JOIN files f ON f.id = e.file_id
 WHERE e.name = '/RealOutputs/Alerts/errors' AND s.value LIKE '%CANivore%';
 ```
+
+## Asking the season questions
+
+`season.py` answers questions from the index in seconds. It has three commands:
+`measure` totals or summarises an entry per match, `find` lists when something
+happened, and `entries` shows what can be asked about.
+
+```bash
+# BR camera: pose updates accepted per match, by event
+python season.py ./logs measure increase '/RealOutputs/Vision/BR/UpdatePoseCount'
+
+# Every camera: seconds not sending frames while enabled, per match
+python season.py ./logs measure time '/RealOutputs/Vision/*/sending frames' --equals false
+
+# Brownouts per match
+python season.py ./logs measure rises /SystemStats/BrownedOut
+
+# Charge drawn by every motor together (A x s; divide by 3600 for Ah)
+python season.py ./logs measure integral '/**/*SupplyCurrent*' --combine
+
+# When each CANivore error happened: event, match, time, mode, how long
+python season.py ./logs find '/RealOutputs/Alerts/errors' --contains canivore
+
+# What there is to ask about
+python season.py ./logs entries '/RealOutputs/Vision/**'
+```
+
+Output from the first one, on the 2026 season:
+
+```
+increase of /RealOutputs/Vision/BR/UpdatePoseCount while enabled, per match
+64 official match logs (63 matches, 6 events); from samples
+
+/RealOutputs/Vision/BR/UpdatePoseCount
+         matches    total  per match  lowest  highest
+-------  -------  -------  ---------  ------  -------
+mnwi          13   75,440      5,803     641   10,239
+ilch          11   22,499      2,045     204    4,353
+johnson       10   16,439      1,644      22    3,435
+ilnap          9   13,546      1,505       1    3,051
+wimil          7   20,844      2,978       3    4,479
+iltrr          9   17,834      1,982     775    3,647
+season        59  166,602      2,824       1   10,239
+
+4 of 63 matches had no value for it.
+```
+
+**Measures.**
+
+| Measure | What it gives | Adds up? |
+|---|---|---|
+| `count` | Records written; each one is a change of value | yes |
+| `rises` | Times the value became true, or met the condition | yes |
+| `time` | Seconds the value was true, or met the condition | yes |
+| `sum` | Sum of the values written; an array counts its elements | yes |
+| `increase` | How much a counter went up; a reset is not a decrease | yes |
+| `integral` | Value × seconds held: amps give A·s, m/s gives meters | yes |
+| `mean`, `rms` | Time-weighted mean, root mean square | no |
+| `max`, `min` | Highest, lowest value held | no |
+
+Each event's row gives its matches, the total where adding up makes sense (the
+time-weighted overall value otherwise), the average per match, and the lowest
+and highest match. `--by match` lists every match; `--by season` gives one row.
+`--json` prints the rows for a script or a spreadsheet.
+
+**Conditions.** `--equals VALUE` (`true`, `12`, `OK`), `--contains TEXT`
+(ignoring case; for an array, any element), and `--above N` / `--below N` choose
+what `rises`, `time` and `find` look for. Without one, they look for a true or
+non-empty value.
+
+**Which logs and when.**
+- `measure` defaults to **official matches**: qualification and elimination logs
+  recorded with the field attached. `find` and `entries` default to every log.
+  `--logs matches` adds practice matches, `--logs all` every log, and `--event
+  CODE` narrows to an event.
+- A match whose robot restarted has two logs; they count as one match.
+- A log whose name carries no event code takes the code of the other logs in
+  its folder.
+- `measure` counts `--while enabled` (auto and teleop) by default; `find`
+  searches `--while always`. Either takes `auto`, `teleop`, `disabled` or
+  `always`.
+
+**Where the answers come from.**
+- `mean`, `rms`, `max`, `min` and `integral` of a plain numeric entry come
+  straight from the per-mode statistics, and need no samples.
+- Everything else reads samples. Booleans, integers, strings and arrays are
+  always stored. Doubles and struct fields (such as `.../RobotPosesAccepted/length`
+  or `.../MeasuredChassisSpeeds/vx`) are stored the first time a question needs
+  them, from each log's file: 3 to 9 minutes for the 64 matches of 2026, once.
+  `--read-only` skips logs that lack them instead.
+
+Struct fields are decoded sample by sample, so a question over a pose array
+takes about a minute for a season.
+
+## Keeping the team's questions
+
+Questions asked at the end of a season can only be answered if the robot logged
+the right things all season. In 2026, two questions could not be answered from
+the logs:
+- energy, because the power distribution panel's readings were never logged;
+- distance, because the drivetrain's speed entry was 0 all season.
+
+`questions.py` keeps the questions in a file, and checks them early, against the
+first practice logs, while the logging can still change.
+
+```bash
+# Which questions can the newest logs answer?
+python questions.py check questions2027.json ./logs
+python questions.py check questions2027.json ./logs --since 2027-01-10
+
+# Answer every question over the season, for a summary
+python questions.py answer questions2026.json ./logs
+```
+
+Each question is the question in words, who asked it, and the `season.py`
+command that answers it: what follows the log folder.
+
+```json
+{
+    "season": 2027,
+    "questions": [
+        {
+            "question": "How much energy does each subsystem use per match (J)?",
+            "askedBy": "Geoff",
+            "ask": "measure increase '/Energy/*/Joules'"
+        }
+    ]
+}
+```
+
+`check` runs every question against the 10 newest logs (`--latest N`, or
+`--since DATE`) and gives each one a status:
+
+| Status | Meaning |
+|---|---|
+| `ready` | The entry is logged, changes, and gives an answer |
+| `check` | It is logged, but a number never changed (one value per log: often something nothing sets), it was 0 in every log, or it held no value while the question counts (was the robot enabled?) |
+| `missing` | No entry matches: the robot code doesn't log it yet, or under another name. The nearest names are suggested |
+| `invalid` | The `ask` is not a `season.py` command |
+
+It exits with status 1 when a question is `missing` or `invalid`. A boolean that
+held one value all match is not flagged: no brownout is good news.
+
+Two files ship:
+- `questions2026.json` holds the 2026 season summary's questions. `check`
+  flags the two the 2026 logging could not answer.
+- `questions2027.json` is a start for 2027. Its new questions use entry names
+  proposed for the robot code, such as `/Drivetrain/DistanceMeters` and
+  `/Energy/<Subsystem>/Joules`, so they show as `missing` until the robot code
+  logs them.
+
+**Logging so a question is one command.**
+- **Anything to be added up** (distance, energy, game pieces) is easiest as a
+  running total, answered by `measure increase`. A restart mid-match is not
+  counted as a decrease. Integers are always stored in the index; doubles are
+  stored the first time a question needs them.
+- **A plain number** (speed in m/s, power in W), not only a struct field, gets
+  per-mode statistics at indexing, so `measure integral`, `mean`, `max` and
+  `rms` answer without reading any samples.
+- **Name entries so one segment varies** (`/Energy/<Subsystem>/Joules`), so one
+  pattern reaches every subsystem and `--combine` gives the total.
+- **Put the unit in the name, and keep names and units fixed all season.** In
+  2026, temperatures changed from kelvin to °C in March, which splits a trend.
 
 ## Pit workflow
 

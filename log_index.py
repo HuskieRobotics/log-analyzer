@@ -40,6 +40,7 @@ for any config's filters without the samples themselves.
 """
 
 import argparse
+import difflib
 import hashlib
 import json
 import math
@@ -64,7 +65,7 @@ from Log import Log
 from StructDecoder import StructDecoder
 
 __all__ = ["SCHEMA_VERSION", "DEFAULT_INDEX_NAME", "STATE_TYPES", "LogIndex", "IndexedRun",
-           "IndexVersionError", "NotAnIndexError", "LoadResult", "index_version",
+           "IndexVersionError", "NotAnIndexError", "LoadResult", "Manifest", "index_version",
            "default_index_path", "parse_log_name", "main"]
 
 # Bump on any change to the tables below or to what extraction records. An
@@ -980,6 +981,49 @@ class LogIndex:
             "(SELECT COUNT(*) FROM entries WHERE file_id = files.id AND stored) "
             "FROM files ORDER BY recorded_at, name")
         return [dict(zip(columns + ("entries", "stored"), row)) for row in rows]
+
+
+class Manifest:
+    """Every field the target logs produce, from the index, without any samples.
+
+    A field is an entry name, or a leaf a struct entry produces once decoded
+    ("/Drivetrain/Pose/translation/x"). For each field it keeps the entry's
+    type (None for a struct leaf, whose type the manifest does not record), the
+    logs it appears in and those holding its samples, its record count, and the
+    DriverStation states its entry was recorded in.
+    """
+
+    def __init__(self, index: "LogIndex", file_ids: Sequence[int]):
+        self.log_count = len(file_ids)
+        self.types: Dict[str, Set[Optional[str]]] = {}
+        self.logs: Dict[str, Set[int]] = {}
+        self.states: Dict[str, Set[int]] = {}
+        self.records: Dict[str, int] = {}
+        self.stored: Dict[str, Set[int]] = {}
+        counts = dict(index.conn.execute(
+            f"SELECT id, records FROM entries WHERE file_id IN "
+            f"({','.join('?' * len(file_ids))})", list(file_ids))) if file_ids else {}
+        for file_id in file_ids:
+            for row in index._entry_rows(file_id):
+                for field in row.fields():
+                    self.records[field] = self.records.get(field, 0) + counts.get(row.id, 0)
+                    leaf = field != row.name
+                    self.types.setdefault(field, set()).add(None if leaf else row.type)
+                    self.logs.setdefault(field, set()).add(file_id)
+                    if row.stored:
+                        self.stored.setdefault(field, set()).add(file_id)
+                    self.states.setdefault(field, set()).update(
+                        state for state, _last in row.span_items())
+        self.names = sorted(self.types)
+
+    def matching(self, pattern: str, exclude: Sequence[str] = ()) -> List[str]:
+        compiled = EntryPattern(pattern)
+        excluded = [EntryPattern(text) for text in exclude]
+        return [name for name in self.names if compiled.matches(name)
+                and not any(e.matches(name) for e in excluded)]
+
+    def suggestions(self, pattern: str) -> List[str]:
+        return difflib.get_close_matches(pattern, self.names, n=3, cutoff=0.75)
 
 
 class IndexedRun:
