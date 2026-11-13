@@ -146,6 +146,28 @@ Two rules there exist to exercise code paths that healthy data cannot:
 
 Neither is in `checks2026.json`, the actual pit config.
 
+## The same goldens, through the index
+
+`Season<year>IndexedGoldenTest` runs every scenario a second time with
+`analysis.py --index`, against an index built in a temporary folder with
+`log_index.py build --config <every scenario config>`. It compares the output with
+the **same** golden files. A Log replayed from the index has to be exactly the Log
+that reading the `.wpilog` builds, and this is where that is proven on real logs.
+Each run also has to report on stderr that it read every log from the index;
+otherwise a fallback to the `.wpilog` would let the comparison pass while testing
+nothing.
+
+Building the index reads each log about twice, so this adds roughly 20 s for 2025
+and 2 minutes for 2026. It is skipped while recording goldens, since goldens are
+always recorded from the `.wpilog` path.
+
+`tests/test_log_index.py` covers what the real logs reach only by accident, on
+small synthetic logs written by [`wpilog_writer.py`](wpilog_writer.py):
+- filters that cut the end of a log;
+- a struct leaf reached through `/**`;
+- the cases where the index must decline and fall back;
+- the protobuf schema that used to fail a log.
+
 ## Updating goldens
 
 When you change the output deliberately, re-record and **review the diff** before

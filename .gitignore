@@ -216,3 +216,10 @@ report.json
 
 # Sidecar cache of which logs are matches (derived; see analysis.load_match_cache)
 .match-cache.json
+
+# The log index (derived from the logs; see log_index.py)
+.log-index.sqlite
+.log-index.sqlite-journal
+
+# Local season logs for testing the index (large; not checked in)
+/logs/

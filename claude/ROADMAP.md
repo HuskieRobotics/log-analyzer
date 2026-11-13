@@ -10,8 +10,8 @@ logs in ~7 s; golden suite in [tests/](../tests/) is green).
 **Status, 2026-11-08:** Milestone A (pit mode) is complete and has been used at
 two events, where it worked as expected. The second event ran the current code,
 including the sync and monitor changes made after the first (A5 and A7 notes in
-§11). §10 has no open items. Milestone B is
-next and not yet started; §13 lists two cross-cutting defects still open.
+§11). §10 has no open items. In Milestone B, B1 (the index) is done and B2
+(event search) is next. §13 lists one cross-cutting defect still open.
 
 ## 1. Requested Features
 
@@ -895,9 +895,9 @@ The post-match checklist, end to end. Nothing here needs the index.
 
 | # | Step | Why | Depends on |
 |---|---|---|---|
-| B1 | **Extract / index layer** (SQLite) — **next** | Makes search viable, checks instant across a season | A2 |
-| B2 | **Event search** (feature 3) | The reason the index exists | B1 |
-| B3 | **Historical comparison and trends** (§9.2–9.3, §9.6) | Catches what sibling comparison cannot: wear affecting every peer equally, and slow trends | B1, A9 |
+| B1 | ~~**Extract / index layer**~~ (SQLite) — **done** (`log_index.py`, `analysis.py --index`) | Makes search viable, checks instant across a season | A2 |
+| B2 | **Event search** (feature 3) — **next** | The reason the index exists | B1 |
+| B3 | **Historical comparison and trends** (§9.2–9.3, §9.6) — scope set 2026-11-08, see B1 notes | Catches what sibling comparison cannot: wear affecting every peer equally, and slow trends | B1, A9 |
 
 ### Milestone C — Optional
 
@@ -1444,6 +1444,142 @@ identity (content hash, not name) so re-imports from A4 are idempotent. Keep the
 schema versioned so a format change can rebuild rather than migrate — extraction
 is cheap and the `.wpilog` files remain authoritative.
 
+**Built as `log_index.py`, read by `analysis.py --index`.** Every golden in both
+seasons produces byte-identical output when run from the index, and the suite now
+checks that on every run (`Season<year>IndexedGoldenTest`). Mechanism:
+[DESIGN.md §3.7](DESIGN.md#37-the-index-log_indexpy).
+
+| Shipped config | From `.wpilog` | From index | |
+|---|---:|---:|---:|
+| `config2025.json`, 2 logs | 6.2 s | 0.15 s | 41× |
+| `config2026.json`, 10 logs | 40 s | 0.72 s | 56× |
+| `checks2026.json`, 10 logs | 227 s | 16.5 s | 14× |
+
+Extraction costs about 7–10 s per log, once. It is a full read, plus a second
+read for any numeric entries a `--config` asks for. Adding a config to an index
+later only does the second read (about 3 s per log).
+
+Four things the design notes above did not anticipate:
+
+- **"Store the numeric entries a config reads" needed a precise answer.** Capture
+  uses `could_contain`, which is true of any ancestor of a match because a struct
+  parent may produce the leaf. So `/**/*Connected*` in `checks2026.json` captures
+  *every record in the log*: that is why the pit checks take 22 s per log from the
+  file. The manifest records the field names each entry actually produces once
+  decoded. A struct's leaves come from decoding one sample of each record length.
+  With them the index stores, and replays, only the 11 numeric entries that config
+  really reads.
+- **A partial replay has to be told where the log ends.**
+  `Log.get_last_timestamp()` is the latest timestamp of any captured field. Checks
+  end their windows there and measure an open spell to it. A full read under
+  `/**` ends on whatever entry logged last, which a partial replay never loads.
+  Each manifest row therefore keeps, for every DriverStation state the entry was
+  seen in, the last timestamp it reached. That gives the exact end for any
+  combination of filters without storing any extra samples.
+- **The size estimate in §3.4 was payload only.** 1.4 MB per log was the bytes in
+  the samples; SQLite adds about 25 bytes of overhead per row. Most state-tier rows
+  are high-rate `int64` clocks and per-cycle counters (`/Timestamp`,
+  `CyclesWithNoResults`), not fault bitfields. Measured: **about 5 MB per log**
+  with the shipped configs, 6.7 MB adding `checks2026.json`. A 60-match season is
+  therefore 300–400 MB, not under 100 MB. Raw bytes are already dropped wherever
+  the decoded value rebuilds them, which saved 30%. If size ever matters, the next
+  step is packing each entry's samples into one blob per chunk instead of one row
+  per sample.
+- **Struct-heavy configs stay decode-bound.** Most of the 16.5 s for
+  `checks2026.json` is decoding 15k `Pose3d[]` records per log for
+  `RobotPosesAccepted/length`. A full read decodes them too; the index removes the
+  file walk, not the struct decode.
+
+**What the index is for (decided 2026-11-08).** One collection of a whole
+season's logs — at-home practice as well as matches — to ask about trends over
+time. The trends that matter most are **current, cycle times, errors and vision
+dropouts**. For doubles, statistics are enough; individual samples are not
+needed. The `.wpilog` files are kept all season, so the index never has to stand
+alone: a config that needs samples not yet stored can always extend it.
+
+That changed B1 in two ways:
+
+- **Statistics per robot mode, weighted by time.** A whole-log min / max / mean
+  was misleading twice over. A practice log with twenty idle minutes dilutes any
+  mean; and AdvantageKit writes doubles only when they change (no current entry
+  in q12 repeats a value; gaps reach 170 s while disabled), so a mean over
+  samples counts three minutes at 0 A as one reading. Every numeric scalar now
+  gets seconds held, min, max, mean and RMS per mode (disabled / auto / teleop),
+  each value credited for as long as it held. RMS is the figure for current,
+  since heating goes as its square. q12's back-left drive supply current: auto
+  20.1 s, mean 10.5 A, RMS 19.2 A; teleop 140.6 s, mean 17.1 A, RMS 25.5 A;
+  disabled 297 s at 0.0 A. Each log also records seconds in each mode, so counts
+  (errors, dropouts) can be compared per minute of driving. Cost: about 1 s more
+  per log to extract, no measurable size.
+- **One index for the season.** `build` takes any number of folders or files and
+  walks subfolders, skipping hidden ones; with more than one source it needs
+  `--index PATH`, so every build adds to the same library. Logs are known by
+  content, so copies in several folders count once.
+
+The other three trends need no new storage: cycle times are time analyses over
+stored strings and booleans, errors are the stored alert arrays, and vision
+dropouts are the stored `sending frames` / `Connected` booleans. What they need
+is B3's front end: per-log results in date order rather than one aggregate, and a
+choice of how practice and matches are compared.
+
+How logs are grouped for that (settled 2026-11-08):
+
+- **Home versus event comes from the name.** Logs written at an event carry the
+  event code (`akit_26-04-30_16-35-17_johnson.wpilog`, pit or match alike); logs
+  from home practice do not (`akit_26-04-29_19-26-56.wpilog`). The index already
+  parses it: `files.event` is NULL for a home log. Within an event,
+  `fms_attached` separates matches from pit sessions.
+- **Pit sessions need not be told apart from home practice.** Not a goal.
+- **Replays are not indexed.** AdvantageKit replay output
+  (`..._q89_sim.wpilog`) reports FMS attached and holds the same match a second
+  time; the season set has two. Both `build` and auto-extend skip a log named
+  `_sim.wpilog` or carrying entries under `/ReplayOutputs/`.
+- **Logs with no timestamp in their name** (hex ids) are rare and are ignored:
+  they have no `recorded_at` and simply do not appear in a trend.
+
+**Auto-extend.** `analysis.py --index` stores whatever it could not serve, once
+the log has been read from its file, so the next run is served. Building the
+index therefore never needs to know the configs in advance: a season index grows
+from the questions actually asked. `build --config` remains for paying the cost
+ahead of time, and `--index-read-only` turns it off. Measured with `checks2026.json`
+over the 10 logs, starting from an index built with no config: the first run took
+258 s (the usual 227 s plus 29 s to store 11 entries per log), the second 17 s,
+and both printed exactly what reading the files does.
+
+**Indexing the whole 2026 season.** All 280 logs in `logs/`, 8.3 GB in one folder
+per event, took 21 minutes to index from scratch. The 2 replays were skipped, and
+the index is about 700 MB. Two things surfaced only at that scale:
+
+- **Replays.** These are AdvantageKit `_sim` logs (see "How logs are grouped"
+  above).
+- **Corrupt timestamps.** Three logs each hold one record stamped far ahead (the
+  worst, years). They inflated those logs' disabled time, to years in two of them,
+  and skewed every disabled-mode statistic. The statistics now run on a clock that one record can move forward
+  by at most 60 s ([DESIGN.md §3.7](DESIGN.md#37-the-index-log_indexpy)). Replay
+  parity is unaffected, because the analyzer itself sees the raw timestamp.
+
+Not done in B1:
+
+- **`--matches-only` does not use the index.** The index records whether the robot
+  was ever FMS-attached, which is exactly that test. The match cache already makes
+  it cheap, though.
+- **The pit monitor does not use the index.** Pit mode reads one fresh log (§2).
+
+The manifest is what the §13 config linter needs (entry names, types, which
+entries a pattern reaches), so that is now cheap to build. The `value` column and
+`entries_by_name` index are the start of B2. Every CANivore error in the alert
+stream across the 2026 set is already one SQL query, answered in 15 ms. It finds
+them in q22 and in the pit session, with timestamps:
+
+```sql
+SELECT f.name, s.ts_us / 1e6, s.value
+FROM samples s JOIN entries e ON e.id = s.entry_id JOIN files f ON f.id = e.file_id
+WHERE e.name = '/RealOutputs/Alerts/errors' AND s.value LIKE '%CANivore%';
+```
+
+What B2 adds is the front end: a query a person can type, which names the event
+and the file without them writing SQL.
+
 ## 12. Test Fixtures and Logging Conventions
 
 **Done.** The suite is season-parameterized; see
@@ -1518,9 +1654,10 @@ Fix these along the way — each will otherwise distort a feature above:
   keyed by `(config position, matched entry)` from `expand_analyses`, which is
   stable across log files and across wildcard fan-out (§6.3). `analysis_idx`
   survives only in the skip messages.
-- **Still open: `.schema` handling assumes `struct:`** (defect #4).
-  `analysis.py` flags any entry containing `.schema` and then takes
-  `split("struct:")[1]`, which raises `IndexError` on a protobuf schema entry.
+- ~~**`.schema` handling assumes `struct:`**~~ (defect #4) — **fixed with B1.**
+  Any entry containing `.schema` was split on `struct:`, which raised
+  `IndexError` on a protobuf schema entry and failed the whole log. Only
+  `/.schema/struct:` entries reach the struct decoder now (`capture.py`).
 - **Still open: no config validation.** Every failure mode in §12.1 produced a clean run with
   empty results rather than an error, which is the worst possible feedback. A
   linter — check each referenced entry exists in the target logs, that the

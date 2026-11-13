@@ -25,6 +25,8 @@ driven by a JSON config; there is no CLI beyond `analysis.py <log_folder> <confi
 | [StructDecoder.py](../StructDecoder.py) | WPILib struct schema parser + decoder | Port of AdvantageScope's `StructDecoder.ts`, Littleton Robotics BSD |
 | [Log.py](../Log.py) | In-memory field store (timestamps → values) | Simplified port of AdvantageScope's `shared/log` |
 | [analysis.py](../analysis.py) | Entry point: config, filtering, analysis, reporting | Original to this repo |
+| [capture.py](../capture.py) | Capture rules: which records of which entries a config keeps, and the type dispatch into `Log` | — |
+| [log_index.py](../log_index.py) | SQLite index: extract each log once, replay the records a config needs | — |
 | [config2025.json](../config2025.json), [config2026.json](../config2026.json) | Per-season example/default analysis configs | — |
 | [entry_patterns.py](../entry_patterns.py) | Segment-scoped glob matching for entry names | — |
 | [report_output.py](../report_output.py) | JSON and self-contained HTML renderings of a run | — |
@@ -54,8 +56,12 @@ signature evaluated at def-time — it works on 3.9, but the README's claim of
 DataLogReader ──► DataLogIterator ──► DataLogRecord      [datalog.py]
     │                                   (entry id, timestamp µs, payload)
     │
-    │  process_log_file(): control-record bookkeeping,
-    │  DriverStation state tracking, filtering, type dispatch
+    │  process_log_file(): control-record bookkeeping       [analysis.py]
+    │  RecordCapture: DriverStation state tracking,         [capture.py]
+    │  filtering, type dispatch
+    │
+    │  ...or LogIndex.load_log(): the same records,         [log_index.py]
+    │  replayed from SQLite through the same RecordCapture
     ▼
 Log ──► LogField ──► LogValueSet(timestamps[], values[])  [Log.py]
     │       └─ struct/JSON/msgpack payloads are *flattened* into
@@ -120,16 +126,19 @@ Decoding slices bits, pads to the type width, and unpacks little-endian.
 `Log.put_struct` pre-create empty child fields for nested struct types even when
 they carry no scalar data.
 
-### 3.4 Ingest and filtering (`analysis.py: process_log_file`)
+### 3.4 Ingest and filtering (`analysis.py: process_log_file`, `capture.py`)
 
-The single pass over records does five things in order:
+`process_log_file` walks the file and keeps the control-record bookkeeping;
+everything per data record is `capture.RecordCapture.add`, which the index's
+replay (§3.7) calls too. The single pass over records does five things in order:
 
 1. **Control records** maintain the `entries` id→`StartRecordData` map.
 2. **DriverStation tracking** — `/DriverStation/Enabled`, `/Autonomous`,
    `/FMSAttached` update three "most recent value" variables. These are *always*
    updated, even for filtered-out records.
-3. **Schema capture** — any entry whose name contains `.schema` is fed to the
-   struct decoder as `name.split("struct:")[1]`.
+3. **Schema capture** — an entry named `/.schema/struct:<Type>` is fed to the
+   struct decoder as `<Type>`. Other schemas under `/.schema/` (protobuf's
+   `/.schema/proto:<Type>`) are not; their data entries are kept as raw.
 4. **Selection** — a record is kept if its name matches a *mandatory* entry, or
    matches a *target* entry **and** `should_capture_record()` passes.
 5. **Type dispatch** — the entry's type string routes to the matching `Log.put_*`.
@@ -265,6 +274,81 @@ four times. The field changes between seasons by more than the margin allows,
 and getting it wrong does not just loosen a bound — it silently rescales the
 healthy baseline every other threshold is chosen against. The number is stated
 once, cited to the game manual, and a test pins the derivation. See [ROADMAP.md §13b](ROADMAP.md#13b-pose-estimator-divergence-shipped).
+
+### 3.7 The index (`log_index.py`)
+
+`log_index.py build` extracts each log once into SQLite. `analysis.py --index`
+then rebuilds each `Log` from it instead of reading the `.wpilog`, when it can do
+so exactly. The output is identical, and the goldens are run through the index
+to prove it.
+
+**What a file contributes.** One pass (`_scan`) records:
+- the *state tier* in full (`boolean`, `int`, `int64`, `string`, their arrays,
+  `json`, `msgpack`, schemas);
+- a manifest row for every entry, stored or not:
+  - count and time range;
+  - `fields`: the names the entry produces once decoded. A struct's leaves come
+    from decoding one sample of each record length.
+  - `spans`: for each DriverStation state the entry was seen in, its last
+    timestamp.
+- for every numeric scalar, an `entry_stats` row per robot mode (disabled,
+  auto, teleop): seconds held, min, max, time-weighted mean and RMS. AdvantageKit
+  writes a value only when it changes, so each value is credited for as long as
+  it held: until the entry's next sample, a mode change, or the end of the log.
+  A mode change credits every held value to the old mode before switching;
+  there are a handful per log, so that loop over held values is cheap.
+- per file, seconds in each mode.
+
+The statistics run on a clock that a single record can move forward by at most
+60 s (`MAX_CLOCK_STEP_US`). Three of the 278 logs in the 2026 season carry one
+record stamped far ahead; the worst, 179,995,251 s in a 423 s log. At face value that
+ends the log there and credits every held value with the time. Legitimate gaps
+between records reach about 23 s, at boot. The number of records held back is
+`files.timestamp_faults`. Raw timestamps stay in `entries`, `spans` and `samples`,
+because a full read of the `.wpilog` does see the wild timestamp, and a replay
+has to match it.
+
+`--config` adds a second pass (`_extend`) that stores the numeric-tier entries a
+config reads. Samples keep their position in the file (`seq`). Their raw bytes are
+dropped where the decoded value rebuilds them exactly (booleans, integers,
+strings).
+
+**Replay.** `load_log` computes the entries whose `fields` the config's patterns
+match, plus the DriverStation and schema entries. It feeds their samples, in `seq`
+order, through the same `RecordCapture` that reads a file. Two things a full read
+gets for free have to be supplied:
+
+- **Where the read ends.** `Log.get_last_timestamp()` is the latest timestamp of
+  any captured field. Checks end their windows there and measure an open spell to
+  it. A broad pattern such as `/**/*Connected*` captures every entry in a full
+  read (`could_contain` is true of any ancestor), but the replay loads only those
+  that produce a matching field. So `load_log` sets `Log.captured_until` from the
+  `spans`. For each captured entry it takes the last timestamp over the
+  DriverStation states the config's filters admit. That is exact for any filter
+  combination without storing a single extra sample.
+- **What a read prints.** Ingest anomalies (duplicate entry ids, invalid control
+  records) are printed by `process_log_file`. Extraction records them as `notes`
+  and the replay prints them.
+
+**Auto-extend.** `analysis.py --index` goes through `IndexedRun`. After a log is
+read from its file, it calls `LogIndex.add` with the config's entry names, which
+indexes a new log or stores the entries that were missing. The index therefore
+grows from the questions actually asked, and `build --config` is only a way to
+pay that cost ahead of time. The write happens after the analysis has its `Log`,
+as a separate pass. Building the index rows during the same read would save that
+pass, but it would merge the capture path with extraction, which this design
+keeps apart so that a replay can be checked against a read. `--index-read-only`
+turns it off. A write error stops the extending but not the serving.
+
+**When it declines.** In each case `analysis.py` reads the `.wpilog` and says why
+on stderr:
+- the file is not indexed;
+- an entry the config reads was not stored;
+- the file declares one name with two types. A full read keeps whichever type
+  arrives first and drops the rest, which a partial replay cannot reproduce.
+
+Identity is the file's sha256, so a renamed or re-copied log is recognised. A
+`paths` table keyed by path, size and mtime avoids re-hashing on every lookup.
 
 ## 4. Config Model
 
@@ -462,9 +546,11 @@ feature will run into.
    analysis with no prior time analysis. Both aggregate blocks now delegate to `print_per_file_counts()`
    ([analysis.py:144](../analysis.py#L144)), which derives counts and filenames
    from the results list it is handed.
-4. **`.schema` handling assumes `struct:`.** `entry.name.split("struct:")[1]`
-   ([analysis.py:407](../analysis.py#L407)) raises `IndexError` on any schema entry
-   that isn't a struct schema (e.g. a protobuf descriptor under `/.schema/`).
+4. ~~**`.schema` handling assumes `struct:`.**~~ **Fixed.** Any entry whose name
+   contained `.schema` was handed to the struct decoder as
+   `entry.name.split("struct:")[1]`, which raised `IndexError` on a protobuf
+   descriptor under `/.schema/` and failed the whole log. Only
+   `/.schema/struct:` entries are decoded now ([capture.py](../capture.py)).
 5. **`LogField.clear_before_time` references `self.striping_reference`**, which is
    never initialized — `AttributeError` if called. Unused today.
 6. **The `continue` inside the type dispatch of `analyze_file_records` /

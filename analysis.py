@@ -21,9 +21,8 @@ from Log import Log, LoggableType
 from entry_patterns import EntryPattern, expand_roles
 from report_output import (FileReport, Report, ReportSection, describe_durations,
                            now_text, render_html, render_json)
-
-# Constants for structured types
-STRUCT_PREFIX = "struct:"
+from capture import (MANDATORY_ENTRIES, STRUCT_PREFIX, RecordCapture,  # noqa: F401
+                     config_entry_names, filters_from_config)
 
 # Set to True for detailed output
 VERBOSE = False
@@ -1401,7 +1400,7 @@ def analyze_value_records(log: Log, log_file_name: str, value_analysis_configs: 
     return [(key, all_value_configs[key], result)
             for key, result in all_value_results.items()]
 
-def process_log_file(log_file_path: str, mandatory_entries: Set[str], target_entry_names: Set[str], 
+def process_log_file(log_file_path: str, mandatory_entries: Set[str], target_entry_names: Set[str],
                      filter_enabled: bool = False, filter_fms_attached: bool = False, robot_mode: str = 'both') -> Log:
     """
     Process a single log file and return captured records and final driver station state.
@@ -1414,37 +1413,8 @@ def process_log_file(log_file_path: str, mandatory_entries: Set[str], target_ent
         robot_mode: Robot mode filter ('auto', 'teleop', or 'both')
         Returns: Log object containing captured records and final driver station state
     """
-
-    def should_capture_record(driver_station_enabled: Optional[bool], driver_station_autonomous: Optional[bool], 
-                            driver_station_fms_attached: Optional[bool]) -> bool:
-        """Check if records should be captured based on current DriverStation state.
-        Args:
-            driver_station_enabled: Current enabled state of the DriverStation
-            driver_station_autonomous: Current autonomous state of the DriverStation
-            driver_station_fms_attached: Current FMS attached state of the DriverStation
-        Returns:
-            bool: True if the record should be captured, False otherwise.
-        """
-        # Check enabled filter
-        if filter_enabled and driver_station_enabled is not None and not driver_station_enabled:
-            return False
-        
-        # Check FMS attached filter
-        if filter_fms_attached and driver_station_fms_attached is not None and not driver_station_fms_attached:
-            return False
-        
-        # Check robot mode filter
-        if robot_mode == "auto" and driver_station_autonomous is not None and not driver_station_autonomous:
-            return False
-        elif robot_mode == "teleop" and driver_station_autonomous is not None and driver_station_autonomous:
-            return False
-        # If robot_mode is "both" or any condition is not set, allow capture
-        
-        return True
-
-
     print(f"\nProcessing: {os.path.basename(log_file_path)}")
-    
+
     with open(log_file_path, "rb") as f:
         mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
         reader = DataLogReader(mm)
@@ -1452,30 +1422,15 @@ def process_log_file(log_file_path: str, mandatory_entries: Set[str], target_ent
             print(f"  Warning: {os.path.basename(log_file_path)} is not a valid log file")
             return Log()
 
+        capture = RecordCapture(mandatory_entries, target_entry_names,
+                                filter_enabled, filter_fms_attached, robot_mode)
         entries = {}
-        log = Log()
 
-        # Whether each entry name is mandatory / targeted / a struct schema depends
-        # only on the name, which is fixed when the entry is declared. Deciding it
-        # once per entry rather than once per record avoids re-running the substring
-        # scans over the configured names for every one of millions of data records.
+        # Flags depend only on the entry's name and type, fixed when it is
+        # declared, so they are decided once per entry rather than once per
+        # record. An entry the config never reads maps to None and is skipped
+        # with a single test.
         entry_flags = {}
-
-        # Patterns are compiled once per file, then tested once per entry (not
-        # once per record), which keeps matching off the hot path.
-        mandatory_patterns = [EntryPattern(name) for name in mandatory_entries]
-        target_patterns = [EntryPattern(name) for name in target_entry_names]
-
-        def flags_for(name: str) -> Tuple[bool, bool, bool]:
-            """Return (is_mandatory, is_target, is_schema) for an entry name."""
-            return (any(pattern.could_contain(name) for pattern in mandatory_patterns),
-                    any(pattern.could_contain(name) for pattern in target_patterns),
-                    ".schema" in name)
-
-        # Track most recent values of DriverStation entries for filtering
-        driver_station_enabled = None
-        driver_station_autonomous = None
-        driver_station_fms_attached = None
 
         for record in reader:
             # Control records all have entry 0; testing that once keeps the far more
@@ -1488,7 +1443,8 @@ def process_log_file(log_file_path: str, mandatory_entries: Set[str], target_ent
                             print("...DUPLICATE entry ID, overriding")
 
                         entries[data.entry] = data
-                        entry_flags[data.entry] = flags_for(data.name)
+                        flags = capture.flags_for(data.name, data.type)
+                        entry_flags[data.entry] = flags if any(flags) else None
 
                     except TypeError:
                         print("Start(INVALID)")
@@ -1513,70 +1469,14 @@ def process_log_file(log_file_path: str, mandatory_entries: Set[str], target_ent
                 else:
                     print("Unrecognized control record")
             else:
-                entry = entries.get(record.entry)
-                if entry is None:
+                flags = entry_flags.get(record.entry)
+                if flags is None:
                     continue
+                entry = entries[record.entry]
+                capture.add(entry.name, entry.type, record, flags)
 
-                is_mandatory, is_target, is_schema = entry_flags[record.entry]
+        return capture.log
 
-                # Update DriverStation state tracking for filtering
-                try:
-                    if entry.name == "/DriverStation/Enabled" and entry.type == "boolean":
-                        driver_station_enabled = record.getBoolean()
-                    elif entry.name == "/DriverStation/Autonomous" and entry.type == "boolean":
-                        driver_station_autonomous = record.getBoolean()
-                    elif entry.name == "/DriverStation/FMSAttached" and entry.type == "boolean":
-                        driver_station_fms_attached = record.getBoolean()
-                except TypeError:
-                    # If we can't read the value, continue without updating state
-                    pass
-
-                if is_schema:
-                    # If the entry is a schema entry, we may want to capture it differently
-                    log.struct_decoder.add_schema(entry.name.split("struct:")[1], record.getBytes())
-
-                # Check if this record matches any target entry names and meets filtering criteria
-                if is_mandatory or (is_target and should_capture_record(driver_station_enabled, driver_station_autonomous, driver_station_fms_attached)):
-                    timestamp = record.timestamp / 1000000
-                    key = entry.name
-                    type_str = entry.type
-                    
-                    if type_str == "boolean":
-                        log.put_boolean(key, timestamp, record.getBoolean())
-                    elif type_str in ("int", "int64"):
-                        log.put_number(key, timestamp, record.getInteger())
-                    elif type_str == "float":
-                        log.put_number(key, timestamp, record.getFloat())
-                    elif type_str == "double":
-                        log.put_number(key, timestamp, record.getDouble())
-                    elif type_str == "string":
-                        log.put_string(key, timestamp, record.getString())
-                    elif type_str == "boolean[]":
-                        log.put_boolean_array(key, timestamp, record.getBooleanArray())
-                    elif type_str in ("int[]", "int64[]"):
-                        log.put_number_array(key, timestamp, record.getIntegerArray())
-                    elif type_str == "float[]":
-                        log.put_number_array(key, timestamp, record.getFloatArray())
-                    elif type_str == "double[]":
-                        log.put_number_array(key, timestamp, record.getDoubleArray())
-                    elif type_str == "string[]":
-                        log.put_string_array(key, timestamp, record.getStringArray())
-                    elif type_str == "json":
-                        log.put_json(key, timestamp, record.getString())
-                    elif type_str == "msgpack":
-                        log.put_msgpack(key, timestamp, record.data)  # getRaw() equivalent
-                    else:  # Default to raw
-                        if type_str.startswith(STRUCT_PREFIX):
-                            schema_type = type_str.split(STRUCT_PREFIX)[1]
-                            if schema_type.endswith("[]"):
-                                log.put_struct(key, timestamp, record.data, schema_type[:-2], True)
-                            else:
-                                log.put_struct(key, timestamp, record.data, schema_type, False)
-                        else:
-                            log.put_raw(key, timestamp, record.data)
-                            # Note: CustomSchemas functionality not implemented in Python version
-                    
-        return log
 
 def main() -> None:
     """Main analysis function."""
@@ -1606,6 +1506,14 @@ def main() -> None:
                         help="with --latest, gap over which to check that the "
                              "chosen log is not still growing; 0 skips the check "
                              "(default 1)")
+    parser.add_argument("--index", nargs="?", const="", metavar="PATH",
+                        help="read each log from the index (see log_index.py) when it "
+                             "holds everything this config needs, and from the .wpilog "
+                             "otherwise, then add what was missing so the next run is "
+                             "served; output is identical either way (default index: "
+                             ".log-index.sqlite in the log folder, created if absent)")
+    parser.add_argument("--index-read-only", action="store_true",
+                        help="with --index, never add to the index")
     parser.add_argument("--verbose", action="store_true",
                         help="include captured values and a record summary")
     args = parser.parse_args()
@@ -1622,11 +1530,10 @@ def main() -> None:
         with open(args.config_json_file, 'r') as config_file:
             config = json.load(config_file)
             
-            # Load filtering criteria
-            filter_on_enabled = config.get('enabled', False)
-            filter_on_fms_attached = config.get('fmsAttached', False)
-            filter_on_robot_mode = config.get('robotMode', 'both')  # 'auto', 'teleop', or 'both'
-            
+            # Load filtering criteria; robot mode is 'auto', 'teleop', or 'both'
+            (filter_on_enabled, filter_on_fms_attached,
+             filter_on_robot_mode) = filters_from_config(config)
+
             # Load analysis configurations
             time_analysis_configs = config.get('timeAnalysis', [])
             value_analysis_configs = config.get('valueAnalysis', [])
@@ -1636,34 +1543,10 @@ def main() -> None:
         print(f"Error loading config file: {e}", file=sys.stderr)
         sys.exit(1)
     
-    target_entry_names = set([])
-
-    # Always capture these entry names regardless of JSON configuration
-    mandatory_entries = {"/DriverStation/Enabled", "/DriverStation/Autonomous", "/DriverStation/FMSAttached"}
-    target_entry_names.update(mandatory_entries)
-    
-    # Add analysis entries to target entries to ensure they're captured
-    for analysis in time_analysis_configs:
-        start_entry = analysis.get('startEntry')
-        end_entry = analysis.get('endEntry')
-        if start_entry:
-            target_entry_names.add(start_entry)
-        if end_entry:
-            target_entry_names.add(end_entry)
-    
-    # Add value analysis entries to target entries
-    for analysis in value_analysis_configs:
-        entry = analysis.get('entry')
-        trigger_entry = analysis.get('triggerEntry')
-        if entry:
-            target_entry_names.add(entry)
-        if trigger_entry:
-            target_entry_names.add(trigger_entry)
-
-    # Check rules name entries too, so they must be captured
-    for rule in check_configs:
-        if rule.get('entry'):
-            target_entry_names.add(rule['entry'])
+    # Always capture the mandatory entries regardless of JSON configuration, plus
+    # every entry an analysis or check rule names.
+    mandatory_entries = set(MANDATORY_ENTRIES)
+    target_entry_names = config_entry_names(config)
 
     # Get list of files to process
     log_files = []
@@ -1746,10 +1629,26 @@ def main() -> None:
     time_analysis_expansions = {}  # key -> concrete config, in first-seen order
     value_analysis_expansions = {}  # key -> concrete config, in first-seen order
 
+    indexed = None
+    if args.index is not None:
+        from log_index import IndexedRun
+        indexed = IndexedRun(args.index, log_folder, config, args.config_json_file,
+                             read_only=args.index_read_only)
+
     # Process all log files
     for log_file in sorted(log_files):
-        log = process_log_file(log_file, mandatory_entries, target_entry_names, 
-                               filter_on_enabled, filter_on_fms_attached, filter_on_robot_mode)
+        loaded = indexed.load(log_file) if indexed is not None else None
+        if loaded is not None:
+            # Print exactly what reading the file would have printed.
+            print(f"\nProcessing: {os.path.basename(log_file)}")
+            for note in loaded.notes:
+                print(note)
+            log = loaded.log
+        else:
+            log = process_log_file(log_file, mandatory_entries, target_entry_names,
+                                   filter_on_enabled, filter_on_fms_attached, filter_on_robot_mode)
+            if indexed is not None:
+                indexed.learn(log_file)
         all_logs.append(log)
         processed_files.append(os.path.basename(log_file))
         file_report = FileReport(name=os.path.basename(log_file))
@@ -1830,6 +1729,10 @@ def main() -> None:
                                   result=computed))
                 for line in format_analysis(computed):
                     print(line)
+
+    if indexed is not None:
+        indexed.close()
+        indexed.report()
 
     # Aggregate the checks across all files
     if check_configs and check_reports:

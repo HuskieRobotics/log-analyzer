@@ -239,6 +239,11 @@ class Log:
         self.fields: Dict[str, LogField] = {}
         self.generated_parents: Set[str] = set()
         self.timestamp_range: Optional[Tuple[float, float]] = None
+        # Set when only part of what a full read would capture is loaded, as when
+        # replaying from the index: the last timestamp that full read would have
+        # held. Checks end their windows there, so it must not depend on which
+        # entries happened to be loaded.
+        self.captured_until: Optional[float] = None
     
     def create_blank_field(self, key: str, log_type: LoggableType) -> None:
         """Checks if the field exists and registers it if necessary."""
@@ -367,6 +372,8 @@ class Log:
         # answer, and this is called once per candidate event during analysis.
         last_timestamps = [field.data.timestamps[-1]
                            for field in self.fields.values() if field.data.timestamps]
+        if self.captured_until is not None:
+            last_timestamps.append(self.captured_until)
         return max(last_timestamps) if last_timestamps else 0.0
     
     # Data reading methods
